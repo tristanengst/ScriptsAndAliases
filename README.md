@@ -1,5 +1,5 @@
 # 📜 Scripts and Aliases
-Useful scripts and their aliases, and more aliases useful for manipulating SLURM and other ML jobs.
+Useful scripts and aliases useful for manipulating SLURM and other ML jobs.
 
 ### Installation
 The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
