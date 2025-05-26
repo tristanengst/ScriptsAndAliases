@@ -57,10 +57,9 @@ def get_ssh_config():
     cur_host = None
     machine2ssh_config = defaultdict(lambda: dict())
     for line in lines:
-        if len(line.strip()) < 3 or line.startswith("#"):
-            continue
-        else:
-            k, v = line.strip().split(" ")
+        line = line.strip().split()
+        if len(line) == 2 and not line[0].startswith("#"):
+            k, v = line
             if k == "Host" and not v == "*":
                 cur_host = v
             elif cur_host is None:
