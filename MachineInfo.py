@@ -73,7 +73,13 @@ def machine_to_ssh_name(m):
     can't be found. The mapping should exist in your ~/.ssh/config file.
     """
     machine2ssh_config = get_ssh_config()
-    possible_ssh_names = machine2info[m]["ssh_names"]
+    if m in machine2info:
+        possible_ssh_names = machine2info[m]["ssh_names"]
+    elif hostname_to_machine(m) in machine2info:
+        possible_ssh_names = machine2info[hostname_to_machine(m)]["ssh_names"]
+    else:
+        raise ValueError()
+
     for m_user in machine2ssh_config:
         if m_user in possible_ssh_names:
             return m_user
@@ -90,7 +96,7 @@ def hostname_to_machine(hostname):
     """Returns the SSH name in [ssh_name2info] of [hostname]."""
     hostname_numeric = [c for c in hostname if c.isdigit()]
     prefix = "S" if "r" in hostname else "A" # Heuristic, possibly brittle
-    return f"{prefix}{''.join(hostname_numeric)}"
+    return f"{prefix}{int(''.join(hostname_numeric))}"
 
 def hostname_is_current_machine(hostname):
     """Returns True if [hostname] is the current machine."""
@@ -98,12 +104,11 @@ def hostname_is_current_machine(hostname):
 
 def run_command_on_machine(m, command):
     """Runs [command] on machine [m] and returns the output."""
-    ssh_name = machine_to_ssh_name(m)
     hostname = machine_to_hostname(m)
-
     if os.uname().nodename == hostname:
         return subprocess.getoutput(command)
-    elif ssh_name is None:
+    ssh_name = machine_to_ssh_name(m)
+    if ssh_name is None:
         raise ValueError(f"Could not find SSH name for machine {m} with hostname={hostname}. Please check your ~/.ssh/config file.")
     else:
         return subprocess.getoutput(f"ssh {ssh_name} '{command}'")
@@ -115,6 +120,7 @@ def get_updated_machine_info(m):
     Args:
     m           -- machine name, which must be a key in [machine2info], or a hostname
     """
+    m = hostname_to_machine(m) if not m in machine2info else m
     result = run_command_on_machine(m, "nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
 
     result = result.split("\n")
