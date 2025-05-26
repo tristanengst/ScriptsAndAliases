@@ -93,6 +93,10 @@ def hostname_to_machine(hostname):
     prefix = "S" if "r" in hostname else "A" # Heuristic, possibly brittle
     return f"{prefix}{''.join(hostname_numeric)}"
 
+def hostname_is_current_machine(hostname):
+    """Returns True if [hostname] is the current machine."""
+    return os.uname().nodename == hostname:
+
 def run_command_on_machine(m, command):
     """Runs [command] on machine [m] and returns the output."""
     ssh_name = machine_to_ssh_name(m)
