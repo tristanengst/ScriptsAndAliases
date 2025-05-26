@@ -1,4 +1,4 @@
-# Scripts and Aliases
+# 📜 Scripts and Aliases
 Useful scripts and their aliases, and more aliases useful for manipulating SLURM and other ML jobs.
 
 ### Installation
