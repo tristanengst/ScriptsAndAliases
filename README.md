@@ -104,7 +104,7 @@ Displays history without line numbers:
 historyb
 ```
 
-Tar files modified within the last `--last_k_days` for saving. _Unlike many not-obviously-wrong ways of saving experiments on ComputeCanada, this runs in some number of ours even when there are hundreds of GB to tar:_
+Tar files modified within the last `--last_k_days` for saving. _Unlike many not-obviously-wrong ways of saving experiments on ComputeCanada, this takes hours and not days:_
 ```
 python TarFiles.py --dir directory_to_tar --out name_of_tar_file --last_k_days 60 --ignore_no_pt 0
 ```
