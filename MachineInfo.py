@@ -95,7 +95,7 @@ def hostname_to_machine(hostname):
 
 def hostname_is_current_machine(hostname):
     """Returns True if [hostname] is the current machine."""
-    return os.uname().nodename == hostname:
+    return os.uname().nodename == hostname
 
 def run_command_on_machine(m, command):
     """Runs [command] on machine [m] and returns the output."""
