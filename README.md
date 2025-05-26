@@ -1,5 +1,5 @@
-# Scripts and Aliases
-Useful scripts and their aliases, and more aliases useful for manipulating SLURM and other ML jobs.
+# 📜 Scripts and Aliases
+Useful scripts and aliases useful for manipulating SLURM and other ML jobs.
 
 ### Installation
 The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
@@ -104,11 +104,11 @@ Displays history without line numbers:
 historyb
 ```
 
-Tar files modified within the last `--last_k_days` for saving. _Unlike many not-obviously-wrong ways of saving experiments on ComputeCanada, this runs in some number of ours even when there are hundreds of GB to tar:_
+Tar files modified within the last `--last_k_days` for saving. _Unlike many not-obviously-wrong ways of saving experiments on ComputeCanada, this takes hours and not days:_
 ```
 python TarFiles.py --dir directory_to_tar --out name_of_tar_file --last_k_days 60 --ignore_no_pt 0
 ```
-If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -xf name_of_tar_file -C directory_to_extract_under some_file_or_folder
+If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -xf name_of_tar_file -C directory_to_extract_under some_file_or_folder`
 
 
 
