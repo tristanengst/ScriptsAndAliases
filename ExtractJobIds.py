@@ -5,8 +5,7 @@ def extract_before_underscore(s):
     """Returns the substring of [s] occuring before the first underscore, or [s] if no
     underscore is found.
     """
-    underscore_idx = s.index("_")
-    return s[:underscore_idx]
+    return s[:s.index("_")] if "_" in s else s
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
