@@ -51,7 +51,7 @@ def tar_folder(args):
         
     if args.out is None:
         args.out = default_tar_name(args.dir)
-        _ = tqdm.write(f"TarFiles.py: No output file given on fname={fname}. Defaulting to out={args.out}")
+        _ = tqdm.write(f"TarFiles.py: No output file given on folder={args.dir}. Defaulting to out={args.out}")
     
     _ = tqdm.write(f"TarFiles.py:  {args.dir} -> {args.out}")
 
