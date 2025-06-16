@@ -16,21 +16,43 @@ import MachineInfo
 
 shell2rc = dict(zsh="~/.zshrc", bash="~/.bashrc")
 
-def get_gpu2cpu(*, num_cpus, num_gpus, last_gpu_gets_remaining_cpus=True):
-    """Returns a GPU index -> (min CPU core index, max CPU core index) map."""
-    cpus_per_gpu = num_cpus // num_gpus
-    gpu2cpu = {gpu_idx: [gpu_idx * cpus_per_gpu, (gpu_idx+1) * cpus_per_gpu-1] for gpu_idx in range(num_gpus)}
-
-    if last_gpu_gets_remaining_cpus:
-        gpu2cpu[num_gpus - 1][1] = num_cpus - 1
-    
-    return gpu2cpu
+server_gpu2cpu = {
+    0: list(range(0, 6)) + list(range(64, 70)),
+    1: list(range(6, 12)) + list(range(70, 76)),
+    2: list(range(12, 18)) + list(range(76, 82)),
+    3: list(range(18, 24)) + list(range(82, 88)),
+    4: list(range(24, 32)) + list(range(88, 96)), # Gets extra CPUs: 30, 31, 94, 95
+    5: list(range(32, 38)) + list(range(96, 102)),
+    6: list(range(38, 44)) + list(range(102, 108)),
+    7: list(range(44, 50)) + list(range(108, 114)),
+    8: list(range(50, 56)) + list(range(114, 120)),
+    9: list(range(56, 64)) + list(range(120, 128))} # Gets extra CPUs: 62, 63, 126, 127
+server_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in server_gpu2cpu.items()}
 
 def get_cpus_from_gpus(*, gpus):
     """Returns the string of CPU indices to feed to taskset for the specified GPUs."""
     host_info = MachineInfo.get_updated_machine_info(os.uname().nodename)
-    gpu2cpu = get_gpu2cpu(num_cpus=host_info.total_cpus, num_gpus=host_info.total_gpus)
-    return ",".join([f"{gpu2cpu[gpu][0]}-{gpu2cpu[gpu][1]}" for gpu in gpus])
+    machine_name = MachineInfo.hostname_to_machine(os.uname().nodename)
+
+    # Servers use a specific map because we enable hyperthreading. Although it can be
+    # computed, it's easier to just state it plainly for quick reference
+    if machine_name in ["S1", "S2", "S3"]:
+        gpu2cpu = server_gpu2cpu
+    else:
+        cpus_per_gpu =  host_info["num_cpus"] // host_info["num_gpus"]
+        gpu2cpu = {gpu_idx: [gpu_idx * cpus_per_gpu, (gpu_idx+1) * cpus_per_gpu-1] for gpu_idx in range()}
+
+    cpu_range = sorted(set([c for gpu in gpus for c in gpu2cpu[gpu]]))
+    cpu_ranges = []
+    cur_cpu = cpu_range[0]
+    for c in cpu_range:
+        if c == cur_cpu + 1:
+            cpu_ranges[-1].append(c)
+        else:
+            cpu_ranges.append([c])
+        cur_cpu = c
+        
+    return ",".join(f"{cr[0]}-{cr[-1]}" if len(cr) > 1 else f"{cr[0]}" for cr in cpu_ranges)
 
 def inset_arg_into_arg_list(*, arg_list, k, v):
     """Returns [arg_list] with argument --k inserted with values [v] before the first
