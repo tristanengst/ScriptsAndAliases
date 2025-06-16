@@ -3,6 +3,7 @@ import os.path as osp
 import subprocess
 
 import MachineInfo
+import Utils
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
@@ -25,7 +26,7 @@ for m in MachineInfo.machine2info:
         if osp.exists(osp.expanduser("~/.zshrc")):
             MachineInfo.run_command_on_machine(m, "source ~/.zshrc",)
     
-    elif not args.recursive_call:
+    elif Utils.is_workstation() and not args.recursive_call:
         print(f"Updating host={hostname}...")
         MachineInfo.run_command_on_machine(m, "python ~/.ScriptsAndAliases/UpdateScriptsAndAliases.py",)
     else:
