@@ -8,7 +8,7 @@ aliases = [
     "# START USEFUL ML ALIASES",
 
     # Useful on SLURM, doesn't require a Python script
-    "alias sqb=\"squeue -u $USER -O 'JobArrayID:.10,Name:.175,State:.8,TimeLeft:.10'\"",
+    "alias sqbf=\"squeue -u $USER -O 'JobArrayID:.10,Name:.175,State:.8,TimeLeft:.10'\"",
     "alias historyb=\"history | cut -c 8-\"",
     "alias sshareb=\"sshare -l -A rrg-keli_gpu; sshare -l -A def-keli_gpu\"",
 
@@ -20,7 +20,8 @@ aliases = [
     "alias scb=\"python ~/.ScriptsAndAliases/Scb.py --job \"",
     "alias scu=\"python ~/.ScriptsAndAliases/Scu.py \"",
     "alias extract_job_ids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
-    "alias sqbau=\"python ~/.ScriptsAndAliases/Sqbau.py\"",
+    "alias sqbau=\"python ~/.ScriptsAndAliases/Sqb2.py --cur_user 1\"",
+    "alias sqbau=\"python ~/.ScriptsAndAliases/Sqb2.py --cur_user 0\"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
     "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\"",
     "alias check_duplicate_jobs=\"python ~/.ScriptsAndAliases/CheckDuplicateJobs.py\"",

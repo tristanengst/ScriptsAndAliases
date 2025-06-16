@@ -15,7 +15,58 @@ def extract_line_contents(*, s, key):
     for l in lines:
         if l.strip().startswith(key):
             return l.strip().replace(key, "")
-    return None
+    return ""
+
+def jobid_to_uid(jobid, default=None, cur_user_only=True):
+    """Returns the UID of the job with [jobid].
+    
+    Args:
+    jobid                   -- job ID to find the UID for
+    default                 -- if not job ID is found, return this
+    other_users_quiet_fail  -- for other users' jobs for which no UID is found, quiet
+    """
+    def print_message(s):
+        user = extract_line_contents(s=scontrol_output, key="UserId=")
+        user = user[:user.index("(")] if "(" in user else user
+        if user == os.environ["USER"] or not cur_user_only:
+            print(s)
+
+    scontrol_output = subprocess.getoutput(f"scontrol show job {jobid}")
+    
+    # This is the most deliberate way to store and return job UIDs
+    if "Comment=" in scontrol_output:
+            comment = extract_line_contents(s=scontrol_output, key="Comment=")
+            try:
+                comment = json.loads(comment)
+            except:
+                comment = comment.replace("'", "\"")
+                try:
+                    comment = json.loads(comment)
+                except:
+                    print_message(f"Failed to parse comment for job {jobid}: {comment}")
+                    return default
+            return comment["uid"]
+
+    elif "Command=" in scontrol_output:
+        command = extract_line_contents(s=scontrol_output, key="Command=")
+        if osp.exists(command):
+            with open(command, "r") as f:
+                slurm_script = f.read()
+            slurm_script = slurm_script.split()
+            possible_uids = [slurm_script[idx+1] for idx,s in enumerate(slurm_script) if s == "--uid"]
+            if len(possible_uids) == 0:
+                print(f"Found zero UIDs for line {l}")
+            elif len(possible_uids) == 1:
+                line2uid[l] = possible_uids[0]
+                pass
+            else:
+                print(f"Found multiple UIDs for line {l}: {possible_uids}")
+        else:
+            print_message(f"Command file {command} does not exist for job {jobid}")
+            return default
+    else:
+        print_message(f"Job {jobid} does not have a Comment or Command field in scontrol output")
+        return default
 
 
 if __name__ == "__main__":
@@ -36,29 +87,6 @@ if __name__ == "__main__":
     # First, see if jobs have the UID recorded in their COMMENT
     for l in line2uid:
         scontrol_output = subprocess.getoutput(f"scontrol show job {l.split()[0]}")
-
-        if "Comment=" in scontrol_output:
-            comment = extract_line_contents(s=scontrol_output, key="Comment=")
-            try:
-                comment = json.loads(comment)
-            except:
-                comment = comment.replace("'", "\"")
-                comment = json.loads(comment)
-            line2uid[l] = comment["uid"]
-            continue
-
-        if "Command=" in scontrol_output:
-            command = extract_line_contents(s=scontrol_output, key="Command=")
-            with open(command, "r") as f:
-                slurm_script = f.read()
-            slurm_script = slurm_script.split()
-            possible_uids = [slurm_script[idx+1] for idx,s in enumerate(slurm_script) if s == "--uid"]
-            if len(possible_uids) == 0:
-                print(f"Found zero UIDs for line {l}")
-            elif len(possible_uids) == 1:
-                line2uid[l] = possible_uids[0]
-                continue
-            else:
-                print(f"Found multiple UIDs for line {l}: {possible_uids}")
+        line2uid[l] = jobid_to_uid(jobid=l.split()[0], default=None, cur_user_only=True)
 
     print_found_uids(args=args, uids=[u for u in line2uid.values()])
