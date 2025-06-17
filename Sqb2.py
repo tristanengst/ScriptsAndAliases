@@ -11,7 +11,7 @@ import Utils
 
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
-    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.9,tres-per-node:.12,Account:.100,Partition:.16,Name:.250,TimeLeft:.12,NumNodes:.4,StartTime:.20,Reason:.15' --sort N --noheader"
+    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.20,tres-per-node:.20,Account:.100,Partition:.16,Name:.250,TimeLeft:.12,NumNodes:.4,StartTime:.20,Reason:.15' --sort N --noheader"
 
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
@@ -42,7 +42,7 @@ def jobs_data_cc(*, account, cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}"
 
-    s = f"squeue {user_str} {account_str} -O 'JobArrayID:11,UserName:6,State:9,tres-per-node:17,TimeLeft:.12,NumNodes:.4,Name:.250,StartTime:.100,Reason:.15,' --noheader"
+    s = f"squeue {user_str} {account_str} -O 'JobArrayID:11,UserName:6,State:.20,tres-per-node:20,TimeLeft:.12,NumNodes:.4,Name:.250,StartTime:.100,Reason:.15,' --noheader"
     jobs = subprocess.getoutput(s).strip()
 
     job_datas = []
