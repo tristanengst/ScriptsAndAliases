@@ -90,7 +90,9 @@ if __name__ == "__main__":
         
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
+        print(job_data)
         for c in colnames:
+            print(c)
             col2max_chars[c] = max(col2max_chars[c], len(str(job_data[c])))
     col2max_chars = {c: mc+1 for c,mc in col2max_chars.items()}
 
