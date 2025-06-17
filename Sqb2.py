@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data_solar()
-        job_datas = [{c: c for c in colnames}] + colnames
+        job_datas = [{c: c for c in colnames}] + job_datas
     else:
         job_datas_rrg, colnames = jobs_data_cc(account="rrg-keli_gpu", cur_user=args.cur_user)
         job_datas_rrg = [{c: c for c in colnames}] + job_datas_rrg
@@ -90,9 +90,7 @@ if __name__ == "__main__":
         
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
-        print(job_data, "----------")
         for c in colnames:
-            print(c)
             col2max_chars[c] = max(col2max_chars[c], len(str(job_data[c])))
     col2max_chars = {c: mc+1 for c,mc in col2max_chars.items()}
 
