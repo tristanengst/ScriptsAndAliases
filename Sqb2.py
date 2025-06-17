@@ -21,7 +21,7 @@ def jobs_data_solar(cur_user=False):
             job_datas.append(dict(
                 NODES=j.strip().split()[0],
                 JOBID=j.strip().split()[1],
-                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[1], default=None, cur_user_only=False),
+                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[1], default=None, cur_user_only=True),
                 STATE=j.strip().split()[2],
                 START_TIME=j.strip().split()[9],
                 GPUS=str(int(j.strip().split()[3].replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]) * int(j.strip().split()[8])),
@@ -42,7 +42,7 @@ def jobs_data_cc(*, account, cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}"
 
-    s = f"squeue {user_str} {account_str} -O 'JobArrayID:11,UserName:6,State:9,tres-per-node:17,TimeLeft:.12,NumNodes:.4,Name:.250,StartTime:.15,Reason:.15,' --noheader"
+    s = f"squeue {user_str} {account_str} -O 'JobArrayID:11,UserName:6,State:9,tres-per-node:17,TimeLeft:.12,NumNodes:.4,Name:.250,StartTime:.100,Reason:.15,' --noheader"
     jobs = subprocess.getoutput(s).strip()
 
     job_datas = []
@@ -51,7 +51,7 @@ def jobs_data_cc(*, account, cur_user=False):
         for j in jobs:
             job_datas.append(dict(
                 JOBID=j.strip().split()[0],
-                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[0], default=None, cur_user_only=False),
+                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[0], default=None, cur_user_only=True),
                 USER=j.strip().split()[1],
                 STATE=j.strip().split()[2],
                 GPUS=str(int(j.strip().split()[3].replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]) * int(j.strip().split()[5])),
@@ -76,12 +76,14 @@ if __name__ == "__main__":
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data_solar()
-        job_datas = colnames + {c: c for c in colnames}
+        job_datas = [{c: c for c in colnames}] + colnames
     else:
         job_datas_rrg, colnames = jobs_data_cc(account="rrg-keli_gpu", cur_user=args.cur_user)
-        job_datas_rrg = job_datas_rrg + [{c: c for c in colnames}]
+        job_datas_rrg = [{c: c for c in colnames}] + job_datas_rrg
+        job_datas_rrg[0]["JOBID"] = f"(rrg) JOBID"
         job_datas_def, colnames = jobs_data_cc(account="def-keli_gpu", cur_user=args.cur_user)
-        job_datas_def = job_datas_def + [{c: c for c in colnames}]
+        job_datas_def = [{c: c for c in colnames}] + job_datas_def
+        job_datas_def[0]["JOBID"] = f"(def) JOBID"
 
         job_datas = job_datas_rrg + job_datas_def
         
@@ -105,7 +107,8 @@ if __name__ == "__main__":
     for j in job_datas:
         s = []
         for c in colnames:
-            s.append(f"{j[c]:<{col2max_chars[c]}}")
+            to_print = str(j[c])
+            s.append(f"{to_print:<{col2max_chars[c]}}")
 
         lines.append("  ".join(s))
     

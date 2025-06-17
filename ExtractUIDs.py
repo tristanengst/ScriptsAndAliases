@@ -10,11 +10,29 @@ def print_found_uids(*, args, uids):
     uids = [f"*{u}*" for u in uids] if args.globs else uids
     print(" ".join(uids))
 
-def extract_line_contents(*, s, key):
+def extract_line_contents(*, s, key, remove_parenthetical=True):
+    key = key.replace("=", "")
+    one_line_keys = ["Command", "Comment", ] # Non-exhaustive list of keys that are expected to be on one line
     lines = s.split("\n")
     for l in lines:
-        if l.strip().startswith(key):
-            return l.strip().replace(key, "")
+        l = l.strip()
+        if any([l.startswith(o) for o in one_line_keys]):
+            k,v = l.split("=")
+            if k == key:
+                return (v[:v.index("(")].strip() if remove_parenthetical and "(" in v else v.strip())
+        else:
+            kvs_in_line = l.split()
+            kvs = [kv.split("=") for kv in kvs_in_line if "=" in kv]
+
+        # Hack
+        for kv in kvs:
+            if len(kv) == 2:
+                k,v = kv
+                if k == key:
+                    if remove_parenthetical and "(" in v:
+                        return v[:v.index("(")].strip()
+                    else:
+                        return v.strip()
     return ""
 
 def jobid_to_uid(jobid, default=None, cur_user_only=True):
@@ -46,10 +64,10 @@ def jobid_to_uid(jobid, default=None, cur_user_only=True):
                     print_message(f"Failed to parse comment for job {jobid}: {comment}")
                     return default
             return comment["uid"]
-
+    
     elif "Command=" in scontrol_output:
         command = extract_line_contents(s=scontrol_output, key="Command=")
-        if osp.exists(command):
+        if osp.exists(command) and not command == "/bin/sh":
             with open(command, "r") as f:
                 slurm_script = f.read()
             slurm_script = slurm_script.split()
@@ -58,7 +76,7 @@ def jobid_to_uid(jobid, default=None, cur_user_only=True):
                 print(f"Found zero UIDs for line {l}")
             elif len(possible_uids) == 1:
                 line2uid[l] = possible_uids[0]
-                pass
+                return possible_uids[0]
             else:
                 print(f"Found multiple UIDs for line {l}: {possible_uids}")
         else:
