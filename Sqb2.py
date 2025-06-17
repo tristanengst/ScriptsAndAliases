@@ -11,7 +11,7 @@ import Utils
 
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
-    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.20,tres-per-node:.20,Account:.100,Partition:.16,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
+    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.20,tres-per-node:.20,Account:.100,Partition:.30,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
 
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
