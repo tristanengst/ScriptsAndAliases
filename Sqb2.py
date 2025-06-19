@@ -42,9 +42,8 @@ def jobs_data_cc(*, account, cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}"
 
-    s = f"squeue {user_str} {account_str} -O 'JobArrayID:11,UserName:6,State:.20,tres-per-node:20,TimeLeft:.30,NumNodes:.10,Name:.250,StartTime:.100,Reason:.15,' --noheader"
+    s = f"squeue {user_str} {account_str} -O 'JobArrayID:.100,UserName:.100,State:.100,tres-per-node:.40,TimeLeft:.80,NumNodes:.10,Name:.250,StartTime:.100,Reason:.15,' --noheader"
     jobs = subprocess.getoutput(s).strip()
-
     job_datas = []
     if not len(jobs) == 0:
         jobs = jobs.split("\n")
