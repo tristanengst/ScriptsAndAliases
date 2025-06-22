@@ -39,8 +39,8 @@ def get_cpus_from_gpus(*, gpus):
     if machine_name in ["S1", "S2", "S3"]:
         gpu2cpu = server_gpu2cpu
     else:
-        cpus_per_gpu =  host_info["num_cpus"] // host_info["num_gpus"]
-        gpu2cpu = {gpu_idx: [gpu_idx * cpus_per_gpu, (gpu_idx+1) * cpus_per_gpu-1] for gpu_idx in range()}
+        cpus_per_gpu =  host_info.total_cpus // host_info.total_gpus
+        gpu2cpu = {gpu_idx: [gpu_idx * cpus_per_gpu, (gpu_idx+1) * cpus_per_gpu-1] for gpu_idx in range(host_info.total_gpus)}
 
     cpu_range = sorted(set([c for gpu in gpus for c in gpu2cpu[gpu]]))
     cpu_ranges = []
