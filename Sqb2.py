@@ -11,13 +11,20 @@ import Utils
 
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
-    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.20,tres-per-node:.20,Account:.100,Partition:.30,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
+    s = f"squeue {user_str} -O 'NodeList:.20,JobArrayID:.6,State:.100,tres-per-node:.100,Account:.100,Partition:.30,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
 
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
     if not len(jobs) == 0:
+
         jobs = jobs.split("\n")
+
         for j in jobs:
+
+            # Sometimes the node list is empty. But then it can't begin with a digit, although a job must
+            if j[0].isnumeric():
+                j = f"unknown_node {j}"
+
             job_datas.append(dict(
                 NODES=j.strip().split()[0],
                 JOBID=j.strip().split()[1],
