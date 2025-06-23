@@ -9,6 +9,13 @@ import subprocess
 import ExtractUIDs
 import Utils
 
+def extract_gpu_str(gres_gpu, nodes):
+    s = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]
+    if s.isnumeric():
+        return str(int(s) * int(nodes))
+    else:
+        return gres_gpu
+
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     s = f"squeue {user_str} -O 'NodeList:.20,JobArrayID:.6,State:.100,tres-per-node:.100,Account:.100,Partition:.30,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
@@ -25,13 +32,14 @@ def jobs_data_solar(cur_user=False):
             if j[0].isnumeric():
                 j = f"unknown_node {j}"
 
+            # print(j, "\n\n\n", j.strip().split())
             job_datas.append(dict(
                 NODES=j.strip().split()[0],
                 JOBID=j.strip().split()[1],
                 UID=ExtractUIDs.jobid_to_uid(j.strip().split()[1], default=None, cur_user_only=True),
                 STATE=j.strip().split()[2],
                 START_TIME=j.strip().split()[9],
-                GPUS=str(int(j.strip().split()[3].replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]) * int(j.strip().split()[8])),
+                GPUS=extract_gpu_str(j.strip().split()[3], j.strip().split()[8]),
                 ACCOUNT=j.strip().split()[4],
                 PARTITION=j.strip().split()[5],
                 NAME=j.strip().split()[6],
