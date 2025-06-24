@@ -87,8 +87,6 @@ def jobs_data_solar(cur_user=False):
             j = j.strip()
             j_list = [j.strip() for j in j.split()]
 
-            print(j)
-
             job_datas.append(dict(
                 NODES=j_list[0],
                 JOBID=j_list[1],
