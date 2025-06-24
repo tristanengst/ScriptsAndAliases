@@ -9,6 +9,13 @@ import subprocess
 import ExtractUIDs
 import Utils
 
+def extract_gpu_str(gres_gpu, nodes):
+    s = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]
+    if s.isnumeric():
+        return str(int(s) * int(nodes))
+    else:
+        return gres_gpu
+
 def job_datas_with_to_prints(*, job_datas, col2max_chars):
     """Returns [job_datas] with a new key "to_print" that contains the string that
     should be printed to the terminal added for each job data.
@@ -56,6 +63,14 @@ def format_gpu_str(gres_gpu, num_nodes=1):
         num_nodes = int(num_nodes)
     return f"{num_gpus * num_nodes}" # We could do something fancier, but right now there's no ambiguity it could resolve
 
+def format_reason_from_slurm(reason):
+    """Returns the reason for the job in a more readable format."""
+    reason = " ".join(reason) if isinstance(reason, list) else reason
+    if reason == "Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions":
+        return "Nodes required"
+    else:
+        return reason.strip()
+
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     s = f"squeue {user_str} -O 'NodeList:100,JobArrayID:.100,State:.100,tres-per-node:.100,Account:.100,Partition:.100,Name:.250,TimeLeft:.30,NumNodes:.100,StartTime:.20,Reason:.15' --sort N --noheader"
@@ -63,7 +78,9 @@ def jobs_data_solar(cur_user=False):
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
     if not len(jobs) == 0:
+
         jobs = jobs.split("\n")
+
         for j in jobs:
             j = j.strip()
             j_list = [j.strip() for j in j.split()]
@@ -79,7 +96,7 @@ def jobs_data_solar(cur_user=False):
                 PARTITION=j_list[5],
                 NAME=j_list[6],
                 TIME_LEFT=j_list[7],
-                REASON=" ".join(j_list[10:]),
+                REASON=format_reason_from_slurm(j_list[10:]),
             ))
     if cur_user:
         colnames = ["NODES", "JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
@@ -110,7 +127,7 @@ def jobs_data_cc(*, account, cur_user=False):
                 TIME_LEFT=Utils.format_time_delta(j_list[4]),
                 NAME=j_list[6],
                 START_TIME=format_start_time_from_slurm(j_list[7]),
-                REASON=" ".join(j_list[8:]),
+                REASON=format_reason_from_slurm(j_list[8])
             ))
 
     if cur_user:

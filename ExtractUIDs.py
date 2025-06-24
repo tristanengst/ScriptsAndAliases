@@ -73,12 +73,12 @@ def jobid_to_uid(jobid, default=None, cur_user_only=True):
             slurm_script = slurm_script.split()
             possible_uids = [slurm_script[idx+1] for idx,s in enumerate(slurm_script) if s == "--uid"]
             if len(possible_uids) == 0:
-                print(f"Found zero UIDs for line {l}")
+                print_message(f"Found zero UIDs for line {slurm_script}")
             elif len(possible_uids) == 1:
                 line2uid[l] = possible_uids[0]
                 return possible_uids[0]
             else:
-                print(f"Found multiple UIDs for line {l}: {possible_uids}")
+                print_message(f"Found multiple UIDs for line {l}: {possible_uids}")
         else:
             print_message(f"Command file {command} does not exist for job {jobid}")
             return default
