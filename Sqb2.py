@@ -146,7 +146,7 @@ if __name__ == "__main__":
     args = P.parse_args()
 
     if Utils.is_solar():
-        job_datas, colnames = jobs_data_solar()
+        job_datas, colnames = jobs_data_solar(cur_user=args.cur_user)
         job_datas = [{c: c for c in colnames}] + job_datas
     else:
         job_datas_rrg, colnames = jobs_data_cc(account="rrg-keli_gpu", cur_user=args.cur_user)
