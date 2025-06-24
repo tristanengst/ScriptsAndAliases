@@ -200,7 +200,7 @@ unparsed_args = args_to_unparsed_args(before_script=before_script, script=script
 unparsed_args = " ".join(unparsed_args)  # Ensure it's a string
 
 command = f"command=\"{cuda_visible_devices_str} {taskset_str} {unparsed_args}\""
-full_command = f"full_command=\"$command $@ 2>&1 | tee -a '{log_file}'\"" if log_file else f"$command"
+full_command = f"full_command=\"$command $@ 2>&1 | tee -a '{log_file}'\"" if log_file else f"full_command=\"$command\""
 
 script_file = osp.join(args.taskset_scripts_dir, f"{uuid.uuid4()}.sh")
 script = f"source {shell2rc[args.shell]}\n{command}\n{full_command}\necho \"Running: $full_command\"\neval \"$full_command\""
