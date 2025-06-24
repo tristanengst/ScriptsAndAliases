@@ -75,12 +75,22 @@ def inset_arg_into_arg_list(*, arg_list, k, v):
             new_arg_list.append(a)
     return new_arg_list
 
+def get_random_port(max_port_address=65535, min_port_address=3456):
+    """Returns a port between [min_port_address] and [max_port_address]."""
+    import random
+    return random.randint(min_port_address, max_port_address)
+
 def get_script_from_alias(alias):
     if alias == "python":
         return "python"
     elif alias.startswith("python_ddp") and alias.replace("python_ddp", "").isdigit():
-        gpu_spec = alias.replace("python_ddp", "")
-        return f"torchrun --standalone --nnodes=1 --nproc-per-node {gpu_spec}"
+        from importlib.metadata import version as package_version
+        if package_version("torch") < "1.9.0":
+            gpu_spec = alias.replace("python_ddp", "")
+            return f"python -m torch.distributed.launch --nproc_per_node={gpu_spec} --master_port='{get_random_port()}'"
+        else:
+            gpu_spec = alias.replace("python_ddp", "")
+            return f"torchrun --standalone --nnodes=1 --nproc-per-node {gpu_spec}"
     else:
         print(f"Unknown alias {alias}, returning alias={alias}")
         return alias
@@ -104,10 +114,13 @@ args, unparsed_args = P.parse_known_args()
 
 if args.gpus is None and not args.strip_gpus is None:
     args.gpus = args.strip_gpus
+    args.strip_gpus = True
 elif not args.gpus is None and not args.strip_gpus is None:
     raise ValueError("Cannot specify both --gpus and --strip_gpus")
 elif args.gpus is None and args.strip_gpus is None:
     raise ValueError("Must specify either --gpus or --strip_gpus")
+else:
+    raise ValueError("Unknown error with --gpus and --strip_gpus")
 
 args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
 
