@@ -9,27 +9,77 @@ import subprocess
 import ExtractUIDs
 import Utils
 
+def job_datas_with_to_prints(*, job_datas, col2max_chars):
+    """Returns [job_datas] with a new key "to_print" that contains the string that
+    should be printed to the terminal added for each job data.
+    """
+    all_time_left_prefixed_zero = all([jd["TIME_LEFT"].startswith("0") or jd["TIME_LEFT"] == "TIME_LEFT" for jd in job_datas])
+    if all_time_left_prefixed_zero:
+        for jd in job_datas:
+            jd["TIME_LEFT"] = jd["TIME_LEFT"][1:] if jd["TIME_LEFT"].startswith("0") else jd["TIME_LEFT"]
+
+    all_start_times_prefixed_zero = all([jd["START_TIME"].startswith("0") or jd["START_TIME"] in ["START_TIME", "N/A"] for jd in job_datas])
+    if all_start_times_prefixed_zero:
+        for jd in job_datas:
+            jd["START_TIME"] = jd["START_TIME"][1:] if jd["START_TIME"].startswith("0") else jd["START_TIME"]
+
+    for j in job_datas:
+        s = []
+        for c in col2max_chars:
+            to_print = str(j[c])
+            s.append(f"{to_print:<{col2max_chars[c]}}")
+        s = "  ".join(s)
+        j["to_print"] = s
+    return job_datas
+
+def job_name_without_gpu_time_spec(jn):
+    """Returns job name [jn] without the GPU and time specification if it exists."""
+    import re
+    pattern = re.compile(r"^(.*?)(-?gpus\d+-\d{3}H\d{2}M)$")
+    match = pattern.match(jn)
+    return match.group(1) if match else jn
+
+def format_start_time_from_slurm(start_time):
+    """Returns the start time as given by squeue better formatted."""
+    if start_time == "N/A":
+        return "N/A"
+    else:
+        return start_time[5:-3].replace("T", "-")  # Remove the year and seconds
+
+def format_gpu_str(gres_gpu, num_nodes=1):
+    """Returns the GPU string formatted from the SLURM output."""
+    gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
+    num_gpus = int(gpus[-1])
+    gpu_type = None if len(gpus) < 2 else gpus[-2]
+
+    if not isinstance(num_nodes, int):
+        num_nodes = int(num_nodes)
+    return f"{num_gpus * num_nodes}" # We could do something fancier, but right now there's no ambiguity it could resolve
+
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
-    s = f"squeue {user_str} -O 'NodeList:20,JobArrayID:.6,State:.20,tres-per-node:.20,Account:.100,Partition:.30,Name:.250,TimeLeft:.30,NumNodes:.10,StartTime:.20,Reason:.15' --sort N --noheader"
+    s = f"squeue {user_str} -O 'NodeList:100,JobArrayID:.100,State:.100,tres-per-node:.100,Account:.100,Partition:.100,Name:.250,TimeLeft:.30,NumNodes:.100,StartTime:.20,Reason:.15' --sort N --noheader"
 
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
     if not len(jobs) == 0:
         jobs = jobs.split("\n")
         for j in jobs:
+            j = j.strip()
+            j_list = [j.strip() for j in j.split()]
+
             job_datas.append(dict(
-                NODES=j.strip().split()[0],
-                JOBID=j.strip().split()[1],
-                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[1], default=None, cur_user_only=True),
-                STATE=j.strip().split()[2],
-                START_TIME=j.strip().split()[9],
-                GPUS=str(int(j.strip().split()[3].replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]) * int(j.strip().split()[8])),
-                ACCOUNT=j.strip().split()[4],
-                PARTITION=j.strip().split()[5],
-                NAME=j.strip().split()[6],
-                TIME_LEFT=j.strip().split()[7],
-                REASON=" ".join(j.strip().split()[10:]),
+                NODES=j_list[0],
+                JOBID=j_list[1],
+                UID=ExtractUIDs.jobid_to_uid(j_list[1], default=None, cur_user_only=True),
+                STATE=j_list[2],
+                START_TIME=format_start_time_from_slurm(j_list[9]),
+                GPUS=format_gpu_str(j_list[3], num_nodes=j_list[8]),
+                ACCOUNT=j_list[4],
+                PARTITION=j_list[5],
+                NAME=j_list[6],
+                TIME_LEFT=j_list[7],
+                REASON=" ".join(j_list[10:]),
             ))
     if cur_user:
         colnames = ["NODES", "JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
@@ -42,22 +92,25 @@ def jobs_data_cc(*, account, cur_user=False):
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}"
 
-    s = f"squeue {user_str} {account_str} -O 'JobArrayID:.100,UserName:.100,State:.100,tres-per-node:.40,TimeLeft:.80,NumNodes:.10,Name:.250,StartTime:.100,Reason:.15,' --noheader"
+    s = f"squeue {user_str} {account_str} -O 'JobArrayID:.100,UserName:.100,State:.100,tres-per-node:.100,TimeLeft:.100,NumNodes:.10,Name:.250,StartTime:.100,Reason:.100,' --noheader"
     jobs = subprocess.getoutput(s).strip()
     job_datas = []
     if not len(jobs) == 0:
         jobs = jobs.split("\n")
         for j in jobs:
+            j = j.strip()
+            j_list = [j.strip() for j in j.split()]
+
             job_datas.append(dict(
-                JOBID=j.strip().split()[0],
-                UID=ExtractUIDs.jobid_to_uid(j.strip().split()[0], default=None, cur_user_only=True),
-                USER=j.strip().split()[1],
-                STATE=j.strip().split()[2],
-                GPUS=str(int(j.strip().split()[3].replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]) * int(j.strip().split()[5])),
-                TIME_LEFT=j.strip().split()[4],
-                NAME=j.strip().split()[6],
-                START_TIME=j.strip().split()[7],
-                REASON=" ".join(j.strip().split()[8:]),
+                JOBID=j_list[0],
+                UID=ExtractUIDs.jobid_to_uid(j_list[0], default=None, cur_user_only=True),
+                USER=j_list[1],
+                STATE=j_list[2],
+                GPUS=format_gpu_str(j_list[3], num_nodes=j_list[5]),
+                TIME_LEFT=Utils.format_time_delta(j_list[4]),
+                NAME=j_list[6],
+                START_TIME=format_start_time_from_slurm(j_list[7]),
+                REASON=" ".join(j_list[8:]),
             ))
 
     if cur_user:
@@ -79,10 +132,10 @@ if __name__ == "__main__":
     else:
         job_datas_rrg, colnames = jobs_data_cc(account="rrg-keli_gpu", cur_user=args.cur_user)
         job_datas_rrg = [{c: c for c in colnames}] + job_datas_rrg
-        job_datas_rrg[0]["JOBID"] = f"(rrg) JOBID"
+        job_datas_rrg[0]["JOBID"] = f"JOBID"
         job_datas_def, colnames = jobs_data_cc(account="def-keli_gpu", cur_user=args.cur_user)
         job_datas_def = [{c: c for c in colnames}] + job_datas_def
-        job_datas_def[0]["JOBID"] = f"(def) JOBID"
+        job_datas_def[0]["JOBID"] = f"JOBID"
 
         job_datas = job_datas_rrg + job_datas_def
         
@@ -91,25 +144,42 @@ if __name__ == "__main__":
     for job_data in job_datas:
         for c in colnames:
             col2max_chars[c] = max(col2max_chars[c], len(str(job_data[c])))
-    col2max_chars = {c: mc+1 for c,mc in col2max_chars.items()}
+    col2max_chars = {c: mc for c,mc in col2max_chars.items()}
 
-    # If including the full name would put the output over one line, then move it to a new line below the rest of the output
-    other_width = sum([col2max_chars[c] for c in col2max_chars if not c == "NAME"])
-    terminal_width = shutil.get_terminal_size().columns
-    possible_name_width = terminal_width - other_width - 1
-    if col2max_chars["NAME"] > possible_name_width:
+    # Try building the string representation for each job data.
+    job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
+
+    # If including the full name would put the output over one line, first try
+    # removing GPU and time specifications
+    all_on_one_line = max([len(j["to_print"]) for j in job_datas]) <= shutil.get_terminal_size().columns
+    if not all_on_one_line:
+        col2max_chars["NAME"] = 0
+        for job_data in job_datas:
+            job_data["NAME"] = job_name_without_gpu_time_spec(job_data["NAME"])
+            col2max_chars["NAME"] = max(col2max_chars["NAME"], len(job_data["NAME"]))
+
+    # If any job name is still too long, re-order the output so the job name comes
+    # last, and then make offending job names print on a line below the rest
+    job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
+    all_on_one_line = max([len(j["to_print"]) for j in job_datas]) < shutil.get_terminal_size().columns
+    if not all_on_one_line:
         col_names = [c for c in colnames if not c == "NAME"] + ["NAME"]
+        col2max_chars = {c: col2max_chars[c] for c in col_names}
+        
+        # Have to work with explicitly the name column, since it will have been padded
+        # so that short job names have many characters
+        other_chars = sum([col2max_chars[c] for c in col_names if not c == "NAME"])
+        max_name_chars = shutil.get_terminal_size().columns - other_chars - 2 * (len(col_names)-1)  # 2 for the spaces between columns
         for j in job_datas:
-            j["NAME"] = "\n\t" + j["NAME"]
-
-    lines = []
-    for j in job_datas:
-        s = []
-        for c in colnames:
-            to_print = str(j[c])
-            s.append(f"{to_print:<{col2max_chars[c]}}")
-
-        lines.append("  ".join(s))
-    
-    lines = "\n".join(lines)
+            if len(j["NAME"].strip()) > max_name_chars:
+                j["NAME"] = "\n\t\t" + j["NAME"] + "\n"
+        
+        # Exclude jobs whose names are on a new line from the length calculation
+        col2max_chars["NAME"] = 0
+        for job_data in job_datas:
+            job_name_ = "" if job_data["NAME"].startswith("\n\t\t") else job_data["NAME"].strip()
+            col2max_chars["NAME"] = max(col2max_chars["NAME"], len(job_name_))
+        
+    job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
+    lines = "\n".join([j["to_print"] for j in job_datas])
     print(lines)
