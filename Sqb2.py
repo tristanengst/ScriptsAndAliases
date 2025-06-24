@@ -89,6 +89,9 @@ def jobs_data_solar(cur_user=False):
             j = j.strip()
             j_list = [j.strip() for j in j.split()]
 
+            jn = j_list[6]
+            jn = jn.replace("preempt_me_", "") if jn.startswith("preempt_me_") else jn # On Solar, this prefix is for only other users
+
             job_datas.append(dict(
                 NODES=j_list[0],
                 JOBID=j_list[1],
@@ -98,7 +101,7 @@ def jobs_data_solar(cur_user=False):
                 GPUS=format_gpu_str(j_list[3], num_nodes=j_list[8]),
                 ACCOUNT=j_list[4],
                 PARTITION=j_list[5],
-                NAME=j_list[6],
+                NAME=jn,
                 TIME_LEFT=j_list[7],
                 REASON=format_reason_from_slurm(j_list[10:]),
             ))
