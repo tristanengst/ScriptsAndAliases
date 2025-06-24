@@ -44,7 +44,9 @@ def job_name_without_gpu_time_spec(jn):
     import re
     pattern = re.compile(r"^(.*?)(-?gpus\d+-\d{3}H\d{2}M)$")
     match = pattern.match(jn)
-    return match.group(1) if match else jn
+    jn = match.group(1) if match else jn
+    jn = jn.replace("preempt_me_", "") if jn.startswith("preempt_me_") else jn # On Solar, this prefix is for only other users
+    return jn
 
 def format_start_time_from_slurm(start_time):
     """Returns the start time as given by squeue better formatted."""
