@@ -55,6 +55,8 @@ def format_start_time_from_slurm(start_time):
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
+    if gres_gpu == "N/A":
+        return "N/A"
     gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
     num_gpus = int(gpus[-1])
     gpu_type = None if len(gpus) < 2 else gpus[-2]
@@ -84,6 +86,8 @@ def jobs_data_solar(cur_user=False):
         for j in jobs:
             j = j.strip()
             j_list = [j.strip() for j in j.split()]
+
+            print(j)
 
             job_datas.append(dict(
                 NODES=j_list[0],
