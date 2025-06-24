@@ -88,7 +88,7 @@ def get_script_from_alias(alias):
 P = argparse.ArgumentParser()
 P.add_argument("-c", default="parse_gpus",
     help="CPU specification")
-P.add_argument("--gpus", nargs="+", type=int, required=True,
+P.add_argument("--gpus", nargs="*", type=int, default=None,
     help="GPU specification")
 P.add_argument("--shell", default="bash", choices=["bash", "zsh"],
     help="Shell type")
@@ -98,9 +98,16 @@ P.add_argument("--taskset_debug", choices=[0, 1], default=0, type=int,
     help="Print the taskset script instead of running it")
 P.add_argument("--time", type=str, default=None,
     help="Time limit for the script passed to timeout command")
-P.add_argument("--strip_gpus", choices=[0, 1], default=0, type=int,
-    help="Remove --gpus from the command being run")
+P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
+    help="Like 'gpus' but they are removed from the command being run")
 args, unparsed_args = P.parse_known_args()
+
+if args.gpus is None and not args.strip_gpus is None:
+    args.gpus = args.strip_gpus
+elif not args.gpus is None and not args.strip_gpus is None:
+    raise ValueError("Cannot specify both --gpus and --strip_gpus")
+elif args.gpus is None and args.strip_gpus is None:
+    raise ValueError("Must specify either --gpus or --strip_gpus")
 
 args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
 
