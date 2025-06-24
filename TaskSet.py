@@ -95,6 +95,64 @@ def get_script_from_alias(alias):
         print(f"Unknown alias {alias}, returning alias={alias}")
         return alias
 
+def get_log_file(script, script_args):
+    """Returns the file to which the file should write results to."""
+    if script in ["TrainSSL2.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
+        import subprocess
+        script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
+        script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
+        script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
+        experiment_name = subprocess.getoutput(script_args_to_get_name).split()[-1]
+        return osp.join(experiment_name, "log.txt")
+    else:
+        return None
+    
+def unparsed_args_to_args(unparsed_args):
+    """Returns an argpare Namespace of [unparsed_args]. It requires that the Python
+    script in it takes only keyword arguments with one or more values.
+    """
+    result = dict()
+    begin_parsing = False
+    cur_key = None
+    cur_values = []
+    script = None
+    before_script = []
+
+    unparsed_args = unparsed_args if isinstance(unparsed_args, list) else unparsed_args.split()
+
+    for a in unparsed_args:
+        if not begin_parsing and not a.endswith(".py"):
+            before_script.append(a)
+        elif not begin_parsing and a.endswith(".py"):
+            begin_parsing = True
+            script = a
+        elif begin_parsing and a.startswith("--"):
+            if not cur_key is None:
+                result[cur_key] = " ".join(cur_values)
+            cur_key, cur_values = a[2:], []
+        elif begin_parsing and not cur_key is None:
+            cur_values.append(a)
+        else:
+            raise NotImplementedError()
+
+    before_script = " ".join(before_script)
+    return before_script, script, argparse.Namespace(**result)
+
+def args_to_unparsed_args(*, args, script=None, before_script=None, sort=True):
+    """Returns a list of unparsed arguments from the argparse Namespace [args]."""
+    unparsed_args = []
+    if before_script is not None:
+        unparsed_args.append(before_script)
+    if script is not None:
+        unparsed_args.append(script)
+
+    args = sorted(vars(args).items(), key=lambda x: x[0]) if sort else vars(args).items()
+
+    for k,v in args:
+        unparsed_args.append(f"--{k}")
+        unparsed_args.append(" ".join([str(x) for x in v]) if isinstance(v, list) else str(v))
+    return unparsed_args
+
 P = argparse.ArgumentParser()
 P.add_argument("-c", default="parse_gpus",
     help="CPU specification")
@@ -107,7 +165,7 @@ P.add_argument("--taskset_scripts_dir", default=osp.expanduser("~/.taskset_scrip
 P.add_argument("--taskset_debug", choices=[0, 1], default=0, type=int,
     help="Print the taskset script instead of running it")
 P.add_argument("--time", type=str, default=None,
-    help="Time limit for the script passed to timeout command")
+    help="Has no effect, but can resolve bugs where we accidentally use this.")
 P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
     help="Like 'gpus' but they are removed from the command being run")
 args, unparsed_args = P.parse_known_args()
@@ -120,25 +178,44 @@ elif not args.gpus is None and not args.strip_gpus is None:
 elif args.gpus is None and args.strip_gpus is None:
     raise ValueError("Must specify either --gpus or --strip_gpus")
 
+# Get the CPU string for taskset
 args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
+taskset_str = f"taskset -c {args.c}"
 
+before_script, script, script_args = unparsed_args_to_args(unparsed_args=unparsed_args)
+
+# Map the tpython_ddpX or other prefix to the script to what it should actually be
+before_script = get_script_from_alias(before_script)
+
+# Add --gpus to [args] unless they were set with --strip_gpus
 if not args.strip_gpus:
-    unparsed_args = inset_arg_into_arg_list(arg_list=unparsed_args, k="gpus", v=[str(gpu) for gpu in range(len(args.gpus))])
+    script_args.gpus = [int(g) for g in args.gpus]
+cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}"
 
-unparsed_args[0] = get_script_from_alias(unparsed_args[0])
+# Try and get the experiment name so we can get a log file
+log_file = get_log_file(script, script_args)
+_ = None if log_file is None else os.makedirs(osp.dirname(log_file), exist_ok=True)
 
-# Really useful for submitting things in the early morning and letting them run till
-# before someone else could reasonably wake up!
-unparsed_args = unparsed_args if args.time is None else (["timeout", args.time] + unparsed_args)
-unparsed_args = " ".join(unparsed_args)
+unparsed_args = args_to_unparsed_args(before_script=before_script, script=script, args=script_args)
+unparsed_args = " ".join(unparsed_args)  # Ensure it's a string
+
+command = f"command=\"{cuda_visible_devices_str} {taskset_str} {unparsed_args}\""
+full_command = f"full_command=\"$command $@ 2>&1 | tee -a '{log_file}'\"" if log_file else f"$command"
 
 script_file = osp.join(args.taskset_scripts_dir, f"{uuid.uuid4()}.sh")
-script = f"source {shell2rc[args.shell]}\nCUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])} taskset -c {args.c} {unparsed_args}\n"
+script = f"source {shell2rc[args.shell]}\n{command}\n{full_command}\necho \"Running: $full_command\"\neval \"$full_command\""
 
 if args.taskset_debug:
     print(script)
 else:
+    print(f"=============================================================================")
+    print(f"Writing taskset script to {script_file}")
+    print(f"Logs write to: stdout " + (f"and {log_file}" if log_file else ""))
+    print(f"=============================================================================")
+
     os.makedirs(osp.dirname(script_file), exist_ok=True)
     with open(script_file, "w+") as f:
         f.write(script)
     os.system(f"taskset -c {args.c} {args.shell} {script_file}")
+
+
