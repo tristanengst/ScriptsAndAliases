@@ -119,8 +119,6 @@ elif not args.gpus is None and not args.strip_gpus is None:
     raise ValueError("Cannot specify both --gpus and --strip_gpus")
 elif args.gpus is None and args.strip_gpus is None:
     raise ValueError("Must specify either --gpus or --strip_gpus")
-else:
-    raise ValueError("Unknown error with --gpus and --strip_gpus")
 
 args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
 
