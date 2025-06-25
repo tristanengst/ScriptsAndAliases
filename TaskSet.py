@@ -95,6 +95,19 @@ def get_script_from_alias(alias):
         print(f"Unknown alias {alias}, returning alias={alias}")
         return alias
 
+def try_add_wandb(script_args):
+    if script in ["TrainSSL2.py", "EvalFinetune.py"]:
+        import subprocess
+        script_args_to_get_wandb = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], wandb="online"))
+        script_args_to_get_wandb = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_wandb)
+        script_args_to_get_wandb = " ".join(script_args_to_get_wandb)  # Ensure it's a string
+        out = subprocess.getoutput(script_args_to_get_wandb).split()[-1]
+        print(f"Experiment name: {out}")
+        # return osp.join(experiment_name, "log.txt")
+        assert 0
+    else:
+        return script_args
+
 def get_log_file(script, script_args):
     """Returns the file to which the file should write results to."""
     if script in ["TrainSSL2.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
@@ -120,7 +133,7 @@ def unparsed_args_to_args(unparsed_args):
 
     unparsed_args = unparsed_args if isinstance(unparsed_args, list) else unparsed_args.split()
 
-    for a in unparsed_args:
+    for idx,a in enumerate(unparsed_args):
         if not begin_parsing and not a.endswith(".py"):
             before_script.append(a)
         elif not begin_parsing and a.endswith(".py"):
@@ -132,6 +145,8 @@ def unparsed_args_to_args(unparsed_args):
             cur_key, cur_values = a[2:], []
         elif begin_parsing and not cur_key is None:
             cur_values.append(a)
+            if idx == len(unparsed_args) - 1 and not cur_values is None:
+                result[cur_key] = " ".join(cur_values)
         else:
             raise NotImplementedError()
 
@@ -168,6 +183,8 @@ P.add_argument("--time", type=str, default=None,
     help="Has no effect, but can resolve bugs where we accidentally use this.")
 P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
     help="Like 'gpus' but they are removed from the command being run")
+P.add_argument("--try_add_wandb", choices=[0, 1], default=1, type=int,
+    help="Tries to add --wandb online if not specified")
 args, unparsed_args = P.parse_known_args()
 
 if args.gpus is None and not args.strip_gpus is None:
