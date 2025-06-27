@@ -50,10 +50,21 @@ def job_name_without_gpu_time_spec(jn):
 
 def format_start_time_from_slurm(start_time):
     """Returns the start time as given by squeue better formatted."""
-    if start_time == "N/A":
+    if start_time[0].isnumeric():
+        # Extract up to the first non-numeric, non-dash, non-color character
+        start_time_chars = []
+        for c in start_time:
+            if c.isnumeric() or c in "-:T":
+                start_time_chars.append(c)
+            else:
+                break
+        start_time = "".join(start_time_chars)
+        return start_time[5:-3].replace("T", "-")
+    elif start_time.startswith("N/A"):
         return "N/A"
     else:
-        return start_time[5:-3].replace("T", "-")  # Remove the year and seconds
+        assert 0, f"Unexpected start time format: {start_time}"
+          # Remove the year and seconds
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
@@ -70,10 +81,8 @@ def format_gpu_str(gres_gpu, num_nodes=1):
 def format_reason_from_slurm(reason):
     """Returns the reason for the job in a more readable format."""
     reason = " ".join(reason) if isinstance(reason, list) else reason
-    if reason == "Nodes required for job are DOWN, DRAINED or reserved for jobs in higher priority partitions":
-        return "Nodes required"
-    else:
-        return reason.strip()
+    reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
+    return reason
 
 def jobs_data_solar(cur_user=False):
     user_str = "-u $USER" if cur_user else ""
