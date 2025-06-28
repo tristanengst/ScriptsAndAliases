@@ -84,43 +84,39 @@ def get_slurm_status(cur_user=False, account=None):
         else:
             return dict(comment=c)
 
+    # On ComputeCanada, get jobs by account
+    if account is None and is_cc():
+        accounts = ["rrg-keli_gpu", "rrg-keli_cpu", "def-keli_gpu", "def-keli_cpu"]
+        result = dict()
+        for account in accounts:
+            result |= get_slurm_status(cur_user=cur_user, account=account)
+        return result
+
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}" if account else ""
-
-    if not cur_user and account is None:
-        return get_slurm_status_cc(cur_user=False, account="rrg-keli") | get_slurm_status_cc(cur_user=False, account="def-keli")
-    else:
-        keys = ["JOBID", "USER", "STATE", "START_TIME", "TIME_LEFT", "Gres", "NODES", "NAME", "REASON", "ACCOUNT", "PARTITION", "HOST"]
-        squeue = f"squeue {user_str} {account_str} -h -o \"%i|%u|%T|%S|%L|%b|%D|%j|%r|%a|%P|%B\""
-        squeue = subprocess.getoutput(squeue).strip()
-
-        if squeue == "":
-            return dict()
-
-        jobs = squeue.split("\n")
-        jobs = [j.strip().split("|") for j in jobs]
-        jobid_info = [list(zip(keys, j)) for j in jobs]
-        job2info = [dict(j) for j in jobid_info]
-        job2info = {j["JOBID"]: j for j in job2info}
-
-        # Now get comments
-        squeue = f"squeue {user_str} {account_str} -h -O JobID:10,Comment:.300"
-        squeue = subprocess.getoutput(squeue).strip()
-        jobs = squeue.split("\n")
-        jobs = [j.strip().split() for j in jobs]
-        job2comment = {j[0]: " ".join(j[1:]) for j in jobs}
-        job2comment = {j: try_parse_comment(c) for j,c in job2comment.items()}
-        job2info = {j: info | job2comment.get(j, {}) for j,info in job2info.items()}
-
-        # Now, ensure UIDs are recorded at a top level for convenience
-        job2info = {j: info | dict(UID=info.get("uid", None)) for j,info in job2info.items()}
-        return job2info
+    keys = ["JOBID", "USER", "STATE", "START_TIME", "TIME_LEFT", "Gres", "NODES", "NAME", "REASON", "ACCOUNT", "PARTITION", "HOST"]
     
+    squeue = f"squeue {user_str} {account_str} -h -o \"%i|%u|%T|%S|%L|%b|%D|%j|%r|%a|%P|%B\""
+    squeue = subprocess.getoutput(squeue).strip()
 
+    if squeue == "":
+        return dict()
 
+    jobs = squeue.split("\n")
+    jobs = [j.strip().split("|") for j in jobs]
+    jobid_info = [list(zip(keys, j)) for j in jobs]
+    job2info = [dict(j) for j in jobid_info]
+    job2info = {j["JOBID"]: j for j in job2info}
 
+    # Now get comments
+    squeue = f"squeue {user_str} {account_str} -h -O JobID:10,Comment:.300"
+    squeue = subprocess.getoutput(squeue).strip()
+    jobs = squeue.split("\n")
+    jobs = [j.strip().split() for j in jobs]
+    job2comment = {j[0]: " ".join(j[1:]) for j in jobs}
+    job2comment = {j: try_parse_comment(c) for j,c in job2comment.items()}
+    job2info = {j: info | job2comment.get(j, {}) for j,info in job2info.items()}
 
-
-
-
-
+    # Now, ensure UIDs are recorded at a top level for convenience
+    job2info = {j: info | dict(UID=info.get("uid", None)) for j,info in job2info.items()}
+    return job2info
