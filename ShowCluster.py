@@ -49,7 +49,10 @@ class Node:
         possible_nodes = len([n for n in node_list if n.can_allocate])
         possible_gpus = sum([n.possible_gpus for n in node_list])
 
-        print(f"AvailFullNodes={avail_full_nodes}/{total_nodes} AvailGPUs={avail_gpus}/{total_gpus} PossibleNodes={possible_nodes}/{total_nodes} PossibleGPUs={possible_gpus}/{total_gpus}")
+        avail_full_node_list = [n.node_name for n in node_list if n.available]
+        avail_full_node_str = ("(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
+
+        print(f"AvailFullNodes={avail_full_nodes}/{total_nodes} {avail_full_node_str} AvailGPUs={avail_gpus}/{total_gpus} PossibleNodes={possible_nodes}/{total_nodes} PossibleGPUs={possible_gpus}/{total_gpus}")
 
     @staticmethod
     def get_node_list():
@@ -100,8 +103,10 @@ class Node:
                 if not any([g in line for g in ["h100", "a100", "v100", "l40s", "a40", "a5000"]]):
                     continue
                 gres = line.split("=")[1].split(",")
-                _, gpu_type, gpus = gres[0].split(":")
-                gpus = int(gpus)
+                gres = gres[0].split(":")
+                gpu_type = gres[1]
+                gpu = int(gres[2][0])
+
             
             elif line.startswith("State="):
                 state = line.split("=")[1].split()[0]
@@ -116,31 +121,35 @@ class Node:
                     elif tres.startswith("mem"):
                         alloc_memory = tres.split("=")[1]
                         if alloc_memory.endswith("M"):
-                            alloc_memory = int(alloc_memory[:-1]) // (1024)
+                            alloc_memory = float(alloc_memory[:-1]) // (1024)
                         elif alloc_memory.endswith("G"):
-                            alloc_memory = int(alloc_memory[:-1])
+                            alloc_memory = float(alloc_memory[:-1])
                         elif alloc_memory.endswith("K"):
-                            alloc_memory = int(alloc_memory[:-1]) // (1024 * 1024)
+                            alloc_memory = float(alloc_memory[:-1]) // (1024 * 1024)
+                        elif alloc_memory.endswith("T"):
+                            alloc_memory = float(alloc_memory[:-1]) * 1024
                         else:
-                            alloc_memory = int(alloc_memory)
+                            alloc_memory = float(alloc_memory)
             elif line.startswith("CfgTRES="):
                 cfg_tres = line.replace("CfgTRES=", "")
                 cfg_tres = cfg_tres.split(",")
                 for tres in cfg_tres:
                     if tres.startswith("gres/gpu"):
-                        gpus = int(tres.split("=")[1])
+                        gpus = float(tres.split("=")[1])
                     elif tres.startswith("cpu"):
-                        cpus = int(tres.split("=")[1])
+                        cpus = float(tres.split("=")[1])
                     elif tres.startswith("mem"):
                         memory = tres.split("=")[1]
                         if memory.endswith("M"):
-                            memory = int(memory[:-1]) // (1024)
+                            memory = float(memory[:-1]) // (1024)
                         elif memory.endswith("G"):
-                            memory = int(memory[:-1])
+                            memory = float(memory[:-1])
                         elif memory.endswith("K"):
-                            memory = int(memory[:-1]) // (1024 * 1024)
+                            memory = float(memory[:-1]) // (1024 * 1024)
+                        elif memory.endswith("T"):
+                            memory = float(memory[:-1]) * 1024
                         else:
-                            memory = int(memory)
+                            memory = float(memory)
             
         if not node_name is None and not gpu_type is None:
                 node_list.append({
