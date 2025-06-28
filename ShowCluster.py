@@ -28,7 +28,7 @@ class Node:
         self.can_allocate = not any([s in self.state for s in ["DOWN", "NOT_RESPONDING", "DRAIN", "RESERVED"]])
         self.possible_gpus = self.gpus if self.can_allocate else 0
 
-        self.available = self.fraction_avail == 1 and self.can_allocate
+        self.available = self.state == "IDLE"
         self.avail_gpus = self.fraction_avail * self.possible_gpus
         
 
