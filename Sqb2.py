@@ -6,6 +6,7 @@ from collections import defaultdict
 import shutil
 import subprocess
 
+from ShowCluster import Node
 import ExtractUIDs
 import Utils
 
@@ -132,6 +133,8 @@ if __name__ == "__main__":
     P.add_argument("-a", "--all", action="store_true",
         help="Show next chunk jobs too")
     args = P.parse_args()
+
+    Node.print_cluster_stats(Node.get_node_list())
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None)
