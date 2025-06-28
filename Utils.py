@@ -96,7 +96,7 @@ def get_slurm_status(cur_user=False, account=None):
     account_str = f"-A {account}" if account else ""
     keys = ["JOBID", "USER", "STATE", "START_TIME", "TIME_LEFT", "Gres", "NODES", "NAME", "REASON", "ACCOUNT", "PARTITION", "HOST"]
     
-    squeue = f"squeue {user_str} {account_str} -h -o \"%i|%u|%T|%S|%L|%b|%D|%j|%r|%a|%P|%B\""
+    squeue = f"squeue {user_str} {account_str} -h -o \"%i|%u|%T|%S|%L|%b|%D|%j|%r|%a|%P|%N\""
     squeue = subprocess.getoutput(squeue).strip()
 
     if squeue == "":
