@@ -84,74 +84,28 @@ def format_reason_from_slurm(reason):
     reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return reason
 
-def jobs_data_solar(cur_user=False):
-    user_str = "-u $USER" if cur_user else ""
-    s = f"squeue {user_str} -O 'NodeList:100,JobArrayID:.100,State:.100,tres-per-node:.100,Account:.100,Partition:.100,Name:.250,TimeLeft:.30,NumNodes:.100,StartTime:.20,Reason:.15' --sort N --noheader"
+def jobs_data(*, account=None, cur_user=False):
+    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account)
+    job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
+    job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
+    job2info = {k: v | dict(REASON=format_reason_from_slurm(v["REASON"])) for k,v in job2info.items()}
+    job2info = {k: v | dict(NAME=v["NAME"].replace("preempt_me_", "") if v["NAME"].startswith("preempt_me_") else v["NAME"]) for k,v in job2info.items()}
 
-    jobs = subprocess.getoutput(s).strip()
-    job_datas = []
-    if not len(jobs) == 0:
-
-        jobs = jobs.split("\n")
-
-        for j in jobs:
-            j = j.strip()
-            j_list = [j.strip() for j in j.split()]
-
-            jn = j_list[6]
-            jn = jn.replace("preempt_me_", "") if jn.startswith("preempt_me_") else jn # On Solar, this prefix is for only other users
-
-            job_datas.append(dict(
-                NODES=j_list[0],
-                JOBID=j_list[1],
-                UID=ExtractUIDs.jobid_to_uid(j_list[1], default=None, cur_user_only=True),
-                STATE=j_list[2],
-                START_TIME=format_start_time_from_slurm(j_list[9]),
-                GPUS=format_gpu_str(j_list[3], num_nodes=j_list[8]),
-                ACCOUNT=j_list[4],
-                PARTITION=j_list[5],
-                NAME=jn,
-                TIME_LEFT=j_list[7],
-                REASON=format_reason_from_slurm(j_list[10:]),
-            ))
-    if cur_user:
-        colnames = ["NODES", "JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
-    else:
-        colnames = ["NODES", "JOBID", "UID", "STATE", "START_TIME", "GPUS", "ACCOUNT", "PARTITION", "NAME", "TIME_LEFT", "REASON"]
-
-    return job_datas, colnames 
-
-def jobs_data_cc(*, account, cur_user=False):
-    user_str = "-u $USER" if cur_user else ""
-    account_str = f"-A {account}"
-
-    s = f"squeue {user_str} {account_str} -O 'JobArrayID:.100,UserName:.100,State:.100,tres-per-node:.100,TimeLeft:.100,NumNodes:.10,Name:.250,StartTime:.100,Reason:.100,' --noheader"
-    jobs = subprocess.getoutput(s).strip()
-    job_datas = []
-    if not len(jobs) == 0:
-        jobs = jobs.split("\n")
-        for j in jobs:
-            j = j.strip()
-            j_list = [j.strip() for j in j.split()]
-
-            job_datas.append(dict(
-                JOBID=j_list[0],
-                UID=ExtractUIDs.jobid_to_uid(j_list[0], default=None, cur_user_only=True),
-                USER=j_list[1],
-                STATE=j_list[2],
-                GPUS=format_gpu_str(j_list[3], num_nodes=j_list[5]),
-                TIME_LEFT=Utils.format_time_delta(j_list[4]),
-                NAME=j_list[6],
-                START_TIME=format_start_time_from_slurm(j_list[7]),
-                REASON=format_reason_from_slurm(j_list[8])
-            ))
 
     if cur_user:
         col_names = ["JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
     else:
-        col_names = ["JOBID", "UID", "USER", "STATE", "START_TIME", "GPUS", "TIME_LEFT", "NAME", "REASON"]
+        col_names = ["JOBID", "UID", "USER", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
     
-    return job_datas, col_names
+    # On Solar, sort all the running jobs by the node name
+    if Utils.is_solar():
+        running_jobs = [k for k,v in job2info.items() if v["STATE"] == "RUNNING"]
+        other_jobs = [k for k,v in job2info.items() if not v["STATE"] == "RUNNING"]
+        running_jobs.sort(key=lambda k: job2info[k]["HOST"])
+        job2info = {j: job2info[j] for j in running_jobs + other_jobs}
+        col_names = ["HOST"] + col_names  # Add HOST to the beginning of the columns
+    
+    return list(job2info.values()), col_names
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
@@ -160,18 +114,15 @@ if __name__ == "__main__":
     args = P.parse_args()
 
     if Utils.is_solar():
-        job_datas, colnames = jobs_data_solar(cur_user=args.cur_user)
+        job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None)
         job_datas = [{c: c for c in colnames}] + job_datas
     else:
-        job_datas_rrg, colnames = jobs_data_cc(account="rrg-keli_gpu", cur_user=args.cur_user)
-        job_datas_rrg = [{c: c for c in colnames}] + job_datas_rrg
-        job_datas_rrg[0]["JOBID"] = f"JOBID"
-        job_datas_def, colnames = jobs_data_cc(account="def-keli_gpu", cur_user=args.cur_user)
-        job_datas_def = [{c: c for c in colnames}] + job_datas_def
-        job_datas_def[0]["JOBID"] = f"JOBID"
-
-        job_datas = job_datas_rrg + job_datas_def
-        
+        accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
+        job_datas = []
+        for account in accounts:
+            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user)
+            if len(job_datas_account) > 0:
+                job_datas += [{c: c for c in colnames}] + job_datas_account
         
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:

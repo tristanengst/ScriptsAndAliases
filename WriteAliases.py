@@ -22,6 +22,7 @@ aliases = [
     "alias extract_job_ids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
     "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py --cur_user 1\"",
     "alias sqbau=\"python ~/.ScriptsAndAliases/Sqb2.py --cur_user 0\"",
+    "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
     "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\"",
     "alias check_duplicate_jobs=\"python ~/.ScriptsAndAliases/CheckDuplicateJobs.py\"",
