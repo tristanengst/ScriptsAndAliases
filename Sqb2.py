@@ -84,7 +84,7 @@ def format_reason_from_slurm(reason):
     reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return reason
 
-def jobs_data(*, account=None, cur_user=False):
+def jobs_data(*, account=None, cur_user=False, next_chunks=False):
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account)
     job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
     job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
@@ -105,12 +105,32 @@ def jobs_data(*, account=None, cur_user=False):
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
         col_names = ["HOST"] + col_names  # Add HOST to the beginning of the columns
     
+    # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
+    # chunk. So, we will sort all of the duplicates below the rest. The smallest JobID
+    # should be in the regular position in this case.
+    elif Utils.is_cc():
+        uid2jobids = defaultdict(list)
+        for idx,(jobid,info) in enumerate(job2info.items()):
+            # Use indices so jobs without UIDs aren't impacted
+            uid = info["UID"] if not info["UID"] is None else str(idx)
+            uid2jobids[uid].append(jobid)
+        
+        least_job_ids = set([min(jobids) for _,jobids in uid2jobids.items()])
+        if next_chunks:
+            job2info_main = {j: info for j,info in job2info.items() if j in least_job_ids}
+            job2info_with_duplicates = {j: info for j,info in job2info.items() if not j in least_job_ids}
+            job2info = job2info_main | job2info_with_duplicates
+        else:
+            job2info = {j: info for j,info in job2info.items() if j in least_job_ids}
+
     return list(job2info.values()), col_names
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("--cur_user", choices=[0, 1], type=int, default=1,
+    P.add_argument("-u", "--cur_user", action="store_true", default=True,
         help="Show only jobs for the current user")
+    P.add_argument("-a", "--all", action="store_true",
+        help="Show next chunk jobs too")
     args = P.parse_args()
 
     if Utils.is_solar():
@@ -120,7 +140,7 @@ if __name__ == "__main__":
         accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
         job_datas = []
         for account in accounts:
-            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user)
+            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user, next_chunks=args.all)
             if len(job_datas_account) > 0:
                 job_datas += [{c: c for c in colnames}] + job_datas_account
         
