@@ -134,8 +134,6 @@ if __name__ == "__main__":
         help="Show next chunk jobs too")
     args = P.parse_args()
 
-    Node.print_cluster_stats(Node.get_node_list())
-
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None)
         job_datas = [{c: c for c in colnames}] + job_datas
@@ -190,3 +188,5 @@ if __name__ == "__main__":
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
     lines = "\n".join([j["to_print"] for j in job_datas])
     print(lines)
+
+    Node.print_cluster_stats(Node.get_node_list())
