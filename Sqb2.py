@@ -72,7 +72,7 @@ def format_start_time_from_slurm(start_time):
 def format_time_left_from_slurm(time_left):
     """Returns the time left as given by squeue better formatted. This just amounts to
     converting DD-HH:MM:SS to HHH:MM:SS. The total length of the returned string is
-    always 8 characters, aligned right. Zeroes are not added to the left.
+    always 9 characters, aligned right. Zeroes are not added to the left.
     """
     if "-" in time_left:
         days, hhmmss = time_left.split("-")
@@ -90,7 +90,7 @@ def format_time_left_from_slurm(time_left):
             raise ValueError(f"Unexpected time left format: {time_left}")
     
     result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
-    return " " * (8 - len(result)) + result
+    return " " * (9 - len(result)) + result
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
