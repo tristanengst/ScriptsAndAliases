@@ -132,6 +132,17 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
 
     return list(job2info.values()), col_names
 
+def account_to_levelfs_str(account):
+    s = subprocess.getoutput(f"sshare -l -A {account} --noheader")
+    if len(s) > 0:
+        group, user = s.split("\n")
+        group = float(group.split()[6])
+        user = float(user.split()[8])
+        return f"{account}={group:.2f} (user={user:.2f})"
+    else:
+        return f"{account}=no LevelFS"
+
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-u", "--cur_user", action="store_true", default=False,
@@ -199,4 +210,20 @@ if __name__ == "__main__":
     lines = "\n".join([j["to_print"] for j in job_datas])
     print(lines)
 
-    Node.print_cluster_stats(Node.get_node_list())
+    # Now describe the overall cluster status or roughly how allocated it is
+    meta_str = "--- Overall Cluster Status ---\n"
+    if Utils.is_cc():
+        accounts = ["rrg-keli_gpu", "def-keli_gpu"]
+        level_fs_strs = [account_to_levelfs_str(a) for a in accounts]
+        level_fs_str = "LevelFS: " + "\t".join(level_fs_strs)
+        level_fs_str = level_fs_str.replace("_gpu", "")
+        meta_str += level_fs_str
+    
+    meta_str +=  "\t|\t" + Node.cluster_stats_to_str()
+    print(meta_str)
+
+   
+
+
+
+

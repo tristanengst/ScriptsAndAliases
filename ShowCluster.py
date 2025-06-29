@@ -36,10 +36,15 @@ class Node:
         return f"{self.__class__.__name__}(avail_gpus={self.avail_gpus})"
 
     @staticmethod
-    def print_cluster_stats(node_list):
+    def print_cluster_stats():
         """Returns a dictionary with the total number of nodes, total GPUs, and
         available GPUs in the cluster.
         """
+        return print(Node.cluster_stats_to_str())
+    
+    @staticmethod
+    def cluster_stats_to_str():
+        node_list = Node.get_node_list()
         total_nodes = len(node_list)
         total_gpus = sum([n.gpus for n in node_list if n.gpus is not None])
 
@@ -51,8 +56,7 @@ class Node:
 
         avail_full_node_list = [n.node_name for n in node_list if n.available]
         avail_full_node_str = ("(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
-
-        print(f"AvailFullNodes={avail_full_nodes}/{total_nodes} {avail_full_node_str} AvailGPUs={avail_gpus}/{total_gpus} PossibleNodes={possible_nodes}/{total_nodes} PossibleGPUs={possible_gpus}/{total_gpus}")
+        return f"AvailFullNodes={avail_full_nodes}/{total_nodes}\t{avail_full_node_str}\tAvailGPUs={avail_gpus}/{possible_gpus}\tPossibleNodes={possible_nodes}/{total_nodes}\tPossibleGPUs={possible_gpus}/{total_gpus}"
 
     @staticmethod
     def get_node_list():
@@ -169,6 +173,6 @@ class Node:
 
 
 if __name__ == "__main__":
-    Node.print_cluster_stats(Node.get_node_list())
+    Node.print_cluster_stats()
         
             
