@@ -215,7 +215,7 @@ if __name__ == "__main__":
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
         level_fs_strs = [account_to_levelfs_str(a) for a in accounts]
-        level_fs_str = "LevelFS: " + "\t".join(level_fs_strs)
+        level_fs_str = "\t|\tLevelFS: " + "\t".join(level_fs_strs)
         level_fs_str = level_fs_str.replace("_gpu", "")
         meta_str += level_fs_str
     
