@@ -82,23 +82,15 @@ def format_time_left_from_slurm(time_left):
     else:
         if time_left.count(":") == 2:
             hh, mm, ss = time_left.split(":")
+            hh, mm, ss = int(hh), int(mm), int(ss)
         elif time_left.count(":") == 1:
-            hh = "0"
             mm, ss = time_left.split(":")
+            hh, mm, ss = 0, int(mm), int(ss)
         else:
             raise ValueError(f"Unexpected time left format: {time_left}")
-
-        # Can use complicated f-strings here
-        num_hh_digits = math.log(int(hh) + 1, 10) if int(hh) > 0 else 0
-        result = f"{int(hh):{num_hh_digits}}:{int(mm):02}:{int(ss):02}"
-        return " " * (8 - len(result)) + result  # Pad with spaces to the left to make it 8 characters long
-        
-        
-        
-        
-        # If there is no dash, it is already in the format HH:MM:SS
-        # hh, mm, ss = time_left.split(":")
-        # return f"{int(hh):03}:{int(mm):02}:{int(ss):02}" if len(time_left) > 0 else "N/A"
+    
+        result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
+        return " " * (8 - len(result)) + result
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
