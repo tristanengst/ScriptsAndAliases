@@ -70,16 +70,34 @@ def format_start_time_from_slurm(start_time):
 
 def format_time_left_from_slurm(time_left):
     """Returns the time left as given by squeue better formatted. This just amounts to
-    converting DD-HH:MM:SS to HHH:MM:SS.
+    converting DD-HH:MM:SS to HHH:MM:SS. The total length of the returned string is
+    always 8 characters, aligned right. Zeroes are not added to the left.
     """
     if "-" in time_left:
         days, hhmmss = time_left.split("-")
         hh, mm, ss = hhmmss.split(":")
         days, hh, mm, ss = int(days), int(hh), int(mm), int(ss)
-        total_hours = days * 24 + hh
-        return f"{total_hours:03}:{mm:02}:{ss:02}"
+        hh = days * 24 + hh
     else:
-        return time_left
+        if time_left.count(":") == 2:
+            hh, mm, ss = time_left.split(":")
+        elif time_left.count(":") == 1:
+            hh = "0"
+            mm, ss = time_left.split(":")
+        else:
+            raise ValueError(f"Unexpected time left format: {time_left}")
+
+        # Can use complicated f-strings here
+        num_hh_digits = math.log(int(hh) + 1, 10) if int(hh) > 0 else 0
+        result = f"{int(hh):{num_hh_digits}}:{int(mm):02}:{int(ss):02}"
+        return " " * (8 - len(result)) + result  # Pad with spaces to the left to make it 8 characters long
+        
+        
+        
+        
+        # If there is no dash, it is already in the format HH:MM:SS
+        # hh, mm, ss = time_left.split(":")
+        # return f"{int(hh):03}:{int(mm):02}:{int(ss):02}" if len(time_left) > 0 else "N/A"
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
