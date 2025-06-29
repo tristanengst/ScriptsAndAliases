@@ -151,8 +151,8 @@ if __name__ == "__main__":
             if len(job_datas_account) > 0:
                 job_datas += [{c: c for c in colnames}] + job_datas_account
     else:
-        # Produces the most obvious error if not on a SLURM cluster
-        print(subprocess.getoutput("squeue"))
+        # On workstations, the obvious equivalent is finding free GPUs.
+        print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0"))
         sys.exit(0)
         
     col2max_chars = {c: len(c) for c in colnames}
