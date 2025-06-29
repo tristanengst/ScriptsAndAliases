@@ -69,15 +69,20 @@ def format_start_time_from_slurm(start_time):
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
+    known_gpu = ["h100", "a100", "l40s", "a40", "a5000", "v100"]
+
     if gres_gpu == "N/A":
         return "N/A"
-    gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
-    num_gpus = int(gpus[-1])
-    gpu_type = None if len(gpus) < 2 else gpus[-2]
+    else:
+        gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
+        
+        # If the last element is a GPU, no GPU was requested
+        num_gpus = 0 if any([gpus[-1].startswith(g) for g in known_gpu]) else int(gpus[-1])
+        gpu_type = None if len(gpus) < 2 else gpus[-2]
 
-    if not isinstance(num_nodes, int):
-        num_nodes = int(num_nodes)
-    return f"{num_gpus * num_nodes}" # We could do something fancier, but right now there's no ambiguity it could resolve
+        if not isinstance(num_nodes, int):
+            num_nodes = int(num_nodes)
+        return f"{num_gpus * num_nodes}"
 
 def format_reason_from_slurm(reason):
     """Returns the reason for the job in a more readable format."""
