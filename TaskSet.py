@@ -13,6 +13,7 @@ import sys
 import uuid
 
 import MachineInfo
+import Utils
 
 shell2rc = dict(zsh="~/.zshrc", bash="~/.bashrc")
 
