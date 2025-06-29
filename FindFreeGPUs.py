@@ -3,7 +3,9 @@ running a process with 'python' in the name are available.
 """
 import argparse
 import math
+from multiprocessing import Pool
 import subprocess
+
 import MachineInfo
 import Utils
 
@@ -41,7 +43,6 @@ def find_free_gpus(h):
 
         user2num_gpus = [f"{k}={host_info.user2num_gpus[k]}" for k in sorted(host_info.user2num_gpus.keys(), key=lambda k: host_info.user2num_gpus[k], reverse=True)]
         user2num_gpus = "(" + ", ".join(user2num_gpus) + ")" if len(user2num_gpus) > 0 else "()"
-
         return {idx: not any(["python" in pn for pn in proc_names]) for idx,proc_names in gpu2proc_names.items()}, user2num_gpus
     else:
         return {i: False for i in range(host_info.total_gpus)}, "()"
@@ -90,8 +91,12 @@ if __name__ == "__main__":
     
     if args.solar == 0 or (args.solar == 2 and not Utils.is_solar()):
         args.hosts = MachineInfo.machine2info.keys() if len(args.hosts) == 0 else args.hosts
-        
-        machine2info = {h: find_free_gpus(h) for h in tqdm(args.hosts)}
+
+        # Parallelizing this is ~5x faster
+        with Pool(processes=min(16, len(args.hosts))) as p:
+            infos = p.map(find_free_gpus, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
+            machine2info = {h: info for h,info in zip(args.hosts, infos)}
+
         host2gpu2free = {h: gpu2free for h,(gpu2free, _) in machine2info.items()}
         host2users = {h: users_str for h,(_, users_str) in machine2info.items()}
         

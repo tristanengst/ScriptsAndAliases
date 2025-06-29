@@ -31,7 +31,7 @@ machine2info = {
     "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S2"]),
     "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S3"]),
     # "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A1"]),
-    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
+    # "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
     "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A3"]),
     "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A4"]),
     # "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
@@ -113,7 +113,7 @@ def run_command_on_machine(m, command):
     else:
         return subprocess.getoutput(f"ssh {ssh_name} '{command}'")
 
-def get_updated_machine_info(m):
+def get_updated_machine_info(m, verbose=0):
     """Returns a Namespace giving the nvidia-smi output, number of GPUs, and number
     CPU cores on machine [m].
 
@@ -129,7 +129,8 @@ def get_updated_machine_info(m):
     
     # Find the total number of GPUs and if nvidia-smi is working
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
-        print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
+        if verbose:
+            print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
         nvidia_smi_ok = False
         total_gpus = machine2info[m]["num_gpus"]
         total_cpus = machine2info[m]["num_cpus"]
