@@ -89,8 +89,8 @@ def format_time_left_from_slurm(time_left):
         else:
             raise ValueError(f"Unexpected time left format: {time_left}")
     
-        result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
-        return " " * (8 - len(result)) + result
+    result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
+    return " " * (8 - len(result)) + result
 
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
