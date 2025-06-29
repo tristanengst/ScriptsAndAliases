@@ -5,6 +5,7 @@ import argparse
 from collections import defaultdict
 import shutil
 import subprocess
+import sys
 
 from ShowCluster import Node
 import ExtractUIDs
@@ -137,18 +138,22 @@ if __name__ == "__main__":
         help="Show only jobs for the current user")
     P.add_argument("-a", "--all", action="store_true",
         help="Show next chunk jobs too")
-    args = P.parse_args()
+    args = P.parse_args()        
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None)
         job_datas = [{c: c for c in colnames}] + job_datas
-    else:
+    elif Utils.is_cc():
         accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
         job_datas = []
         for account in accounts:
             job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user, next_chunks=args.all)
             if len(job_datas_account) > 0:
                 job_datas += [{c: c for c in colnames}] + job_datas_account
+    else:
+        # Produces the most obvious error if not on a SLURM cluster
+        print(subprocess.getoutput("squeue"))
+        sys.exit(0)
         
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
