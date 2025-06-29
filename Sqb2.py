@@ -3,6 +3,7 @@ job name, and time remaining. Jobs are separated by SLURM account.
 """
 import argparse
 from collections import defaultdict
+import math
 import shutil
 import subprocess
 import sys
