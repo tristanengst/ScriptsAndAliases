@@ -68,6 +68,19 @@ def format_start_time_from_slurm(start_time):
         assert 0, f"Unexpected start time format: {start_time}"
           # Remove the year and seconds
 
+def format_time_left_from_slurm(time_left):
+    """Returns the time left as given by squeue better formatted. This just amounts to
+    converting DD-HH:MM:SS to HHH:MM:SS.
+    """
+    if "-" in time_left:
+        days, hhmmss = time_left.split("-")
+        hh, mm, ss = hhmmss.split(":")
+        days, hh, mm, ss = int(days), int(hh), int(mm), int(ss)
+        total_hours = days * 24 + hh
+        return f"{total_hours:03}:{mm:02}:{ss:02}"
+    else:
+        return time_left
+
 def format_gpu_str(gres_gpu, num_nodes=1):
     """Returns the GPU string formatted from the SLURM output."""
     known_gpu = ["h100", "a100", "l40s", "a40", "a5000", "v100"]
@@ -95,7 +108,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account)
     job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
     job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
-    job2info = {k: v | dict(TIME_LEFT=format_start_time_from_slurm(v["TIME_LEFT"])) for k,v in job2info.items()}
+    job2info = {k: v | dict(TIME_LEFT=format_time_left_from_slurm(v["TIME_LEFT"])) for k,v in job2info.items()}
     job2info = {k: v | dict(REASON=format_reason_from_slurm(v["REASON"])) for k,v in job2info.items()}
     job2info = {k: v | dict(NAME=v["NAME"].replace("preempt_me_", "") if v["NAME"].startswith("preempt_me_") else v["NAME"]) for k,v in job2info.items()}
 
