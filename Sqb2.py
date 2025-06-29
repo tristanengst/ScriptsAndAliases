@@ -95,6 +95,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account)
     job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
     job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
+    job2info = {k: v | dict(TIME_LEFT=format_start_time_from_slurm(v["TIME_LEFT"])) for k,v in job2info.items()}
     job2info = {k: v | dict(REASON=format_reason_from_slurm(v["REASON"])) for k,v in job2info.items()}
     job2info = {k: v | dict(NAME=v["NAME"].replace("preempt_me_", "") if v["NAME"].startswith("preempt_me_") else v["NAME"]) for k,v in job2info.items()}
 
