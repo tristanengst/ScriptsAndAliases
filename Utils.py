@@ -7,6 +7,8 @@ def get_cluster_type():
     h = os.uname()[1]
     if "nibi" in h:
         return "nibi"
+    elif h.startswith("rorqual") or h.startswith("rq") or h.startswith("rg") or h.startswith("rl"):
+        return "rorqual"
     elif h.startswith("narval") or h.startswith("ng"):
         return "narval"
     elif h.startswith("cedar") or h.startswith("cdr"):
@@ -22,7 +24,7 @@ def get_cluster_type():
         return os.environ.get("CLUSTER_TYPE", "cs-apex")
 
 def is_solar(): return get_cluster_type() == "solar"
-def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham"]
+def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual"]
 def is_workstation(): return not is_solar() and not is_cc()
 
 

@@ -209,7 +209,7 @@ if __name__ == "__main__":
 
     # If including the full name would put the output over one line, first try
     # removing GPU and time specifications
-    all_on_one_line = max([len(j["to_print"]) for j in job_datas]) <= shutil.get_terminal_size().columns
+    all_on_one_line = len(job_datas) == 0 or max([len(j["to_print"]) for j in job_datas]) <= shutil.get_terminal_size().columns
     if not all_on_one_line:
         col2max_chars["NAME"] = 0
         for job_data in job_datas:
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     # If any job name is still too long, re-order the output so the job name comes
     # last, and then make offending job names print on a line below the rest
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
-    all_on_one_line = max([len(j["to_print"]) for j in job_datas]) < shutil.get_terminal_size().columns
+    all_on_one_line = len(job_datas) == 0 or max([len(j["to_print"]) for j in job_datas]) < shutil.get_terminal_size().columns
     if not all_on_one_line:
         col_names = [c for c in colnames if not c == "NAME"] + ["NAME"]
         col2max_chars = {c: col2max_chars[c] for c in col_names}
