@@ -111,6 +111,13 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
         running_jobs.sort(key=lambda k: job2info[k]["HOST"])
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
         col_names = ["HOST"] + col_names  # Add HOST to the beginning of the columns
+
+    # Combine an abbreviated partition name with the user name
+    if Utils.is_solar() and not cur_user:
+        for jobid,info in job2info.items():
+            partition = info["PARTITION"].replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
+            job2info[jobid]["USER"] = f"{info['USER']}/{partition}"
+        
     
     # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
     # chunk. So, we will sort all of the duplicates below the rest. The smallest JobID
