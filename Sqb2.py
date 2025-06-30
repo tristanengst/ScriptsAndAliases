@@ -8,6 +8,10 @@ import shutil
 import subprocess
 import sys
 
+from datetime import datetime
+
+
+
 from ShowCluster import Node
 import ExtractUIDs
 import Utils
@@ -34,12 +38,22 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
             jd["START_TIME"] = jd["START_TIME"][1:] if jd["START_TIME"].startswith("0") else jd["START_TIME"]
 
     for j in job_datas:
+        job_id = "" if j["JOBID"].startswith("next chunks") else str(j["JOBID"])
+
         s = []
         for c in col2max_chars:
-            to_print = str(j[c])
-            s.append(f"{to_print:<{col2max_chars[c]}}")
+            if c == "JOBID" and j["JOBID"].startswith("__next chunks"):
+                s.append("")
+            elif c == "NAME" and j["NAME"].startswith("next chunks"):
+                to_print = f"------ {j['NAME']} ------"
+                to_print = f"{to_print:^{col2max_chars[c]}}"
+                s.append(to_print)
+            else:
+                s.append(f"{str(j[c]):<{col2max_chars[c]}}")
+            
         s = "  ".join(s)
         j["to_print"] = s
+    
     return job_datas
 
 def job_name_without_gpu_time_spec(jn):
@@ -51,18 +65,31 @@ def job_name_without_gpu_time_spec(jn):
     jn = jn.replace("preempt_me_", "") if jn.startswith("preempt_me_") else jn # On Solar, this prefix is for only other users
     return jn
 
+def start_time_to_comparable(start_time):
+    """Returns [start_time] a comparable string."""
+    if start_time[0].isnumeric():
+        month = int(start_time[:start_time.index("-")])
+        month = f"{month:02d}"  # Ensure month is two digits
+        return month + start_time[start_time.index("-"):]
+    else:
+        return start_time
+
 def format_start_time_from_slurm(start_time):
     """Returns the start time as given by squeue better formatted."""
+    # If [start_time] starts with four numbers, these are the year and are removed.
+    if len(start_time) > 4 and start_time[0:4].isnumeric():
+        start_time = start_time[5:]  # Remove the year and the dash after it
+    
     if start_time[0].isnumeric():
-        # Extract up to the first non-numeric, non-dash, non-color character
         start_time_chars = []
         for c in start_time:
             if c.isnumeric() or c in "-:T":
                 start_time_chars.append(c)
             else:
+                print(f"Unexpected character in start time: {c}")
                 break
         start_time = "".join(start_time_chars)
-        return start_time[5:-3].replace("T", "-")
+        return start_time[:-3].replace("T", "-")
     elif start_time.startswith("N/A"):
         return "N/A"
     else:
@@ -115,27 +142,49 @@ def format_reason_from_slurm(reason):
     reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return reason
 
-def jobs_data(*, account=None, cur_user=False, next_chunks=False):
-    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account)
+def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, submit_time=False):
+    """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
+    job IDs to info about their SLURM whatnot, and col_names is a list of column names
+    indexing each value of [job2info].
+
+    Args:
+    account     -- SLURM account to get jobs for, or none for all applicable accounts
+    cur_user    -- if True, only show jobs for the current user
+    next_chunks -- if True, include next chunk jobs too
+    nodes       -- if True, include the node list for all jobs
+    submit_time -- if True, include the submit time for all jobs
+    """
+    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, submit_time=submit_time)
     job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
     job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
     job2info = {k: v | dict(TIME_LEFT=format_time_left_from_slurm(v["TIME_LEFT"])) for k,v in job2info.items()}
     job2info = {k: v | dict(REASON=format_reason_from_slurm(v["REASON"])) for k,v in job2info.items()}
     job2info = {k: v | dict(NAME=v["NAME"].replace("preempt_me_", "") if v["NAME"].startswith("preempt_me_") else v["NAME"]) for k,v in job2info.items()}
 
-
     if cur_user:
         col_names = ["JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
     else:
         col_names = ["JOBID", "UID", "USER", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
+
+    # If submit time is requested, add it after the UID, and format it like a start
+    # time. Since 'SUBMIT_TIME' won't be in the [job2info] values unless [submit_time]
+    # is True, do the formatting after the check here.
+    if submit_time:
+        col_names = (col_names[:2] + ["SUBMIT_TIME"] + col_names[2:])
+        job2info = job2info = {k: v | dict(SUBMIT_TIME=format_start_time_from_slurm(v["SUBMIT_TIME"])) for k,v in job2info.items()}
+        
     
-    # On Solar, sort all the running jobs by the node name
+    # On Solar, sort all the running jobs by the node name. The node name is printed
+    # on the far left.
     if Utils.is_solar():
         running_jobs = [k for k,v in job2info.items() if v["STATE"] == "RUNNING"]
         other_jobs = [k for k,v in job2info.items() if not v["STATE"] == "RUNNING"]
         running_jobs.sort(key=lambda k: job2info[k]["HOST"])
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
         col_names = ["HOST"] + col_names  # Add HOST to the beginning of the columns
+    # Otherwise, if node names are requested, append them after the UID
+    elif nodes:
+        col_names = (col_names[:2] + ["HOST"] + col_names[2:])
 
     # Combine an abbreviated partition name with the user name
     if Utils.is_solar() and not cur_user:
@@ -145,8 +194,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
         
     
     # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
-    # chunk. So, we will sort all of the duplicates below the rest. The smallest JobID
-    # should be in the regular position in this case.
+    # chunk. So, we will sort all of the duplicates below the rest. In this case, we
+    # will sort the jobs so matching UIDs are grouped together and ordered by the
+    # start time of the least-job ID of the next chunks.
     elif Utils.is_cc():
         uid2jobids = defaultdict(list)
         for idx,(jobid,info) in enumerate(job2info.items()):
@@ -156,9 +206,18 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False):
         
         least_job_ids = set([min(jobids) for _,jobids in uid2jobids.items()])
         if next_chunks:
+            duplicate_job_ids = [j for j in job2info if not j in least_job_ids]
+            duplicate_job_ids = sorted(duplicate_job_ids, key=lambda j: start_time_to_comparable(job2info[j]["START_TIME"]))
+            duplicate_job_ids = sorted(duplicate_job_ids, key=lambda j: job2info[j]["UID"])
+
             job2info_main = {j: info for j,info in job2info.items() if j in least_job_ids}
-            job2info_with_duplicates = {j: info for j,info in job2info.items() if not j in least_job_ids}
-            job2info = job2info_main | job2info_with_duplicates
+            job2info_with_duplicates = {j: job2info[j] for j in duplicate_job_ids}
+
+            # Insert an indicator into [job2info] giving where the next chunks start
+            if len(job2info_with_duplicates) > 0:
+                account_str = "" if account is None else f" ({account})"
+                next_chunk = {f"__next chunks{account_str}": {c: f"next chunks{account_str}" if c == "NAME" else (f"__next chunks{account_str}" if c == "JOBID" else "") for c in col_names}}
+                job2info = job2info_main | next_chunk | job2info_with_duplicates
         else:
             job2info = {j: info for j,info in job2info.items() if j in least_job_ids}
 
@@ -181,16 +240,26 @@ if __name__ == "__main__":
         help="Show only jobs for the current user")
     P.add_argument("-a", "--all", action="store_true",
         help="Show next chunk jobs too")
+    P.add_argument("-n", "--nodes", action="store_true",
+        help="Show show the node list for all jobs")
+    P.add_argument("-s", "--submit_time", action="store_true",
+        help="Show show the submit time for all jobs")
     args = P.parse_args()        
 
     if Utils.is_solar():
-        job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None)
+        job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None,
+            next_chunks=args.all,
+            nodes=args.nodes,
+            submit_time=args.submit_time)
         job_datas = [{c: c for c in colnames}] + job_datas
     elif Utils.is_cc():
         accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
         job_datas = []
         for account in accounts:
-            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user, next_chunks=args.all)
+            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user,
+                next_chunks=args.all,
+                nodes=args.nodes,
+                submit_time=args.submit_time)
             if len(job_datas_account) > 0:
                 job_datas += [{c: c for c in colnames}] + job_datas_account
     else:
@@ -201,7 +270,7 @@ if __name__ == "__main__":
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
         for c in colnames:
-            col2max_chars[c] = max(col2max_chars[c], len(str(job_data[c])))
+            col2max_chars[c] = max(col2max_chars[c], 0 if str(job_data["JOBID"]).startswith("__") else len(str(job_data[c])))
     col2max_chars = {c: mc for c,mc in col2max_chars.items()}
 
     # Try building the string representation for each job data.

@@ -69,9 +69,14 @@ def format_time_delta(td, days=False, seconds=True):
     ss_str = f"{ss:02}" if seconds else ""
     return f"{dd_str}{hh_str}{mm_str}{ss_str}"
 
-def get_slurm_status(cur_user=False, account=None):
+def get_slurm_status(cur_user=False, account=None, submit_time=False):
     """Returns a dictionary describing the entire state what's running. Strings are
     not processed or reformatted in any way.
+
+    Args:
+    cur_user    -- if True, only show jobs for the current user
+    account     -- if not None, only show jobs for this account
+    submit_time -- if True, include the submit time for all jobs
     """
     import json
     def try_parse_comment(c):
@@ -110,7 +115,7 @@ def get_slurm_status(cur_user=False, account=None):
     job2info = [dict(j) for j in jobid_info]
     job2info = {j["JOBID"]: j for j in job2info}
 
-    # Now get comments
+    # Now get comments so we can add UIDs
     squeue = f"squeue {user_str} {account_str} -h -O JobID:10,Comment:.300"
     squeue = subprocess.getoutput(squeue).strip()
     jobs = squeue.split("\n")
@@ -118,7 +123,15 @@ def get_slurm_status(cur_user=False, account=None):
     job2comment = {j[0]: " ".join(j[1:]) for j in jobs}
     job2comment = {j: try_parse_comment(c) for j,c in job2comment.items()}
     job2info = {j: info | job2comment.get(j, {}) for j,info in job2info.items()}
-
-    # Now, ensure UIDs are recorded at a top level for convenience
     job2info = {j: info | dict(UID=info.get("uid", None)) for j,info in job2info.items()}
+
+    # Get the submit time for each job if requested
+    if submit_time:
+        squeue = f"squeue {user_str} {account_str} -h -O JobID:10,SubmitTime:20"
+        squeue = subprocess.getoutput(squeue).strip()
+        jobs = squeue.split("\n")
+        jobs = [j.strip().split() for j in jobs]
+        job2submit_time = {j[0]: j[1] for j in jobs}
+        job2info = {j: info | dict(SUBMIT_TIME=job2submit_time.get(j, None)) for j,info in job2info.items()}
+
     return job2info
