@@ -42,12 +42,24 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
 
         s = []
         for c in col2max_chars:
-            if c == "JOBID" and j["JOBID"].startswith("__next chunks"):
-                s.append("")
+            if j["JOBID"].startswith("__next chunks") and not c == "NAME":
+                s.append(" " * col2max_chars[c])  # Empty space for next chunks
+            elif j["JOBID"].startswith("__account") and c == "JOBID":
+                s.append(f"{'JOBID':<{col2max_chars[c]}}")
+            
+
             elif c == "NAME" and j["NAME"].startswith("next chunks"):
                 to_print = f"------ {j['NAME']} ------"
                 to_print = f"{to_print:^{col2max_chars[c]}}"
                 s.append(to_print)
+
+            elif c == "NAME" and j["NAME"] == "NAME" and Utils.is_cc():
+                account = j["JOBID"].replace("__account ", "")
+                to_print = f"------ {account} ------"
+                to_print = f"{to_print:^{col2max_chars[c] - len(c) * 2}}"
+                to_print = "NAME" + to_print
+                s.append(to_print)
+            
             else:
                 s.append(f"{str(j[c]):<{col2max_chars[c]}}")
             
@@ -216,7 +228,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
             # Insert an indicator into [job2info] giving where the next chunks start
             if len(job2info_with_duplicates) > 0:
                 account_str = "" if account is None else f" ({account})"
-                next_chunk = {f"__next chunks{account_str}": {c: f"next chunks{account_str}" if c == "NAME" else (f"__next chunks{account_str}" if c == "JOBID" else "") for c in col_names}}
+                next_chunk = {f"__next chunks{account_str}": {c: f"next chunks{account_str}" if c == "NAME" else (f"__next chunks{account_str}" if c == "JOBID" else c) for c in col_names}}
                 job2info = job2info_main | next_chunk | job2info_with_duplicates
         else:
             job2info = {j: info for j,info in job2info.items() if j in least_job_ids}
@@ -261,7 +273,8 @@ if __name__ == "__main__":
                 nodes=args.nodes,
                 submit_time=args.submit_time)
             if len(job_datas_account) > 0:
-                job_datas += [{c: c for c in colnames}] + job_datas_account
+                colnames_job_data = {c: f"__account {account}" if c == "JOBID" else c for c in colnames}
+                job_datas += [colnames_job_data] + job_datas_account
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
         print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0"))
@@ -306,6 +319,8 @@ if __name__ == "__main__":
         for job_data in job_datas:
             job_name_ = "" if job_data["NAME"].startswith("\n\t\t") else job_data["NAME"].strip()
             col2max_chars["NAME"] = max(col2max_chars["NAME"], len(job_name_))
+
+    
         
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
     lines = "\n".join([j["to_print"] for j in job_datas])
