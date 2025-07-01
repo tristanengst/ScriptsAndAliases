@@ -135,3 +135,15 @@ def get_slurm_status(cur_user=False, account=None, submit_time=False):
         job2info = {j: info | dict(SUBMIT_TIME=job2submit_time.get(j, None)) for j,info in job2info.items()}
 
     return job2info
+
+
+def jobid2info_to_uid2jobids(job2info=None):
+    """Converts a job2info dictionary to a uid2jobids dictionary."""
+    from collections import defaultdict
+    job2info = job2info if job2info else get_slurm_status(cur_user=True)
+
+    uid2jobids = defaultdict(list)
+    for jobid,info in job2info.items():
+        if "UID" in info:
+            uid2jobids[info["UID"]].append(jobid)
+    return dict(uid2jobids)
