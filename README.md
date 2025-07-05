@@ -33,7 +33,7 @@ exclude_nodes node123 node456
 
 View all your jobs (nicer version of `squeue`):
 ```
-sqb
+sqbf
 ```
 
 View all `def-keli` and `rrg-keli` jobs on ComputeCanada, or all users' jobs on Solar:
@@ -55,6 +55,12 @@ extract_job_ids 's'
 I always include a matching UID in **(1)** my experiments' names and **(2)** the directories they save checkpoints to, ensuring an unambiguous provenance to any result or file. On SLURM this extends to **(3)** SLURM jobs, **(4)** their submission scripts, and **(5)** their output files. These UIDs become a central handle with which to interact with the cluster; for example, finding the script that ran an experiment with UID `asdfgh` is simple: `cat some/path/*asdfgh*`!
 
 _To effect this, the Python script that runs an experiment has `--uid ` argument, with the UID generated automatically if `--uid` isn't included. Each of these scripts is run inside a SLURM script, generated from a template file by another Python script. This script can then generate a UID to find the name of the experiment it's submitting, and then include it as a keyword argument to the Python script run inside the job. This allows setting the job's name, output file, and the generated SLURM script to include the UID. I also include the UID in a dictionary of metadata stored in the job's `COMMENT` attribute (up to 256 characters). This is probably the most unambiguous way to specify it, as how the UID appears in how things are named doesn't matter._
+
+View all your jobs (nicer version of `sqb`) and show UIDs too:
+```
+sqb [-a show jobs with duplicate UIDs] [-s show start times] [-u all users as in sqbau]
+```
+The bash commands don't require using flags for ease of typing, eg `sqba` and `sqbus` and `sqbsu` are valid.
 
 Extract UIDs of all jobs from string `s` of newline-separated job names  (eg. `sqb` output):
 ```
@@ -110,7 +116,8 @@ python TarFiles.py --dir directory_to_tar --out name_of_tar_file --last_k_days 6
 ```
 If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -xf name_of_tar_file -C directory_to_extract_under some_file_or_folder`
 
-
+### Notes
+- The development model for this is very ad-hoc; I fix bugs when they are sufficiently annoying to justify the time. This could change if this impacts other people.
 
 
 
