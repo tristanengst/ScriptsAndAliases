@@ -248,19 +248,19 @@ def account_to_levelfs_str(account):
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("-u", "--cur_user", action="store_true", default=False,
-        help="Show only jobs for the current user")
-    P.add_argument("-a", "--all", action="store_true",
+    P.add_argument("-u", "--users", action="store_true", default=False,
+        help="Show only jobs for all users")
+    P.add_argument("-c", "--next_chunks", action="store_true", default=False,
         help="Show next chunk jobs too")
-    P.add_argument("-n", "--nodes", action="store_true",
+    P.add_argument("-n", "--nodes", action="store_true", default=False,
         help="Show show the node list for all jobs")
-    P.add_argument("-s", "--submit_time", action="store_true",
+    P.add_argument("-s", "--submit_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
-    args = P.parse_args()        
+    args = P.parse_args()
 
     if Utils.is_solar():
-        job_datas, colnames = jobs_data(cur_user=args.cur_user, account=None,
-            next_chunks=args.all,
+        job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
+            next_chunks=args.next_chunks,
             nodes=args.nodes,
             submit_time=args.submit_time)
         job_datas = [{c: c for c in colnames}] + job_datas
@@ -268,8 +268,8 @@ if __name__ == "__main__":
         accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
         job_datas = []
         for account in accounts:
-            job_datas_account, colnames = jobs_data(account=account, cur_user=args.cur_user,
-                next_chunks=args.all,
+            job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
+                next_chunks=args.next_chunks,
                 nodes=args.nodes,
                 submit_time=args.submit_time)
             if len(job_datas_account) > 0:
