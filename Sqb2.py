@@ -211,10 +211,16 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
     job2info = {j: job_dict_with_formatted_reason(info) for j,info in job2info.items()}
     job2info = {j: job_dict_without_preempt_me_name(info) for j,info in job2info.items()}
 
+    # Combine an abbreviated partition name with the user name on Solar
+    if Utils.is_solar() and not cur_user:
+        for jobid,info in job2info.items():
+            partition = info["PARTITION"].replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
+            job2info[jobid]["USER"] = f"{info['USER']}/{partition}"
+
 
     col_names = ["HOST" if Utils.is_solar() or nodes else None,
         "JOBID", "UID",
-        "USER" if not Utils.is_solar() else None,
+        "USER" if not cur_user else None,
         "STATE",
         "SUBMIT_TIME" if submit_time else None,
         "ELIGIBLE_TIME" if eligible_time else None,
@@ -232,11 +238,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         running_jobs.sort(key=lambda k: job2info[k]["HOST"])
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
 
-    # Combine an abbreviated partition name with the user name on Solar
-    if Utils.is_solar() and not cur_user:
-        for jobid,info in job2info.items():
-            partition = info["PARTITION"].replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
-            job2info[jobid]["USER"] = f"{info['USER']}/{partition}"
+    
 
     # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
     # chunk. So, we will sort all of the duplicates below the rest. In this case, we
