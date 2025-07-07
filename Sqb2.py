@@ -86,75 +86,105 @@ def start_time_to_comparable(start_time):
     else:
         return start_time
 
-def format_start_time_from_slurm(start_time):
-    """Returns the start time as given by squeue better formatted."""
-    # If [start_time] starts with four numbers, these are the year and are removed.
-    if len(start_time) > 4 and start_time[0:4].isnumeric():
-        start_time = start_time[5:]  # Remove the year and the dash after it
+def job_dict_with_queue_time(jd):
+    """Returns job dict [jd] with the queue time added."""
+    if "ELIGIBLE_TIME" in jd and jd["ELIGIBLE_TIME"] in ["Unknown", "N/A"]:
+        return jd | dict(QUEUE_TIME="N/A")
+    elif "ELIGIBLE_TIME" in jd and jd["ELIGIBLE_TIME"]:
+        eligible_time = datetime.strptime(jd["ELIGIBLE_TIME"], "%Y-%m-%dT%H:%M:%S")
+    elif not "ELIGIBLE_TIME" in jd:
+        raise NotImplementedError(f"job_dict={jd} missing 'ELIGIBLE_TIME' key")
+    else:
+        raise NotImplementedError(f"job_dict={jd} ")
+
+    if jd["STATE"] in ["RUNNING", "COMPLETING"]:
+        start_time = datetime.strptime(jd["START_TIME"], "%Y-%m-%dT%H:%M:%S")
+    else:
+        start_time = datetime.now()
     
-    if start_time[0].isnumeric():
-        start_time_chars = []
-        for c in start_time:
+    queue_time = start_time - eligible_time
+    queue_time = f"{queue_time.total_seconds() / 3600:.2f}H"
+    return jd | dict(QUEUE_TIME=queue_time) 
+
+def job_dict_with_formatted_date_time(jd, *, key):
+    """Returns job dict [jd] with the date/time key [key] formatted. This function should be run last!"""
+    date_time = jd[key]
+
+    # If [start_time] starts with four numbers, these are the year and are removed.
+    if len(date_time) > 4 and date_time[0:4].isnumeric():
+        date_time = date_time[5:]  # Remove the year and the dash after it
+    
+    if date_time[0].isnumeric():
+        date_time_chars = []
+        for c in date_time:
             if c.isnumeric() or c in "-:T":
-                start_time_chars.append(c)
+                date_time_chars.append(c)
             else:
                 print(f"Unexpected character in start time: {c}")
                 break
-        start_time = "".join(start_time_chars)
-        return start_time[:-3].replace("T", "-")
-    elif start_time.startswith("N/A"):
-        return "N/A"
+        date_time = "".join(date_time_chars)
+        date_time = date_time[:-3].replace("T", "-") # Exclude seconds
+    elif date_time.startswith("N/A"):
+        date_time = "N/A"
     else:
-        assert 0, f"Unexpected start time format: {start_time}"
-          # Remove the year and seconds
+        assert 0, f"Unexpected start time format: {date_time}"
 
-def format_time_left_from_slurm(time_left):
-    """Returns the time left as given by squeue better formatted. This just amounts to
-    converting DD-HH:MM:SS to HHH:MM:SS. The total length of the returned string is
-    always 9 characters, aligned right. Zeroes are not added to the left.
-    """
-    if "-" in time_left:
-        days, hhmmss = time_left.split("-")
+    return jd | {key: date_time}
+
+def job_dict_with_formatted_time_delta(jd, key="TIME_LEFT"):
+    """Returns job dict [jd] with the time delta key [key] formatted."""
+    delta = jd[key]
+    if "-" in delta:
+        days, hhmmss = delta.split("-")
         hh, mm, ss = hhmmss.split(":")
         days, hh, mm, ss = int(days), int(hh), int(mm), int(ss)
         hh = days * 24 + hh
     else:
-        if time_left.count(":") == 2:
-            hh, mm, ss = time_left.split(":")
+        if delta.count(":") == 2:
+            hh, mm, ss = delta.split(":")
             hh, mm, ss = int(hh), int(mm), int(ss)
-        elif time_left.count(":") == 1:
-            mm, ss = time_left.split(":")
+        elif delta.count(":") == 1:
+            mm, ss = delta.split(":")
             hh, mm, ss = 0, int(mm), int(ss)
         else:
-            raise ValueError(f"Unexpected time left format: {time_left}")
+            raise ValueError(f"Unexpected time left format: {delta}")
     
     result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
-    return " " * (9 - len(result)) + result
+    result = " " * (9 - len(result)) + result
 
-def format_gpu_str(gres_gpu, num_nodes=1):
-    """Returns the GPU string formatted from the SLURM output."""
+    return jd | {key: result}
+
+def job_dict_with_formatted_resources(jd, num_nodes=1):
+    """Returns job dict [jd] with the resources formatted."""
     known_gpu = ["h100", "a100", "l40s", "a40", "a5000", "v100"]
-
+    
+    gres_gpu = jd.get("Gres", "N/A")
+    num_nodes = jd.get("NODES", num_nodes)
+    
     if gres_gpu == "N/A":
-        return "N/A"
+        gpus = "N/A"
     else:
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
         
         # If the last element is a GPU, no GPU was requested
         num_gpus = 0 if any([gpus[-1].startswith(g) for g in known_gpu]) else int(gpus[-1])
         gpu_type = None if len(gpus) < 2 else gpus[-2]
+        gpus =  f"{num_gpus * int(num_nodes)}"
 
-        if not isinstance(num_nodes, int):
-            num_nodes = int(num_nodes)
-        return f"{num_gpus * num_nodes}"
+    return jd | dict(GPUS=gpus,)
 
-def format_reason_from_slurm(reason):
-    """Returns the reason for the job in a more readable format."""
-    reason = " ".join(reason) if isinstance(reason, list) else reason
+def job_dict_with_formatted_reason(jd):
+    """Returns job dict [jd] with the reason formatted."""
+    reason = " ".join(jd["REASON"]) if isinstance(jd["REASON"], list) else jd["REASON"]
     reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
-    return reason
+    return jd | dict(REASON=reason)
 
-def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, submit_time=False):
+def job_dict_without_preempt_me_name(jd):
+    """Returns job dict [jd] with the name without the 'preempt_me_' prefix."""
+    name = jd["NAME"].replace("preempt_me_", "") if jd["NAME"].startswith("preempt_me_") else jd["NAME"]
+    return jd | dict(NAME=name)
+
+def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, submit_time=False, eligible_time=False, queue_time=False, verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
     indexing each value of [job2info].
@@ -166,24 +196,32 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
     """
-    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, submit_time=submit_time)
-    job2info = {k: v | dict(GPUS=format_gpu_str(v["Gres"], num_nodes=v.get("NODES", 1))) for k,v in job2info.items()}
-    job2info = {k: v | dict(START_TIME=format_start_time_from_slurm(v["START_TIME"])) for k,v in job2info.items()}
-    job2info = {k: v | dict(TIME_LEFT=format_time_left_from_slurm(v["TIME_LEFT"])) for k,v in job2info.items()}
-    job2info = {k: v | dict(REASON=format_reason_from_slurm(v["REASON"])) for k,v in job2info.items()}
-    job2info = {k: v | dict(NAME=v["NAME"].replace("preempt_me_", "") if v["NAME"].startswith("preempt_me_") else v["NAME"]) for k,v in job2info.items()}
+    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=verbose)
 
-    if cur_user:
-        col_names = ["JOBID", "UID", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
-    else:
-        col_names = ["JOBID", "UID", "USER", "STATE", "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON"]
-
-    # If submit time is requested, add it after the UID, and format it like a start
-    # time. Since 'SUBMIT_TIME' won't be in the [job2info] values unless [submit_time]
-    # is True, do the formatting after the check here.
     if submit_time:
-        col_names = (col_names[:2] + ["SUBMIT_TIME"] + col_names[2:])
-        job2info = job2info = {k: v | dict(SUBMIT_TIME=format_start_time_from_slurm(v["SUBMIT_TIME"])) for k,v in job2info.items()}
+        job2info = {j: job_dict_with_formatted_date_time(v, key="SUBMIT_TIME") for j,v in job2info.items()}
+    if eligible_time:
+        job2info = {j: job_dict_with_formatted_date_time(v, key="ELIGIBLE_TIME") for j,v in job2info.items()}
+    if queue_time:
+        job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
+
+    job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
+    job2info = {j: job_dict_with_formatted_date_time(info, key="START_TIME") for j,info in job2info.items()}
+    job2info = {j: job_dict_with_formatted_time_delta(info, key="TIME_LEFT") for j,info in job2info.items()}
+    job2info = {j: job_dict_with_formatted_reason(info) for j,info in job2info.items()}
+    job2info = {j: job_dict_without_preempt_me_name(info) for j,info in job2info.items()}
+
+
+    col_names = ["HOST" if Utils.is_solar() or nodes else None,
+        "JOBID", "UID",
+        "USER" if not Utils.is_solar() else None,
+        "STATE",
+        "SUBMIT_TIME" if submit_time else None,
+        "ELIGIBLE_TIME" if eligible_time else None,
+        "QUEUE_TIME" if queue_time else None,
+        "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON",]
+    col_names = [c for c in col_names if not c is None]
+    job2info = {j: {c: info[c] for c in col_names} for j,info in job2info.items()}
         
     
     # On Solar, sort all the running jobs by the node name. The node name is printed
@@ -193,18 +231,13 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         other_jobs = [k for k,v in job2info.items() if not v["STATE"] == "RUNNING"]
         running_jobs.sort(key=lambda k: job2info[k]["HOST"])
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
-        col_names = ["HOST"] + col_names  # Add HOST to the beginning of the columns
-    # Otherwise, if node names are requested, append them after the UID
-    elif nodes:
-        col_names = (col_names[:2] + ["HOST"] + col_names[2:])
 
-    # Combine an abbreviated partition name with the user name
+    # Combine an abbreviated partition name with the user name on Solar
     if Utils.is_solar() and not cur_user:
         for jobid,info in job2info.items():
             partition = info["PARTITION"].replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
             job2info[jobid]["USER"] = f"{info['USER']}/{partition}"
-        
-    
+
     # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
     # chunk. So, we will sort all of the duplicates below the rest. In this case, we
     # will sort the jobs so matching UIDs are grouped together and ordered by the
@@ -256,13 +289,22 @@ if __name__ == "__main__":
         help="Show show the node list for all jobs")
     P.add_argument("-s", "--submit_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
+    P.add_argument("-e", "--eligible_time", action="store_true", default=False,
+        help="Show show the submit time for all jobs")
+    P.add_argument("-q", "--queue_time", action="store_true", default=False,
+        help="Show show the submit time for all jobs")
+    P.add_argument("-v", "--verbose", action="store_true", default=False,
+        help="Verbose output, show commands being run")
     args = P.parse_args()
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
             next_chunks=args.next_chunks,
             nodes=args.nodes,
-            submit_time=args.submit_time)
+            submit_time=args.submit_time,
+            eligible_time=args.eligible_time,
+            queue_time=args.queue_time,
+            verbose=args.verbose)
         job_datas = [{c: c for c in colnames}] + job_datas
     elif Utils.is_cc():
         accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
@@ -271,7 +313,10 @@ if __name__ == "__main__":
             job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
                 next_chunks=args.next_chunks,
                 nodes=args.nodes,
-                submit_time=args.submit_time)
+                submit_time=args.submit_time,
+                eligible_time=args.eligible_time,
+                queue_time=args.queue_time,
+                verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = {c: f"__account {account}" if c == "JOBID" else c for c in colnames}
                 job_datas += [colnames_job_data] + job_datas_account
