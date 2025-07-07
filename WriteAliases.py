@@ -26,6 +26,7 @@ aliases = [
     "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
     "alias sqbas=\"python ~/.ScriptsAndAliases/Sqb2.py -as \"",
     "alias sqbsa=\"python ~/.ScriptsAndAliases/Sqb2.py -ns \"",
+    "alias sqbau=\"python ~/.ScriptsAndAliases/Sqb2.py -au \"",
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
 
