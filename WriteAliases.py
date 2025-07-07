@@ -20,13 +20,15 @@ aliases = [
     "alias scb=\"python ~/.ScriptsAndAliases/Scb.py --job \"",
     "alias scu=\"python ~/.ScriptsAndAliases/Scu.py \"",
     "alias extract_job_ids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
-    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",           # Concise summary
-    "alias sqbc=\"python ~/.ScriptsAndAliases/Sqb2.py -c \"",       # Show next-chunk jobs  
-    "alias sqbs=\"python ~/.ScriptsAndAliases/Sqb2.py -s \"",       # Show start times
-    "alias sqbu=\"python ~/.ScriptsAndAliases/Sqb2.py -u \"",       # Show jobs of all users
-    "alias sqbcs=\"python ~/.ScriptsAndAliases/Sqb2.py -cs \"",     # Show next-chunk jobs and start times
-    "alias sqbcu=\"python ~/.ScriptsAndAliases/Sqb2.py -cu \"",     # Show next-chunk jobs and jobs of all users
-    "alias sqbcsu=\"python ~/.ScriptsAndAliases/Sqb2.py -csu \"",   # Show next-chunk jobs, start times and jobs of all users
+
+    # Common ways to run Sqb2.py.
+    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
+    "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
+    "alias sqbas=\"python ~/.ScriptsAndAliases/Sqb2.py -as \"",
+    "alias sqbsa=\"python ~/.ScriptsAndAliases/Sqb2.py -ns \"",
+    "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
+    "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
+
     "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
     "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\"",

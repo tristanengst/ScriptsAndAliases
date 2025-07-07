@@ -283,7 +283,7 @@ if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-u", "--users", action="store_true", default=False,
         help="Show only jobs for all users")
-    P.add_argument("-c", "--next_chunks", action="store_true", default=False,
+    P.add_argument("-a", "-c", "--next_chunks", action="store_true", default=False,
         help="Show next chunk jobs too")
     P.add_argument("-n", "--nodes", action="store_true", default=False,
         help="Show show the node list for all jobs")
