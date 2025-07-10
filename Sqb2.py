@@ -374,7 +374,8 @@ if __name__ == "__main__":
     print(lines)
 
     # Now describe the overall cluster status or roughly how allocated it is
-    meta_str = "--- Overall Cluster Status ---\n"
+    time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    meta_str = f"--- Overall Cluster Status ({time_str}) ---\n"
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
         level_fs_strs = [account_to_levelfs_str(a) for a in accounts]
