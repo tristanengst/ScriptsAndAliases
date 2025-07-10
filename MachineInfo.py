@@ -104,6 +104,7 @@ def hostname_is_current_machine(hostname):
 
 def run_command_on_machine(m, command):
     """Runs [command] on machine [m] and returns the output."""
+    os.chdir("/") # Not sure why this fixes an issue
     hostname = machine_to_hostname(m)
     if os.uname().nodename == hostname:
         return subprocess.getoutput(command)
