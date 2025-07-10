@@ -43,6 +43,9 @@ aliases = [
     "alias jcats=\"python ~/.ScriptsAndAliases/JobCat.py -s --substr \"",
     "alias jcatsr=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
     "alias jcatrs=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
+
+    # Updates ScriptsAndAliases
+    "alias update_scripts_and_aliases="cd ~/.ScriptsAndAliases ; python WriteAliases.py ; source ~/.bashrc",
     
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet
