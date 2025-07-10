@@ -30,10 +30,19 @@ aliases = [
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
 
+    # Quiet output, saves cluster state to a file
+    "alias sqbr=\"python ~/.ScriptsAndAliases/Sqb2.py -ausq --record default --verbose 0\"", 
+
     "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
     "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\"",
     "alias check_duplicate_jobs=\"python ~/.ScriptsAndAliases/CheckDuplicateJobs.py\"",
+
+    # Prints a job's output and/or SLURM script given a substring from its name
+    "alias jcat=\"python ~/.ScriptsAndAliases/JobCat.py -r --substr \"",
+    "alias jcats=\"python ~/.ScriptsAndAliases/JobCat.py -s --substr \"",
+    "alias jcatsr=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
+    "alias jcatrs=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
     
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet

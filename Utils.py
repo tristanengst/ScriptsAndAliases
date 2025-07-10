@@ -136,35 +136,8 @@ def get_slurm_status(cur_user=False, account=None, verbose=False):
 
     job2comment = {j[0]: " ".join(j[3:]) for j in jobs}
     job2comment = {j: try_parse_comment(c) for j,c in job2comment.items()}
-    job2info = {j: info | job2comment.get(j, {}) for j,info in job2info.items()}
-    job2info = {j: info | dict(UID=info.get("uid", None)) for j,info in job2info.items()}
-    
-    
-    
-    
-    # # Now get comments so we can add UIDs
-    # squeue = f"squeue {user_str} {account_str} -h -O JobID:10,Comment:.300"
-    # squeue = subprocess.getoutput(squeue).strip()
-    # jobs = squeue.split("\n")
-    # jobs = [j.strip().split() for j in jobs]
-    # job2comment = {j[0]: " ".join(j[1:]) for j in jobs}
-    # job2comment = {j: try_parse_comment(c) for j,c in job2comment.items()}
-    # job2info = {j: info | job2comment.get(j, {}) for j,info in job2info.items()}
-    # job2info = {j: info | dict(UID=info.get("uid", None)) for j,info in job2info.items()}
-
-    # # Get the submit time for each job if requested
-    # if submit_time:
-    #     squeue = f"squeue {user_str} {account_str} -h -O JobID:10,SubmitTime:20"
-    #     squeue = subprocess.getoutput(squeue).strip()
-    #     jobs = squeue.split("\n")
-    #     jobs = [j.strip().split() for j in jobs]
-    #     job2submit_time = {j[0]: j[1] for j in jobs}
-    #     job2info = {j: info | dict(SUBMIT_TIME=job2submit_time.get(j, None)) for j,info in job2info.items()}
-
-    # # Include or exclude the eligible time for each job as requested
-    # if not eligible_time:
-    #     for j in job2info:
-    #         job2info = {k: v for k,v in job2info.items() if not k == "ELIGIBLE"}
+    job2info = {j: info | dict(COMMENT=job2comment.get(j, dict())) for j,info in job2info.items()}
+    job2info = {j: info | dict(UID=info["COMMENT"].get("uid", None)) for j,info in job2info.items()}
     
     return job2info
 

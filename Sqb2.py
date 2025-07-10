@@ -3,25 +3,13 @@ job name, and time remaining. Jobs are separated by SLURM account.
 """
 import argparse
 from collections import defaultdict
-import math
+from datetime import datetime
 import shutil
 import subprocess
 import sys
 
-from datetime import datetime
-
-
-
 from ShowCluster import Node
-import ExtractUIDs
 import Utils
-
-def extract_gpu_str(gres_gpu, nodes):
-    s = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").split(":")[-1]
-    if s.isnumeric():
-        return str(int(s) * int(nodes))
-    else:
-        return gres_gpu
 
 def job_datas_with_to_prints(*, job_datas, col2max_chars):
     """Returns [job_datas] with a new key "to_print" that contains the string that
@@ -196,7 +184,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
     """
-    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=verbose)
+    job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
     if submit_time:
         job2info = {j: job_dict_with_formatted_date_time(v, key="SUBMIT_TIME") for j,v in job2info.items()}
@@ -226,9 +214,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         "ELIGIBLE_TIME" if eligible_time else None,
         "QUEUE_TIME" if queue_time else None,
         "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON",]
-    col_names = [c for c in col_names if not c is None]
-    job2info = {j: {c: info[c] for c in col_names} for j,info in job2info.items()}
-        
+    col_names = [c for c in col_names if not c is None]        
     
     # On Solar, sort all the running jobs by the node name. The node name is printed
     # on the far left.
@@ -237,8 +223,6 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         other_jobs = [k for k,v in job2info.items() if not v["STATE"] == "RUNNING"]
         running_jobs.sort(key=lambda k: job2info[k]["HOST"])
         job2info = {j: job2info[j] for j in running_jobs + other_jobs}
-
-    
 
     # On ComputeCanada, there may be duplicate UIDs as jobs pre-submit their next job
     # chunk. So, we will sort all of the duplicates below the rest. In this case, we
@@ -270,15 +254,27 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
 
     return list(job2info.values()), col_names
 
-def account_to_levelfs_str(account):
+def account_to_levelfs_record(account):
+    """Returns a dictionary giving the group and user LevelFS for [account]."""
     s = subprocess.getoutput(f"sshare -l -A {account} --noheader")
     if len(s) > 0:
         group, user = s.split("\n")
         group = float(group.split()[6])
         user = float(user.split()[8])
-        return f"{account}={group:.2f} (user={user:.2f})"
+        return dict(group=group, user=user)
+        # return f"{account}={group:.2f} (user={user:.2f})"
     else:
-        return f"{account}=no LevelFS"
+        return dict(group=None, user=None)
+
+def build_record(*, job_datas, account2lfs):
+    """Returns a JSON record giving what was going on with the cluster when run."""
+    import os, time # Imported here to be faster when not 
+    return dict(date=datetime.now().strftime("%Y-%m-%d-%H:%M:%S"),
+        time=time.time(), # Maybe useful for easy sorting? Idk.
+        account2lfs=account2lfs,
+        job_data=job_datas,
+        user=os.environ["USER"],  # Maybe useful if multiple people run this and end up with different LevelFS user fields?
+        )
 
 
 if __name__ == "__main__":
@@ -295,8 +291,10 @@ if __name__ == "__main__":
         help="Show show the submit time for all jobs")
     P.add_argument("-q", "--queue_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
-    P.add_argument("-v", "--verbose", action="store_true", default=False,
-        help="Verbose output, show commands being run")
+    P.add_argument("-v", "--verbose", default=1, choices=[0, 1, 2], type=int,
+        help="Verbosity: 0=no output, 1=default output, 2=default+commands being run")
+    P.add_argument("-r", "--record", default=False,
+        help="Save outputs to this file for recording. 'default' saves to ~/.ClusterData/SqbOutputs/sqb_output_TIMESTR.json")
     args = P.parse_args()
 
     if Utils.is_solar():
@@ -366,25 +364,40 @@ if __name__ == "__main__":
         for job_data in job_datas:
             job_name_ = "" if job_data["NAME"].startswith("\n\t\t") else job_data["NAME"].strip()
             col2max_chars["NAME"] = max(col2max_chars["NAME"], len(job_name_))
-
-    
         
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
     lines = "\n".join([j["to_print"] for j in job_datas])
-    print(lines)
+    
+    if args.verbose:
+        print(lines)
 
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     meta_str = f"--- Overall Cluster Status ({time_str}) ---\n"
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
-        level_fs_strs = [account_to_levelfs_str(a) for a in accounts]
+        account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
+        account2lfs_str = {a: {k: f"{l:.2f}" if isinstance(l, float) else str(l) for k,l in lfs.items()} for a,lfs in account2lfs.items() if not lfs["group"] is None}
+        level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
         level_fs_str = "\t|\tLevelFS: " + "\t".join(level_fs_strs)
         level_fs_str = level_fs_str.replace("_gpu", "")
         meta_str += level_fs_str
     
     meta_str +=  "\t|\t" + Node.cluster_stats_to_str()
-    print(meta_str)
+    if args.verbose:
+        print(meta_str)
+
+    # If on ComputeCanada and --record is set, save the data that was computed so we
+    # can reference it later.
+    if Utils.is_cc() and args.record == "default":
+        import os.path as osp # Imported here to be faster when not needed
+        time_str = time_str.replace(":", "-")
+        args.record = osp.join(osp.expanduser(f"~/.ClusterData"), "SqbOutputs", f"sqb_output_{time_str}.json")
+    if Utils.is_cc() and args.record:
+        import UtilsBase # Imported here to be faster when not needed
+        job_datas = [jd for jd in job_datas if not jd["JOBID"].startswith("__")]
+        record = build_record(job_datas=job_datas, account2lfs=account2lfs)
+        _ = UtilsBase.atomic_save_lite(data=record, fname=args.record)
 
    
 
