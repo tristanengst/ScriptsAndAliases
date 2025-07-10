@@ -104,15 +104,20 @@ def hostname_is_current_machine(hostname):
 
 def run_command_on_machine(m, command):
     """Runs [command] on machine [m] and returns the output."""
-    os.chdir("/") # Not sure why this fixes an issue
+    cwd = os.getcwd()
+    os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
     hostname = machine_to_hostname(m)
     if os.uname().nodename == hostname:
-        return subprocess.getoutput(command)
+        result = subprocess.getoutput(command)
+        os.chdir(cwd)
+        return result
     ssh_name = machine_to_ssh_name(m)
     if ssh_name is None:
         raise ValueError(f"Could not find SSH name for machine {m} with hostname={hostname}. Please check your ~/.ssh/config file.")
     else:
-        return subprocess.getoutput(f"ssh {ssh_name} '{command}'")
+        result = subprocess.getoutput(f"ssh {ssh_name} '{command}'")
+        os.chdir(cwd)
+        return result
 
 def get_updated_machine_info(m, verbose=0):
     """Returns a Namespace giving the nvidia-smi output, number of GPUs, and number
