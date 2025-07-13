@@ -9,6 +9,7 @@ import argparse
 from collections import defaultdict
 import os
 import os.path as osp
+import subprocess
 import sys
 import uuid
 
@@ -98,7 +99,6 @@ def get_script_from_alias(alias):
 
 def try_add_wandb(script_args):
     if script in ["TrainSSL2.py", "EvalFinetune.py"]:
-        import subprocess
         script_args_to_get_wandb = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], wandb="online"))
         script_args_to_get_wandb = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_wandb)
         script_args_to_get_wandb = " ".join(script_args_to_get_wandb)  # Ensure it's a string
@@ -109,15 +109,14 @@ def try_add_wandb(script_args):
     else:
         return script_args
 
-def get_log_file(script, script_args):
+def get_experiment_name(*, script, script_args):
     """Returns the file to which the file should write results to."""
     if script in ["TrainSSL2.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
-        import subprocess
         script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
         script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
         script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
         experiment_name = subprocess.getoutput(script_args_to_get_name).split()[-1]
-        return osp.join(experiment_name, "log.txt")
+        return osp.join(osp.expanduser(experiment_name))
     else:
         return None
     
@@ -169,6 +168,111 @@ def args_to_unparsed_args(*, args, script=None, before_script=None, sort=True):
         unparsed_args.append(" ".join([str(x) for x in v]) if isinstance(v, list) else str(v))
     return unparsed_args
 
+
+def get_new_directory_strs(*, exp_name, args, script_args):
+    """Returns (start_command, end_command) tuple. The first sets up and changes to a
+    temporary directory unique to an experiment being run. The second removes the
+    directory.
+
+    This is basically a SLURM_TMPDIR. However, we won't actually set that environment
+    variable as that could confuse things. Instead, we will (literally) clone the
+    current working directory. If there exists saved state for the experiment, we will
+    then load from it into the current working directory, replacing things.
+    
+    Args:
+    exp_name    -- abspath to name of the experiment, used to create a new directory
+    args        -- taskset argparse Namespace
+    script_args -- argparse Namespace of the script being run, used to determine what
+    """
+    def get_rel_root(path):
+        rels = []
+        for r in osp.relpath(path).split(osp.sep):
+            rels.append(r)
+            if not r in [".", ".."]:
+                break
+        return osp.sep.join(rels)
+
+    def get_symlink_to_rel_root(*, temp_dir, path):
+        """Returns a command to create a symlink to the top-level directory in [path]
+        as seen in the current working directory. If the file is itself a symlink,
+        then symlink to where it actually points to.
+        """
+        if path.startswith("~") or osp.isabs(path):
+            return f"# no need to symlink {path}"
+        else:
+            relpath = osp.relpath(get_rel_root(path))
+            abspath = osp.abspath(osp.realpath(relpath))
+            return f"ln -s {abspath} {osp.join(temp_dir, relpath)}"
+        
+    if not args.new_dir:
+        return "", ""
+
+    temp_dir = osp.join(osp.expanduser("~/.taskset_dirs"), osp.basename(exp_name))
+
+    symlinked_files = []
+    commands = [
+        f"echo \"Current working directory: $PWD\"",
+        f"echo \"Using temporary directory {temp_dir}\"",
+        f"mkdir -p {temp_dir}"]
+    
+    # Ensure that data and weights are symlinked. We can assume this code is being run
+    # from a directory capable of executing the script, ie. paths will be right.
+    # Because these paths are being copied explicitly and with symlinks, we will
+    # assume they should not be copied again, sym- or hardlinked.
+    if "data_tr" in script_args and osp.exists(script_args.data_tr):
+        symlinked_files.append(get_rel_root(script_args.data_tr))
+        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_tr)
+        if not cmd in commands:
+            commands.append(cmd)
+    if "data_val" in script_args and osp.exists(script_args.data_val):
+        symlinked_files.append(get_rel_root(script_args.data_val))
+        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_val)
+        if not cmd in commands:
+            commands.append(cmd)
+    if "colormae_file" in script_args and osp.exists(script_args.colormae_file):
+        symlinked_files.append(get_rel_root(script_args.colormae_file))
+        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.colormae_file)
+        if not cmd in commands:
+            commands.append(cmd)
+
+    # Copy everything to the save directory. We will use heuristics to ignore some
+    # files that we almost certainly don't need/want to copy. Note that this will copy
+    # the .git directory from whenever the script is being started.
+    ignore_prefixes = ["__pycache__", "fgvc-aircraft", "fgvcaircraft", "aircraft", "flowers"]
+    ignore_suffixes = [".PYC", ".PNG", ".JPEG", ".JPG"]
+    ignore_suffixes += [s.lower() for s in ignore_suffixes]
+    ignore_files = [f"{p}*" for p in ignore_prefixes] + [f"*{s}" for s in ignore_suffixes] + symlinked_files
+    ignore_str = " ".join([f"--exclude='{f}'" for f in ignore_files])
+    cp_everything_cmd = f"rsync -a {ignore_str} ./ {temp_dir}/"
+    commands.append(cp_everything_cmd)
+
+    # Now, if there is saved state, overwrite whatever we just copied with it. In each
+    # case, there should either be a cur_git_sha.txt file or a .git subdirectory 
+    # the former case, we need to remove the .git directory that was just copied as it
+    # wouldn't match the code.
+    if osp.exists(exp_name) and osp.exists(osp.join(exp_name, "code")):
+        commands.append(f"cp -r --remove-destination {osp.join(exp_name, 'code')}/* {temp_dir}")
+    elif osp.exists(exp_name) and osp.exists(osp.join(exp_name, "code.tar")):
+        commands.append(f"tar -xf {osp.join(exp_name, 'code.tar')} -C {temp_dir}")
+    elif osp.exists(exp_name) and osp.exists(osp.join(exp_name, "cur_git_sha.txt")):
+        commands.append(f"rm -rf {osp.join(temp_dir, '.git')}")
+        commands.append(f"cp {osp.join(exp_name, 'cur_git_sha.txt')} {temp_dir}")
+    else:
+        sha = subprocess.run("git rev-parse HEAD", capture_output=True, shell=True, text=True).stdout.strip()
+        commands.append(f"echo {sha} > {osp.join(exp_name, 'cur_git_sha.txt')}")
+        
+    commands.append(f"cd {temp_dir}")
+
+    at_end_cmds = [f"echo \"Ran in {temp_dir}\"",
+        # f"rm -r {temp_dir}",
+        f"cd {osp.abspath(os.getcwd())}"]
+
+    return "\n" + "\n".join(commands) + "\n", "\n" + "\n".join(at_end_cmds)
+
+    
+
+
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-c", default="parse_gpus",
@@ -187,6 +291,8 @@ if __name__ == "__main__":
         help="Like 'gpus' but they are removed from the command being run")
     P.add_argument("--try_add_wandb", choices=[0, 1], default=1, type=int,
         help="Tries to add --wandb online if not specified")
+    P.add_argument("-n", "--new_dir", default=1, type=int, choices=[0, 1],
+        help="Runs in an isolated directory if possible")
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_cc():
@@ -215,9 +321,16 @@ if __name__ == "__main__":
         script_args.gpus = [int(g) for g in args.gpus]
     cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}"
 
-    # Try and get the experiment name so we can get a log file
-    log_file = get_log_file(script, script_args)
-    _ = None if log_file is None else os.makedirs(osp.dirname(log_file), exist_ok=True)
+    # Try and get the experiment name so we can do nice things: log.txt, and is desired, isolated working directory
+    exp_name = get_experiment_name(script=script, script_args=script_args)
+    if exp_name is None:
+        new_directory_str = ""
+        log_file = None
+        start_cmd, end_cmd = "", ""
+    else:
+        _ = os.makedirs(exp_name, exist_ok=True)
+        log_file = osp.join(exp_name, "log.txt")
+        start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_name, args=args, script_args=script_args)
 
     unparsed_args = args_to_unparsed_args(before_script=before_script, script=script, args=script_args)
     unparsed_args = " ".join(unparsed_args)  # Ensure it's a string
@@ -226,7 +339,7 @@ if __name__ == "__main__":
     full_command = f"full_command=\"$command $@ 2>&1 | tee -a '{log_file}'\"" if log_file else f"full_command=\"$command\""
 
     script_file = osp.join(args.taskset_scripts_dir, f"{uuid.uuid4()}.sh")
-    script = f"source {shell2rc[args.shell]}\n{command}\n{full_command}\necho \"Running: $full_command\"\neval \"$full_command\""
+    script = f"source {shell2rc[args.shell]}\n{start_cmd}\n{command}\n{full_command}\necho \"Running: $full_command\"\neval \"$full_command\"\n{end_cmd}"
 
     if args.taskset_debug:
         print(script)
