@@ -6,6 +6,7 @@ import argparse
 import os
 import os.path as osp
 import subprocess
+import sys
 import UtilsBase
 
 result_search_dirs = ["pretrain_results", "finetune_results"]
@@ -22,7 +23,17 @@ if __name__ == "__main__":
     P.add_argument("--search_dirs",
         default=[osp.expanduser("~/Development/IMLE-SSL-2")],
         help="Directories to search in")
-    args = P.parse_args()
+
+    try:
+        args = P.parse_args()
+    except:
+        argv = sys.argv[1:]
+        for idx,a in enumerate(argv):
+            if a == "--substr":
+                argv[idx+1] = UtilsBase.strip_left(argv[idx+1], "-")
+                break
+        args = P.parse_args(argv)
+
 
     args.search_dirs = [s for s in args.search_dirs if osp.exists(s)]
     if not len(args.search_dirs):
