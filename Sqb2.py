@@ -323,6 +323,8 @@ if __name__ == "__main__":
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
         print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0"))
+        time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+        print(time_str)
         sys.exit(0)
         
     col2max_chars = {c: len(c) for c in colnames}
