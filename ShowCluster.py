@@ -3,13 +3,15 @@ import math
 import subprocess
 
 class Node:
-    def __init__(self, node_name, state, gpu_type, gpus, cpus, memory, alloc_gpus, alloc_cpus, alloc_memory):
+    def __init__(self, node_name, state, gpu_type, fractional_gpus, gpus, cpus, memory, alloc_fractional_gpus, alloc_gpus, alloc_cpus, alloc_memory):
         self.node_name = node_name
         self.state = state
         self.gpu_type = gpu_type
+        self.fractional_gpus = fractional_gpus
         self.gpus = gpus
         self.cpus = cpus
         self.memory = memory
+        self.alloc_fractional_gpus = alloc_fractional_gpus
         self.alloc_gpus = alloc_gpus
         self.alloc_cpus = alloc_cpus
         self.alloc_memory = alloc_memory
@@ -69,9 +71,11 @@ class Node:
         node_name = None
         state = None
         gpu_type = None
+        fractional_gpus = None
         gpus = None
         cpus = None
         memory = None
+        alloc_fractional_gpus = 0
         alloc_gpus = 0
         alloc_cpus = 0
         alloc_memory = 0
@@ -85,9 +89,11 @@ class Node:
                         "node_name": node_name,
                         "state": state,
                         "gpu_type": gpu_type,
+                        "fractional_gpus": fractional_gpus,
                         "gpus": gpus,
                         "cpus": cpus,
                         "memory": memory,
+                        "alloc_fractional_gpus": fractional_gpus,
                         "alloc_gpus": alloc_gpus,
                         "alloc_cpus": alloc_cpus,
                         "alloc_memory": alloc_memory
@@ -96,9 +102,11 @@ class Node:
                 node_name = line.split("=")[1].split()[0]
                 state = None
                 gpu_type = None
+                fractional_gpus = None
                 gpus = None
                 cpus = None
                 memory = None
+                alloc_fractional_gpus = 0
                 alloc_gpus = 0
                 alloc_cpus = 0
                 alloc_memory = 0
@@ -117,8 +125,11 @@ class Node:
             elif line.startswith("AllocTRES="):
                 alloc_tres = line.replace("AllocTRES=", "")
                 alloc_tres = alloc_tres.split(",")
+                alloc_fractional_gpus = int("g." in line)
                 for tres in alloc_tres:
-                    if tres.startswith("gres/gpu"):
+                    if tres.startswith("gres/gpu") and fractional_gpus:
+                        alloc_fractional_gpus = int(tres.split("=")[1])
+                    elif tres.startswith("gres/gpu"):
                         alloc_gpus = int(tres.split("=")[1])
                     elif tres.startswith("cpu"):
                         alloc_cpus = int(tres.split("=")[1])
@@ -137,8 +148,14 @@ class Node:
             elif line.startswith("CfgTRES="):
                 cfg_tres = line.replace("CfgTRES=", "")
                 cfg_tres = cfg_tres.split(",")
+
+                # Fake GPUs for people without real compute requirements
+                fractional_gpus = int("g." in line)
+
                 for tres in cfg_tres:
-                    if tres.startswith("gres/gpu"):
+                    if tres.startswith("gres/gpu") and fractional_gpus:
+                        fractional_gpus = float(tres.split("=")[1])
+                    elif tres.startswith("gres/gpu"):
                         gpus = float(tres.split("=")[1])
                     elif tres.startswith("cpu"):
                         cpus = float(tres.split("=")[1])
@@ -160,9 +177,11 @@ class Node:
                     "node_name": node_name,
                     "state": state,
                     "gpu_type": gpu_type,
+                    "fractional_gpus": fractional_gpus,
                     "gpus": gpus,
                     "cpus": cpus,
                     "memory": memory,
+                    "alloc_fractional_gpus": alloc_fractional_gpus,
                     "alloc_gpus": alloc_gpus,
                     "alloc_cpus": alloc_cpus,
                     "alloc_memory": alloc_memory
