@@ -27,10 +27,9 @@ def default_tar_name(fname):
     return f"{fname}_{cluster_type}_{date}.tar"
 
 def tar_imle_ssl_dir(args):
-    # dirs_to_tar = ["models_mae", "models_imle", "models_stop", "models_dino", "probes", "finetunes"]
-    dirs_to_tar = ["finetunes"]
+    dirs_to_tar = ["models_mae", "models_imle", "models_stop", "models_dino", "probes", "finetunes"]
     for d in tqdm(dirs_to_tar):
-        d = osp.join(osp.expanduser("~/scratch/IMLE-SSL"), d)
+        d = osp.join(osp.expanduser("/scratch/tme3/IMLE-SSL"), d)
         out = default_tar_name(d)
         
         _ = tar_folder(argparse.Namespace(**vars(args) | dict(dir=d, out=out)))
