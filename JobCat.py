@@ -21,7 +21,8 @@ if __name__ == "__main__":
     P.add_argument("--substr", required=True,
         help="Substring that identifies job")
     P.add_argument("--search_dirs",
-        default=[osp.expanduser("~/Development/IMLE-SSL-2")],
+        default=[osp.expanduser("~/Development/IMLE-SSL-2"),
+                 osp.expanduser("~/Development/IMLE-SSL-Dev")],
         help="Directories to search in")
 
     try:
