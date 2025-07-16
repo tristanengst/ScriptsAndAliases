@@ -72,7 +72,7 @@ if __name__ == "__main__":
             subprocess.run(f"cat {list(result_file2halfname.keys())[0]}", shell=True)
         else:
             result_files_str = "\n".join(result_files)
-            raise ValuError(f"Got multiple possible result files:\n{result_files_str}")
+            raise ValueError(f"Got multiple possible result files:\n{result_files_str}")
     
     if args.slurm and len(slurm_files) == 1:
         subprocess.run(f"cat {slurm_files[0]}", shell=True)
@@ -83,7 +83,7 @@ if __name__ == "__main__":
             subprocess.run(f"cat {list(slurm_file2halfname.keys())[0]}", shell=True)
         else:
             slurm_files_str = "\n".join(slurm_files)
-            raise ValuError(f"Got multiple possible SLURM files:\n{slurm_files_str}")
+            raise ValueError(f"Got multiple possible SLURM files:\n{slurm_files_str}")
 
 
 
