@@ -68,7 +68,7 @@ if __name__ == "__main__":
     if args.result and len(result_files) > 1:
         result_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 2:] for f in result_files}
         result_file2halfname = {o: h for o,h in result_file2halfname.items() if args.substr in h}
-        if len(result_file2halfname).values() == 1:
+        if len(result_file2halfname.values()) == 1:
             subprocess.run(f"cat {list(result_file2halfname.keys())[0]}", shell=True)
         else:
             result_files_str = "\n".join(result_files)
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     if args.slurm and len(slurm_files) > 1:
         slurm_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 2:] for f in slurm_files}
         slurm_file2halfname = {s: h for s,h in slurm_file2halfname.items() if args.substr in h}
-        if len(slurm_file2halfname).values() == 1:
+        if len(slurm_file2halfname.values()) == 1:
             subprocess.run(f"cat {list(slurm_file2halfname.keys())[0]}", shell=True)
         else:
             slurm_files_str = "\n".join(slurm_files)
