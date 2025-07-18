@@ -17,7 +17,7 @@ def fname_from_common_path(fname):
     # For now, assume that ~/scratch/IMLE-SSL/...... will always work.
     imle_ssl_index = abspath.find("IMLE-SSL")
     if imle_ssl_index == -1:
-        raise ValueError(f"Cannot find IMLE-SSL in {abspath}, cannot create a common path.")
+        return fname
     else:
         return f"scratch/{abspath[imle_ssl_index:]}"
 
@@ -27,10 +27,9 @@ def send_file_to_cluster(*, fname, dest, cluster):
         _ = twrite(f"File {fname} does not exist, cannot send to cluster {cluster}")
         return
 
-    fname_common = fname_from_common_path(fname)
     cmd = f"ssh {cluster} 'mkdir -p {osp.dirname(dest)}' ; rsync --info=progress2 ~/{fname} {cluster}:{dest}'"
     result = subprocess.getoutput(cmd)
-    _ = twrite(f"Sent file {fname} to {cluster}:{fname_common}\ngot\n{result}")
+    _ = twrite(f"Sent file {fname} to {cluster}:{dest}\ngot\n{result}")
 
 def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"):
     """Sends file [fname] to the specified clusters [clusters] via the intermediate cluster [intermediate]."""
