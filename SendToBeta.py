@@ -47,12 +47,11 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}")
 
     # Then have the intermediate cluster send it to the final clusters
-    rsync_cmds = [f"rsync --info=progress2 {tmp_file} {c}:{fname_common}" for c in clusters]
-    rsync_cmd = " ; ".join(rsync_cmds)
+    rsync_cmd = " ; ".join([f"rsync --info=progress2 {tmp_file} {c}:{fname_common}" for c in clusters])
     rm_cmd = f"rm {tmp_file}"
     cmd = f"ssh {intermediate} ' {rsync_cmd} ; {rm_cmd} '"
     result = subprocess.run(cmd, shell=True, check=True)
-    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)}")
+    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)} as {fname_common}")
     
 
 def watch_and_send(args):
@@ -66,10 +65,12 @@ def watch_and_send(args):
         else:
             _ = twrite(f"Found files={files} matching {args.watch} -> sending to clusters={args.clusters} if not already sent")
             for fname in files:
-                clusters = [c for c in args.clusters if fname not in cluser2send_files[c]]
-                _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate)
-                for c in clusters:
-                    cluser2send_files[c].add(fname)
+                clusters = [c for c in args.clusters if not fname in cluser2send_files[c]]
+                if len(clusters) == 0:
+                    _ = twrite(f"fname={fname} already sent to all clusters={args.clusters}, skipping")
+                else:
+                    _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate)
+                    cluser2send_files = {c: cluser2send_files[c] | {fname} for c in clusters}
 
         if UtilsBase.time_since_time(start_time) > UtilsBase.time_str_to_time(args.max_time):
             _ = twrite(f"Stopping watching files after {UtilsBase.time_since_time(start_time)} seconds, max time={args.max_time}")
