@@ -82,6 +82,7 @@ def watch_and_send(args):
 
 
 if __name__ == "__main__":
+    P = argparse.ArgumentParser(description="Send files to clusters or watch for changes.")
     P.add_argument("--watch", default=None,
         help="Glob pattern to to watch for changes")
     P.add_argument("--clusters", nargs="+", choices=["beluga", "cedar", "narval", "rorqual", "nibi", "A4", "S1", "S2", "S3", "solar"],
