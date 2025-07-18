@@ -43,9 +43,9 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     fname_common = fname_from_common_path(fname)
     fname_base, ext = osp.splitext(fname_common)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
-    cmd = f"rsync -rv --info=progress2 {fname} {intermediate}:{temp_file}"
+    cmd = f"rsync -rv --info=progress2 {fname} {intermediate}:{tmp_file}"
     result = subprocess.getoutput(cmd)
-    _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {temp_file}\ngot\n{result}")
+    _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}\ngot\n{result}")
 
     # Then have the intermediate cluster send it to the final clusters
     cmd = f"ssh {intermediate} 'python {osp.join(osp.dirname(__file__), 'SendToBeta.py')} --send ~/{tmp_file} --dest ~/{fname_common} --clusters {' '.join(clusters)}'"
