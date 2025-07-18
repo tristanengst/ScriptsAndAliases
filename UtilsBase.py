@@ -30,7 +30,7 @@ def is_tarfile(f):
 ######################################################################################
 
 ####### I/O Functions ################################################################
-def twrite(*args, time=True, verbose=1, quiet=False, **kwargs):
+def twrite(*args, time=True, verbose=1, quiet=False, offset=False, **kwargs):
     """Lite version of twrite(). Doesn't support multiple processes."""
     if quiet or verbose < 1:
         return
