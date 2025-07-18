@@ -97,6 +97,7 @@ if __name__ == "__main__":
         help="Destination path on the clusters, if not watching. If not specified, will use")
     P.add_argument("--max_time", default="168:00:00",
         help="Maximum time the file can be watched for changes. Specify as HH:MM:SS")
+    args = P.parse_args()
 
     if args.send:
         for c in args.clusters:
