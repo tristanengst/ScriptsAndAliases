@@ -28,7 +28,7 @@ def send_file_to_cluster(*, fname, dest, cluster):
         return
 
     fname_common = fname_from_common_path(fname)
-    cmd = f"ssh {cluster} 'mkdir -p {osp.dirname(dest)}' ; rsync -rv --info=progress2 ~/{fname} {cluster}:{dest}'"
+    cmd = f"ssh {cluster} 'mkdir -p {osp.dirname(dest)}' ; rsync --info=progress2 ~/{fname} {cluster}:{dest}'"
     result = subprocess.getoutput(cmd)
     _ = twrite(f"Sent file {fname} to {cluster}:{fname_common}\ngot\n{result}")
 
