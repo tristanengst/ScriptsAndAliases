@@ -47,7 +47,7 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}\ngot\n{result}")
 
     # Then have the intermediate cluster send it to the final clusters
-    cmd = f"ssh {intermediate} ' bash -cil \"python /.ScriptsAndAliases/SendToBeta.py --send {tmp_file} --dest {fname_common} --clusters {' '.join(clusters)} \" '"
+    cmd = f"ssh {intermediate} ' bash -cl \"python /home/{os.environ.get('USER', 'tme3')}/.ScriptsAndAliases/SendToBeta.py --send {tmp_file} --dest {fname_common} --clusters {' '.join(clusters)} \" '"
     result = subprocess.getoutput(cmd)
     _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)}\ngot\n{result}")
     
