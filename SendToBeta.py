@@ -21,16 +21,6 @@ def fname_from_common_path(fname):
     else:
         return f"scratch/{abspath[imle_ssl_index:]}"
 
-def send_file_to_cluster(*, fname, dest, cluster):
-    """Sends file [fname] to [dest] on [cluster]."""
-    if not osp.exists(fname):
-        _ = twrite(f"File {fname} does not exist, cannot send to cluster {cluster}")
-        return
-
-    cmd = f"ssh {cluster} 'mkdir -p {osp.dirname(dest)}' ; rsync --info=progress2 ~/{fname} {cluster}:{dest}'"
-    result = subprocess.getoutput(cmd)
-    _ = twrite(f"Sent file {fname} to {cluster}:{dest}\ngot\n{result}")
-
 def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"):
     """Sends file [fname] to the specified clusters [clusters] via the intermediate cluster [intermediate]."""
     if not osp.exists(fname):
@@ -41,19 +31,18 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     # First send the file to a tempfile on the intermediate cluster
     fname_common = fname_from_common_path(fname)
     fname_base, ext = osp.splitext(fname_common)
-    tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
+    tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')[:8]}_{osp.basename(fname_base)}.tmp"
     cmd = f"rsync --info=progress2 {fname} {intermediate}:{tmp_file}"
     result = subprocess.run(cmd, shell=True, check=True)
     _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}")
 
     # Then have the intermediate cluster send it to the final clusters
-    rsync_cmd = " ; ".join([f"rsync --info=progress2 {tmp_file} {c}:{fname_common}" for c in clusters])
+    mv_cmds = " ; ".join([f"rsync --info=progress2 {tmp_file} {c}:{tmp_file} ; ssh {c} \"mv {tmp_file} {fname_common}\" " for c in clusters])
     rm_cmd = f"rm {tmp_file}"
-    cmd = f"ssh {intermediate} ' {rsync_cmd} ; {rm_cmd} '"
+    cmd = f"ssh {intermediate} ' {mv_cmds} ; {rm_cmd} '"
     result = subprocess.run(cmd, shell=True, check=True)
-    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)} as {fname_common}")
+    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to clusters=({', '.join(args.clusters)}) as {fname_common}")
     
-
 def watch_and_send(args):
     """Watches a file and sends it to specified clusters."""
     cluser2send_files = defaultdict(set)
@@ -63,11 +52,11 @@ def watch_and_send(args):
         if len(files) == 0:
             _ = twrite(f"No files found matching {args.watch}")
         else:
-            _ = twrite(f"Found files={files} matching {args.watch} -> sending to clusters={args.clusters} if not already sent")
+            _ = twrite(f"Found files={files} matching {args.watch} -> sending to clusters=({', '.join(args.clusters)}) if not already sent")
             for fname in files:
                 clusters = [c for c in args.clusters if not fname in cluser2send_files[c]]
                 if len(clusters) == 0:
-                    _ = twrite(f"fname={fname} already sent to all clusters={args.clusters}, skipping")
+                    _ = twrite(f"fname={fname} already sent to all clusters=({', '.join(args.clusters)}), skipping")
                 else:
                     _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate)
                     cluser2send_files = {c: cluser2send_files[c] | {fname} for c in clusters}
@@ -90,21 +79,12 @@ if __name__ == "__main__":
         help="Intermediate cluster to send files to before sending to the final destination")
     P.add_argument("--check_iter", type=int, default=120,
         help="Number seconds to wait between checks for new files")
-    P.add_argument("--send", default=None,
-        help="File to send to the clusters, if not watching")
-    P.add_argument("--dest", default=None,
-        help="Destination path on the clusters, if not watching. If not specified, will use")
     P.add_argument("--max_time", default="168:00:00",
         help="Maximum time the file can be watched for changes. Specify as HH:MM:SS")
     args = P.parse_args()
 
-    if args.send:
-        for c in args.clusters:
-            _ = send_file_to_cluster(fname=args.send, dest=args.dest, cluster=c)
-        os.remove(args.send)
-        _ = twrite(f"Sent file {args.send} to clusters {args.clusters} as {args.dest} -> removing {args.send}")
-    elif args.watch:
-        _ = watch_and_send(args)
+    _ = watch_and_send(args)
+        
 
 
 
