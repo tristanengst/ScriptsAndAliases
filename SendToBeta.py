@@ -43,16 +43,16 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     fname_base, ext = osp.splitext(fname_common)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
     cmd = f"rsync --info=progress2 {fname} {intermediate}:{tmp_file}"
-    result = subprocess.getoutput(cmd)
-    _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}\ngot\n{result}")
+    result = subprocess.run(cmd, , shell=True, check=True)
+    _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}")
 
     # Then have the intermediate cluster send it to the final clusters
     rsync_cmds = [f"rsync --info=progress2 {tmp_file} {c}:{fname_common}" for c in clusters]
     rsync_cmd = " ; ".join(rsync_cmds)
     rm_cmd = f"rm {tmp_file}"
     cmd = f"ssh {intermediate} ' {rsync_cmd} ; {rm_cmd} '"
-    result = subprocess.getoutput(cmd)
-    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)}\ngot\n{result}")
+    result = subprocess.run(cmd, shell=True, check=True)
+    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)}")
     
 
 def watch_and_send(args):
