@@ -43,14 +43,14 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     fname_common = fname_from_common_path(fname)
     fname_base, ext = osp.splitext(fname_common)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
-    cmd = f"rsync -rv --info=progress2 {fname} {intermediate}:{tmp_file}"
+    cmd = f"rsync --info=progress2 {fname} {intermediate}:{tmp_file}"
     result = subprocess.getoutput(cmd)
     _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}\ngot\n{result}")
 
     # Then have the intermediate cluster send it to the final clusters
-    cmd = f"ssh {intermediate} 'source ~/.bashrc ; python {osp.join(osp.dirname(__file__), 'SendToBeta.py')} --send ~/{tmp_file} --dest ~/{fname_common} --clusters {' '.join(clusters)}'"
+    cmd = f"ssh {intermediate} 'bash -c \"python {osp.join(osp.dirname(__file__), 'SendToBeta.py')} --send ~/{tmp_file} --dest ~/{fname_common} --clusters {' '.join(clusters)} \"'"
     result = subprocess.getoutput(cmd)
-    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {clusters}\ngot\n{result}")
+    _ = twrite(f"Intermediate cluster={intermediate} moved: {tmp_file} to {' '.join(clusters)}\ngot\n{result}")
     
 
 def watch_and_send(args):
