@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     if args.send:
         for c in args.clusters:
-            _ = send_file_to_cluster(fname=args.send, cluster=c, intermediate=None)
+            _ = send_file_to_cluster(fname=args.send, dest=args.dest, cluster=c)
         os.remove(args.send)
         _ = twrite(f"Sent file {args.send} to clusters {args.clusters} as {args.dest} -> removing {args.send}")
     elif args.watch:
