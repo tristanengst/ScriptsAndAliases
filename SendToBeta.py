@@ -21,23 +21,30 @@ def fname_from_common_path(fname):
     else:
         return f"scratch/{abspath[imle_ssl_index:]}"
 
-def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"):
+def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4", cluser2send_files=dict()):
     """Sends file [fname] to the specified clusters [clusters] via the intermediate cluster [intermediate]."""
+    
+    def get_rm_prev_cmd(cluster):
+        if cluster in cluser2send_files and len(cluser2send_files[cluster]) > 0:
+            fname_prev = fname_from_common_path(cluser2send_files[cluster][-1])
+            return f"rm {fname_prev}"
+        else:
+            return ""
+
     if not osp.exists(fname):
         _ = twrite(f"File {fname} does not exist, cannot send to clusters {clusters}")
         return
 
     fname_common = fname_from_common_path(fname)
-    # First send the file to a tempfile on the intermediate cluster
-    fname_common = fname_from_common_path(fname)
+
     fname_base, ext = osp.splitext(fname_common)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')[:8]}_{osp.basename(fname_base)}.tmp"
     cmd = f"rsync --info=progress2 {fname} {intermediate}:{tmp_file}"
     result = subprocess.run(cmd, shell=True, check=True)
     _ = twrite(f"Sent file {fname} to intermediate={intermediate} as {tmp_file}")
 
-    # Then have the intermediate cluster send it to the final clusters
-    mv_cmds = " ; ".join([f"rsync --info=progress2 {tmp_file} {c}:{tmp_file} ; ssh {c} \"mv {tmp_file} {fname_common}\" " for c in clusters])
+    # Then have the intermediate cluster send it to the final clusters and remove previous versions
+    mv_cmds = " ; ".join([f"rsync --info=progress2 {tmp_file} {c}:{tmp_file} ; ssh {c} \"mv {tmp_file} {fname_common} ; {get_rm_prev_cmd(c)} \" " for c in clusters])
     rm_cmd = f"rm {tmp_file}"
     cmd = f"ssh {intermediate} ' {mv_cmds} ; {rm_cmd} '"
     result = subprocess.run(cmd, shell=True, check=True)
@@ -45,7 +52,7 @@ def send_file_to_clusters_via_intermediate(*, fname, clusters, intermediate="A4"
     
 def watch_and_send(args):
     """Watches a file and sends it to specified clusters."""
-    cluser2send_files = defaultdict(set)
+    cluser2send_files = defaultdict(list)
     start_time = time.time()
     while True:
         files = glob.glob(args.watch)
@@ -58,8 +65,8 @@ def watch_and_send(args):
                 if len(clusters) == 0:
                     _ = twrite(f"fname={fname} already sent to all clusters=({', '.join(args.clusters)}), skipping")
                 else:
-                    _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate)
-                    cluser2send_files = {c: cluser2send_files[c] | {fname} for c in clusters}
+                    _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate, cluser2send_files=cluser2send_files)
+                    cluser2send_files = {c: cluser2send_files[c] + [fname] for c in clusters}
 
         if UtilsBase.time_since_time(start_time) > UtilsBase.time_str_to_time(args.max_time):
             _ = twrite(f"Stopping watching files after {UtilsBase.time_since_time(start_time)} seconds, max time={args.max_time}")
