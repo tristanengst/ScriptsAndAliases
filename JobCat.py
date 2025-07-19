@@ -12,6 +12,17 @@ import UtilsBase
 result_search_dirs = ["pretrain_results", "finetune_results"]
 slurm_search_dirs = ["slurm"]
 
+def handle_multiple_files(*, files):
+    """If multiple files are found, raise an error."""
+    files = [f.replace(f"/home/{os.environ['USER']}", "~") for f in files]
+    files_str = "\n".join([f"({idx+1}): {f}" for idx,f in enumerate(files)])
+    
+    user_select = "None" 
+    while not user_select.isdigit() or int(user_select) > len(files):
+        user_select = input(f"Select file by number:\n{files_str}\n")
+
+    subprocess.run(f"cat {files[int(user_select) - 1]}", shell=True)
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-r", "--result", action="store_true",
@@ -66,24 +77,26 @@ if __name__ == "__main__":
     if args.result and len(result_files) == 1:
         subprocess.run(f"cat {result_files[0]}", shell=True)
     if args.result and len(result_files) > 1:
-        result_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 2:] for f in result_files}
+        result_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 3:] for f in result_files}
         result_file2halfname = {o: h for o,h in result_file2halfname.items() if args.substr in h}
         if len(result_file2halfname.values()) == 1:
             subprocess.run(f"cat {list(result_file2halfname.keys())[0]}", shell=True)
         else:
-            result_files_str = "\n".join(result_files)
-            raise ValueError(f"Got multiple possible result files:\n{result_files_str}")
+            _ = handle_multiple_files(files=list(result_file2halfname.keys()))
     
     if args.slurm and len(slurm_files) == 1:
         subprocess.run(f"cat {slurm_files[0]}", shell=True)
     if args.slurm and len(slurm_files) > 1:
-        slurm_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 2:] for f in slurm_files}
+        slurm_file2halfname = {f: osp.basename(f)[len(osp.basename(f)) // 3:] for f in slurm_files}
         slurm_file2halfname = {s: h for s,h in slurm_file2halfname.items() if args.substr in h}
         if len(slurm_file2halfname.values()) == 1:
             subprocess.run(f"cat {list(slurm_file2halfname.keys())[0]}", shell=True)
         else:
-            slurm_files_str = "\n".join(slurm_files)
-            raise ValueError(f"Got multiple possible SLURM files:\n{slurm_files_str}")
+            _ = handle_multiple_files(files=list(result_file2halfname.keys()))
+
+
+    print("") # So that the new terminal prompt is on a new line.
+
 
 
 
