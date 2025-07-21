@@ -195,7 +195,7 @@ def time_to_seconds(time_str):
     [time_str] could be interpreted as a duration; it need not actually be a string.
     """
     if isinstance(time_str, int | float):
-        return t
+        return time_str
     elif "-" in time_str:
         days, time_str = time_str.split("-")
         
