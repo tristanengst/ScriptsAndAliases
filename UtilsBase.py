@@ -183,35 +183,55 @@ def flatten(xs):
 
 
 ###### Time Functions ################################################################
-def time_since_time(start_time): return time.time() - start_time    
-def hours_since_time(start_time): return time_since_time(start_time) / 3600
-def minutes_since_time(start_time): return time_since_time(start_time) / 60
+def seconds_since_time(start_time): return time.time() - start_time    
+def hours_since_time(start_time): return seconds_since_time(start_time) / 3600
+def minutes_since_time(start_time): return seconds_since_time(start_time) / 60
 def seconds_to_minutes(seconds): return seconds / 60
 def seconds_to_hours(seconds): return seconds / 3600
 
 
-def time_str_to_time(time_str):
-    """Returns the number of seconds in a time string, formatted in the various ways
-    SLURM tends to do it, eg. DD-HH:MM:SS, HH:MM:SS. It is assumed that seconds are
-    included.
+def time_to_seconds(time_str):
+    """Returns [time_str] as a number of seconds. Tries to fit as many possible ways
+    [time_str] could be interpreted as a duration; it need not actually be a string.
     """
-    if "-" in time_str:
+    if isinstance(time_str, int | float):
+        return t
+    elif "-" in time_str:
         days, time_str = time_str.split("-")
+        
+        # If there is only a single colon in [time_str] now, then assume that the
+        # seconds are not included.
+        time_str = f"{time_str}:00" if if time_str.count(":") == 1 else time_str
+        
         return int(days) * 24 * 3600 + time_str_to_time(time_str)
-    else:
+    # Usually output by SLURM. Assumes that seconds are present!
+    elif ":" in time_str:
         times = time_str.split(":")
         return sum([int(t) * (60 ** idx) for idx,t in enumerate(reversed(times))])
-def time_str_to_hours(time_str): return time_str_to_time(time_str) / 3600
-def time_str_to_minutes(time_str): return time_str_to_time(time_str) / 60
-def time_str_to_str(time_str):
+    else:
+        time_suffix2seconds = dict(H=3600, M=60, S=1, D=24*3600)
+        s, cur_num = 0, ""
+        for c in time_str:
+            if c.isnumeric():
+                cur_num += c
+            elif c in time_suffix2seconds and cur_num:
+                s += int(cur_num) * time_suffix2seconds[c.upper()]
+                cur_num = ""
+            else:
+                raise ValueError(f"Invalid character in time string: {c} in {time_str}")
+        return s
+        
+def time_to_hours(t): return time_to_seconds(t) / 3600
+def time_to_minutes(t): return time_to_seconds(t) / 60
+def time_to_str(t):
     """Returns time string [time_str] in our default way, ie. without days."""
-    s = time_str_to_time(time_str)
+    s = time_to_seconds(t)
     h, m, s = s // 3600, (s % 3600) // 60, s % 60
-    return f"{h}:{m:02}:{s:02}"
+    return f"{int(h)}:{int(m):02}:{int(s):02}"
 
-def pretty_time_str(time_str):
+def time_to_pretty_str(t):
     """Returns XXHYYM for XX hours and YY minutes. Days are collapsed to hours."""
-    s = time_str_to_seconds(time_str)
+    s = time_to_seconds(t)
     h = s // 3600
     m = (s % 3600) // 60
     h = str(h).zfill(max(2, len(str(h))+1))
