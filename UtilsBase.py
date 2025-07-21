@@ -201,7 +201,7 @@ def time_to_seconds(time_str):
         
         # If there is only a single colon in [time_str] now, then assume that the
         # seconds are not included.
-        time_str = f"{time_str}:00" if if time_str.count(":") == 1 else time_str
+        time_str = f"{time_str}:00" if time_str.count(":") == 1 else time_str
         
         return int(days) * 24 * 3600 + time_to_time(time_str)
     # Usually output by SLURM. Assumes that seconds are present!
