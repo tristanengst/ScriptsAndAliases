@@ -203,7 +203,7 @@ def time_to_seconds(time_str):
         # seconds are not included.
         time_str = f"{time_str}:00" if if time_str.count(":") == 1 else time_str
         
-        return int(days) * 24 * 3600 + time_str_to_time(time_str)
+        return int(days) * 24 * 3600 + time_to_time(time_str)
     # Usually output by SLURM. Assumes that seconds are present!
     elif ":" in time_str:
         times = time_str.split(":")
