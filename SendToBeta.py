@@ -68,8 +68,9 @@ def watch_and_send(args):
                     _ = send_file_to_clusters_via_intermediate(fname=fname, clusters=clusters, intermediate=args.intermediate, cluser2send_files=cluser2send_files)
                     cluser2send_files = {c: cluser2send_files[c] + [fname] for c in clusters}
 
-        if UtilsBase.time_since_time(start_time) > UtilsBase.time_str_to_time(args.max_time):
-            _ = twrite(f"Stopping watching files after {UtilsBase.time_since_time(start_time)} seconds, max time={args.max_time}")
+        time_elapsed_since_start = UtilsBase.seconds_since_time(start_time)
+        if time_elapsed_since_start > UtilsBase.time_to_seconds(args.max_time):
+            _ = twrite(f"Stopping watching files after {time_elapsed_since_start} seconds, max time={args.max_time}")
             break
         else:
             time.sleep(args.check_iter)
