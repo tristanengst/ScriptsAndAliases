@@ -79,7 +79,7 @@ def watch_and_send(args):
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser(description="Send files to clusters or watch for changes.")
-    P.add_argument("--watch", default=None,
+    P.add_argument("--watch", required=True,
         help="Glob pattern to to watch for changes")
     P.add_argument("--clusters", nargs="+", choices=["beluga", "cedar", "narval", "rorqual", "nibi", "A4", "S1", "S2", "S3", "solar"],
         help="Clusters to send to")
@@ -90,6 +90,11 @@ if __name__ == "__main__":
     P.add_argument("--max_time", default="168:00:00",
         help="Maximum time the file can be watched for changes. Specify as HH:MM:SS")
     args = P.parse_args()
+
+    # It's commont to forget that the argument to --watch should include the glob
+    # pattern, but be passed in quotes to let glob work inside the script.
+    if not "*" in args.watch:
+        _ = twrite(f"[WARNING] The --watch argument should likely include a glob pattern and be quoted")
 
     _ = watch_and_send(args)
         

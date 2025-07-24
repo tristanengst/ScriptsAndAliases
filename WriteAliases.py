@@ -21,6 +21,9 @@ aliases = [
     "alias scu=\"python ~/.ScriptsAndAliases/Scu.py \"",
     "alias extract_job_ids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
 
+    # LS a model without typing an annoying path
+    "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py -m \"",
+
     # Common ways to run Sqb2.py.
     "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
     "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
