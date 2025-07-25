@@ -2,10 +2,32 @@ import argparse
 import glob
 import os
 import os.path as osp
+import pty
 import subprocess
+
+
 
 import UtilsBase
 from UtilsBase import twrite
+
+def ls_(ls_cmd):
+    main_fd, second_fn = pty.openpty()
+    proc = subprocess.Popen(['ls', '-C'], stdout=second_fn, stderr=subprocess.DEVNULL)
+    os.close(second_fn)
+
+    output = b''
+    try:
+        while True:
+            chunk = os.read(main_fd, 1024)
+            if not chunk:
+                break
+            output += chunk
+    finally:
+        os.close(main_fd)
+        proc.wait()
+
+    return output.decode()
+
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
@@ -14,7 +36,13 @@ if __name__ == "__main__":
         osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
         osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
         osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
-        osp.expanduser("~/scratch/IMLE-SSL/models_stop")],
+        osp.expanduser("~/scratch/IMLE-SSL/models_stop"),
+        
+        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_imle",
+        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_mae",
+        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/finetunes",
+        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_stop"
+        ],
         help="Directories to search for experiments in")
 
     # Arguements to pass to ls command
@@ -26,16 +54,18 @@ if __name__ == "__main__":
     P.add_argument("-s", action="store_true", help="Like -s for ls")
     args = P.parse_args()
 
-    found_exp_folders = []
+    experiments = set()
     for s in args.search_dirs:
         if not osp.exists(s):
             continue
-        experiments = [osp.join(s, f) for f in os.listdir(s) if args.experiment in f]
+        experiments |= {osp.join(s, f) for f in os.listdir(s) if args.experiment in f}
+    experiments = list(experiments)
 
     if len(experiments) == 0:
         _ = twrite(f"No files found matching {args.experiment} in directories={args.search_dirs}")
     elif len(experiments) == 1:
         experiment = experiments[0]
+        print(experiment)
 
         ls_args_str = ""
         ls_args_str += " -l" if args.l else ""
@@ -45,11 +75,11 @@ if __name__ == "__main__":
         ls_args_str += " -d" if args.d else ""
         ls_args_str += " -s" if args.s else ""
 
-        files = subproces.getoutput(f"ls {ls_args_str} {experiments}", shell=True)
+        files = subprocess.getoutput(f"ls {ls_args_str} {experiment}")
         _ = print(f"Found experiment={osp.join(osp.basename(osp.dirname(experiment)), osp.basename(experiment))}")
         _ = print(files)
     else:
-        experiment_list = "\n".join([f"{idx+1}. {osp.join(osp.basename(osp.dirname(exp)), osp.basename(exp))}" for idx,exp in enumerate(experiments)])
+        experiment_list = "\n".join([f"{idx+1}. {exp}" for idx,exp in enumerate(experiments)])
         _ = twrite(f"Multiple experiments found matching {args.experiment}. Select one:\n{experiment_list}")
 
         user_select = input()
@@ -65,6 +95,8 @@ if __name__ == "__main__":
         ls_args_str += " -d" if args.d else ""
         ls_args_str += " -s" if args.s else ""
 
-        files = subproces.getoutput(f"ls {ls_args_str} {experiments}", shell=True)
+        # --color=always -C
+
+        files = subprocess.getoutput(f"ls --color=always {ls_args_str} {experiment}", shell=True, capture_output=True)
         _ = print(f"Found experiment={osp.join(osp.basename(osp.dirname(experiment)), osp.basename(experiment))}")
         _ = print(files)

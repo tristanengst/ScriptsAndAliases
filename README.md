@@ -7,6 +7,10 @@ The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` director
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
 python ~/.ScriptsAndAliases/WriteAliases.py
 ```
+To update:
+```
+cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc
+```
 
 ### Useful on our SLURM Clusters
 Make jobs `123` and `456` run on the `def-keli` or `rrg-keli` accounts:
