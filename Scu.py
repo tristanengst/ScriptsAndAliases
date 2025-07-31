@@ -7,12 +7,18 @@ import Utils
 
 def apply_to_jobid(*, jobid, cmd, job2info=None, force=False):
 	"""Tries to cancel [jobid] and returns True if it was successful."""
+	# There is some issue where changing the TimeLimit of a running job kills it. In
+	# general we don't want to do this!
 	if "TimeLimit" in cmd:
 		job2info = job2info if job2info else Utils.get_slurm_status(cur_user=True)
 		if jobid in job2info and not job2info[jobid]["STATE"] == "PENDING" and not force:
-			return True, "Job is not pending, cannot change TimeLimit."
+			return False, "Job is not pending, cannot change TimeLimit."
+		elif not jobid in job2info:
+			return False, f"JobID={jobid} not found in job2info."
 		else:
-			return False, ""
+			pass
+	else:
+		pass
 
 	if cmd == "hold":
 		result = subprocess.getoutput(f"scontrol hold {jobid}")
@@ -34,6 +40,7 @@ if "TimeLimit" in args.cmd:
 uid2jobs = None
 for j in args.jobs:
 	success_by_jobid, result_by_jobid = apply_to_jobid(jobid=j, cmd=args.cmd, job2info=job2info)
+	print(f"Job {j} result: {result_by_jobid} (success: {success_by_jobid})")
 	if success_by_jobid:
 		continue
 
