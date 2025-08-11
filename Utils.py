@@ -9,7 +9,7 @@ def get_cluster_type():
         return "nibi"
     elif "trig" in h or "trillium" in h:
         return "trillium"
-    elif "fir" in h:
+    elif h.startswith("fc") or h.startswith("login"):
         return "fir"
     elif h.startswith("rorqual") or h.startswith("rq") or h.startswith("rg") or h.startswith("rl"):
         return "rorqual"
