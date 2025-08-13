@@ -15,46 +15,55 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
     """Returns [job_datas] with a new key "to_print" that contains the string that
     should be printed to the terminal added for each job data.
     """
-    all_time_left_prefixed_zero = all([jd["TIME_LEFT"].startswith("0") or jd["TIME_LEFT"] == "TIME_LEFT" for jd in job_datas])
-    if all_time_left_prefixed_zero:
-        for jd in job_datas:
-            jd["TIME_LEFT"] = jd["TIME_LEFT"][1:] if jd["TIME_LEFT"].startswith("0") else jd["TIME_LEFT"]
+    try:
+        all_time_left_prefixed_zero = all([jd["TIME_LEFT"].startswith("0") or jd["TIME_LEFT"] == "TIME_LEFT" for jd in job_datas])
+        if all_time_left_prefixed_zero:
+            for jd in job_datas:
+                jd["TIME_LEFT"] = jd["TIME_LEFT"][1:] if jd["TIME_LEFT"].startswith("0") else jd["TIME_LEFT"]
 
-    all_start_times_prefixed_zero = all([jd["START_TIME"].startswith("0") or jd["START_TIME"] in ["START_TIME", "N/A"] for jd in job_datas])
-    if all_start_times_prefixed_zero:
-        for jd in job_datas:
-            jd["START_TIME"] = jd["START_TIME"][1:] if jd["START_TIME"].startswith("0") else jd["START_TIME"]
+        all_start_times_prefixed_zero = all([jd["START_TIME"].startswith("0") or jd["START_TIME"] in ["START_TIME", "N/A"] for jd in job_datas])
+        if all_start_times_prefixed_zero:
+            for jd in job_datas:
+                jd["START_TIME"] = jd["START_TIME"][1:] if jd["START_TIME"].startswith("0") else jd["START_TIME"]
 
-    for j in job_datas:
-        job_id = "" if j["JOBID"].startswith("next chunks") else str(j["JOBID"])
+        for j in job_datas:
+            job_id = "" if j["JOBID"].startswith("next chunks") else str(j["JOBID"])
 
-        s = []
-        for c in col2max_chars:
-            if j["JOBID"].startswith("__next chunks") and not c == "NAME":
-                s.append(" " * col2max_chars[c])  # Empty space for next chunks
-            elif j["JOBID"].startswith("__account") and c == "JOBID":
-                s.append(f"{'JOBID':<{col2max_chars[c]}}")
-            
+            s = []
+            for c in col2max_chars:
+                if j["JOBID"].startswith("__next chunks") and not c == "NAME":
+                    s.append(" " * col2max_chars[c])  # Empty space for next chunks
+                elif j["JOBID"].startswith("__account") and c == "JOBID":
+                    s.append(f"{'JOBID':<{col2max_chars[c]}}")
+                
 
-            elif c == "NAME" and j["NAME"].startswith("next chunks"):
-                to_print = f"------ {j['NAME']} ------"
-                to_print = f"{to_print:^{col2max_chars[c]}}"
-                s.append(to_print)
+                elif c == "NAME" and j["NAME"].startswith("next chunks"):
+                    to_print = f"------ {j['NAME']} ------"
+                    to_print = f"{to_print:^{col2max_chars[c]}}"
+                    s.append(to_print)
 
-            elif c == "NAME" and j["NAME"] == "NAME" and Utils.is_cc():
-                account = j["JOBID"].replace("__account ", "")
-                to_print = f"------ {account} ------"
-                to_print = f"{to_print:^{col2max_chars[c] - len(c) * 2}}"
-                to_print = "NAME" + to_print
-                s.append(to_print)
-            
-            else:
-                s.append(f"{str(j[c]):<{col2max_chars[c]}}")
-            
-        s = "  ".join(s)
-        j["to_print"] = s
-    
-    return job_datas
+                elif c == "NAME" and j["NAME"] == "NAME" and Utils.is_cc():
+                    account = j["JOBID"].replace("__account ", "")
+                    to_print = f"------ {account} ------"
+                    to_print = f"{to_print:^{col2max_chars[c] - len(c) * 2}}"
+                    to_print = "NAME" + to_print
+                    s.append(to_print)
+                
+                else:
+                    s.append(f"{str(j[c]):<{col2max_chars[c]}}")
+                
+            s = "  ".join(s)
+            j["to_print"] = s
+        
+        return job_datas
+    except ValueError as e:
+        if str(e) == "Sign not allowed in string format specifier":
+            print("Terminal width too small. Resize the window and try again.")
+            sys.exit(1)
+        else:
+            raise e
+        
+
 
 def job_name_without_gpu_time_spec(jn):
     """Returns job name [jn] without the GPU and time specification if it exists."""
