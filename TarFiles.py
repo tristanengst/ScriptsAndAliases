@@ -22,16 +22,22 @@ import Utils
 
 def default_tar_name(fname):
     """Returns a default tar name."""
-    cluster_type = Utils.get_cluster_type()
+    if Utils.is_workstation():
+        import MachineInfo
+        cluster_type = MachineInfo.hostname_to_machine(os.uname()[1]).lower()
+    else:
+        cluster_type = Utils.get_cluster_type()
+    
     date = time.strftime("%Y_%m_%d")
     return f"{fname}_{cluster_type}_{date}.tar"
 
 def tar_imle_ssl_dir(args):
     dirs_to_tar = ["models_mae", "models_imle", "models_stop", "models_dino", "probes", "finetunes"]
+    scratch_dir = osp.expanduser("/scratch/tme3/IMLE-SSL") if osp.exists("/scratch/tme3/IMLE-SSL") else osp.expanduser("~/scratch/IMLE-SSL")
+    
     for d in tqdm(dirs_to_tar):
-        d = osp.join(osp.expanduser("/scratch/tme3/IMLE-SSL"), d)
+        d = osp.join(scratch_dir, d)
         out = default_tar_name(d)
-        
         _ = tar_folder(argparse.Namespace(**vars(args) | dict(dir=d, out=out)))
 
 def is_newer_than(f, days, ignore_errors=False):
