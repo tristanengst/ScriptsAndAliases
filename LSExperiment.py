@@ -5,28 +5,11 @@ import os.path as osp
 import pty
 import subprocess
 
-
-
 import UtilsBase
 from UtilsBase import twrite
 
-def ls_(ls_cmd):
-    main_fd, second_fn = pty.openpty()
-    proc = subprocess.Popen(['ls', '-C'], stdout=second_fn, stderr=subprocess.DEVNULL)
-    os.close(second_fn)
 
-    output = b''
-    try:
-        while True:
-            chunk = os.read(main_fd, 1024)
-            if not chunk:
-                break
-            output += chunk
-    finally:
-        os.close(main_fd)
-        proc.wait()
 
-    return output.decode()
 
 
 if __name__ == "__main__":
@@ -94,8 +77,6 @@ if __name__ == "__main__":
         ls_args_str += " -a" if args.a else ""
         ls_args_str += " -d" if args.d else ""
         ls_args_str += " -s" if args.s else ""
-
-        # --color=always -C
 
         files = subprocess.getoutput(f"ls --color=always {ls_args_str} {experiment}", shell=True, capture_output=True)
         _ = print(f"Found experiment={osp.join(osp.basename(osp.dirname(experiment)), osp.basename(experiment))}")
