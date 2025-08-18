@@ -114,6 +114,44 @@ def remove_nonnumeric(s):
     """Returns [s] with all non-numeric characters removed."""
     return "".join([c for c in s if c.isnumeric()])
 
+def digits_after(s, substr):
+    """Returns the longest substring of [s] that directly follows [substr] or [substr]
+    and an equals sign that permits numeric interpretation. Returns None if no such
+    substring exist or raises an error if [substr] isn't in [s].
+    """
+    substr_idx = s.find(substr)
+    if substr_idx == -1:
+        raise ValueError(f"Substring '{substr}' not found in string '{s}'")
+    if idx + len(substr) >= len(s):
+        return None  # No digits after the substring
+    s = s[idx+len(substr)+1:] if s[idx+len(substr)] == "=" else s[idx+len(substr):]
+
+    # Special characters that are used for scientific notation or negation can occur
+    # only a finite number of times. If they occur more often, then stop parsing.
+    finite_chars2remaining = {".": 1, "e": 1, "-": 2}
+    possible_s = ""
+    for idx,c in enumerate(s):
+        if c in finite_chars2remaining and finite_chars2remaining[c]:
+            one_count_chars2count[c] -= 1
+            possible_s += c
+        elif c.isnumeric():
+            possible_s += c
+        else:
+            break
+    s = possible_s
+    if not s:
+        return None
+
+    # Return the longest left-aligned substring of [s] that is a number
+    numeric_substrings = [s[:idx] for idx in range(1, len(s) + 1)]
+    for n in reversed(numeric_substrings):
+        try:
+            result = float(n)
+            return strip_riht(n, ".") # Remove the training dot since probably the thing isn't meant to represent a float
+        except ValueError:
+            continue
+    return None  # No numeric substring found
+
 ######################################################################################
 ######################################################################################
 ######################################################################################

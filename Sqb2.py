@@ -4,12 +4,15 @@ job name, and time remaining. Jobs are separated by SLURM account.
 import argparse
 from collections import defaultdict
 from datetime import datetime
+import os.path as osp
+import glob
 import shutil
 import subprocess
 import sys
 
 from ShowCluster import Node
 import Utils
+import UtilsBase
 
 def job_datas_with_to_prints(*, job_datas, col2max_chars):
     """Returns [job_datas] with a new key "to_print" that contains the string that
@@ -286,6 +289,48 @@ def build_record(*, job_datas, account2lfs):
         )
 
 
+def find_latest_checkpoint_str(*, args, jd):
+    """Returns the latest checkoint for job data [jd] per a heuristic."""
+    print(jd)
+
+    def checkpoint_to_sort_value(c):
+        """Returns the prefix for checkpoint [c]."""
+        if c.startswith("probe_pretep"):
+            pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
+            probe_epoch = UtilsBase.digits_after(c, "prbep")
+            return float(f"{pretrain_epoch}.{probe_epoch}")
+        elif c.startsiwth("fn"):
+            fn_epoch = UtilsBase.digits_after(c, "fn")
+            return float(f"0.{fn_epoch}")
+        elif c[0].isnumeric():
+            pretrain_epoch = UtilsBase.digits_after(c, "")
+            return float(f"{pretrain_epoch}.0")
+        else:
+            return 0
+
+    if "COMMENT" in jd:
+        if "exp_name" in jd["COMMENT"]:
+            exp_name = jd["COMMENT"]["exp_name"]
+        elif "exp_name_trunc" in jd["COMMENT"] and "uid" in jd["COMMENT"]:
+            exp_name = f"{jd['COMMENT']['exp_name_trunc']}*{jd['COMMENT']['uid']}*"
+        else:
+            return "no exp_name found"
+
+        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.latest_checkpoint_search_dirs])
+        if len(found_exp_folders) == 0:
+            return "no files"
+        elif len(found_exp_folders) > 1:
+            return "multiple exp names"
+        else:
+            exp_folder = found_exp_folders[0]
+            checkpoints = [f for f in os.listdir(exp_folder) if f.endswith(".pt") and not f.startswith("wandb_data")]
+            checkpoints = sorted(checkpoints, key=checkpoint_to_sort_value, reverse=True)
+            return checkpoints[0] if len(checkpoints) > 0 else "no checkpoints found"
+    else:
+        return ""
+
+
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-u", "--users", action="store_true", default=False,
@@ -304,7 +349,17 @@ if __name__ == "__main__":
         help="Verbosity: 0=no output, 1=default output, 2=default+commands being run")
     P.add_argument("-r", "--record", default=False,
         help="Save outputs to this file for recording. 'default' saves to ~/.ClusterData/SqbOutputs/sqb_output_TIMESTR.json")
+
+    P.add_argument("-l", "--latest_checkpoint", action="store_true", default=False,
+        help="Try and find the latest checkpoint associated to each job with a UID")
+    P.add_argument("--latest_checkpoint_search_dirs", nargs="+",
+        default=[osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
+            osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
+            osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
+            osp.expanduser("~/scratch/IMLE-SSL/models_stop")],
+        help="Directories to search for latest checkpoints in. If empty, no checkpoints are searched for.")
     args = P.parse_args()
+
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
