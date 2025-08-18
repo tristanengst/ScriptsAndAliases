@@ -27,11 +27,13 @@ aliases = [
     # Common ways to run Sqb2.py.
     "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
     "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
+    "alias sqbls=\"python ~/.ScriptsAndAliases/Sqb2.py -ls \"",
     "alias sqbas=\"python ~/.ScriptsAndAliases/Sqb2.py -as \"",
     "alias sqbsa=\"python ~/.ScriptsAndAliases/Sqb2.py -ns \"",
     "alias sqbau=\"python ~/.ScriptsAndAliases/Sqb2.py -au \"",
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
+    "alias sqbl=\"python ~/.ScriptsAndAliases/Sqb2.py -l \"",
 
     # Quiet output, saves cluster state to a file
     "alias sqbr=\"python ~/.ScriptsAndAliases/Sqb2.py -ausq --record default --verbose 0\"", 

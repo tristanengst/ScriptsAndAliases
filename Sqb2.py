@@ -4,8 +4,9 @@ job name, and time remaining. Jobs are separated by SLURM account.
 import argparse
 from collections import defaultdict
 from datetime import datetime
-import os.path as osp
 import glob
+import os
+import os.path as osp
 import shutil
 import subprocess
 import sys
@@ -184,7 +185,9 @@ def job_dict_without_preempt_me_name(jd):
     name = jd["NAME"].replace("preempt_me_", "") if jd["NAME"].startswith("preempt_me_") else jd["NAME"]
     return jd | dict(NAME=name)
 
-def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, submit_time=False, eligible_time=False, queue_time=False, verbose=False):
+def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
+    submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
+    verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
     indexing each value of [job2info].
@@ -195,6 +198,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
     next_chunks -- if True, include next chunk jobs too
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
+    eligible_time -- if True, include the eligible time for all jobs
+    queue_time  -- if True, include the queue time for all jobs
+    latest_checkpoint -- if True, try to find the latest checkpoint for each job
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
@@ -204,6 +210,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         job2info = {j: job_dict_with_formatted_date_time(v, key="ELIGIBLE_TIME") for j,v in job2info.items()}
     if queue_time:
         job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
+    if latest_checkpoint:
+        job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
 
     job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
     job2info = {j: job_dict_with_formatted_date_time(info, key="START_TIME") for j,info in job2info.items()}
@@ -225,6 +233,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False, s
         "SUBMIT_TIME" if submit_time else None,
         "ELIGIBLE_TIME" if eligible_time else None,
         "QUEUE_TIME" if queue_time else None,
+        "CHKPT" if latest_checkpoint else None,
         "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON",]
     col_names = [c for c in col_names if not c is None]        
     
@@ -289,17 +298,15 @@ def build_record(*, job_datas, account2lfs):
         )
 
 
-def find_latest_checkpoint_str(*, args, jd):
+def job_dict_with_latest_str(*, args, jd):
     """Returns the latest checkoint for job data [jd] per a heuristic."""
-    print(jd)
-
     def checkpoint_to_sort_value(c):
         """Returns the prefix for checkpoint [c]."""
         if c.startswith("probe_pretep"):
             pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
             probe_epoch = UtilsBase.digits_after(c, "prbep")
             return float(f"{pretrain_epoch}.{probe_epoch}")
-        elif c.startsiwth("fn"):
+        elif c.startswith("fn"):
             fn_epoch = UtilsBase.digits_after(c, "fn")
             return float(f"0.{fn_epoch}")
         elif c[0].isnumeric():
@@ -314,20 +321,22 @@ def find_latest_checkpoint_str(*, args, jd):
         elif "exp_name_trunc" in jd["COMMENT"] and "uid" in jd["COMMENT"]:
             exp_name = f"{jd['COMMENT']['exp_name_trunc']}*{jd['COMMENT']['uid']}*"
         else:
-            return "no exp_name found"
+            return jd | dict(CHKPT="no exp_name found")
 
         found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.latest_checkpoint_search_dirs])
         if len(found_exp_folders) == 0:
-            return "no files"
+            return jd | dict(CHKPT="no exp folders found")
         elif len(found_exp_folders) > 1:
-            return "multiple exp names"
+            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.latest_checkpoint_search_dirs}: {found_exp_folders}")
+            return jd | dict(CHKPT="multiple exp names")
         else:
             exp_folder = found_exp_folders[0]
             checkpoints = [f for f in os.listdir(exp_folder) if f.endswith(".pt") and not f.startswith("wandb_data")]
             checkpoints = sorted(checkpoints, key=checkpoint_to_sort_value, reverse=True)
-            return checkpoints[0] if len(checkpoints) > 0 else "no checkpoints found"
+            checkpoint = checkpoints[0] if len(checkpoints) > 0 else "no checkpoints found"
+            return jd | dict(CHKPT=checkpoint)
     else:
-        return ""
+        return jd | dict(CHKPT="-")
 
 
 
@@ -368,6 +377,7 @@ if __name__ == "__main__":
             submit_time=args.submit_time,
             eligible_time=args.eligible_time,
             queue_time=args.queue_time,
+            latest_checkpoint=args.latest_checkpoint,
             verbose=args.verbose)
         job_datas = [{c: c for c in colnames}] + job_datas
     elif Utils.is_cc():
@@ -380,6 +390,7 @@ if __name__ == "__main__":
                 submit_time=args.submit_time,
                 eligible_time=args.eligible_time,
                 queue_time=args.queue_time,
+                latest_checkpoint=args.latest_checkpoint,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = {c: f"__account {account}" if c == "JOBID" else c for c in colnames}
