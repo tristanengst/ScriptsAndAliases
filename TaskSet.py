@@ -263,11 +263,15 @@ def get_new_directory_strs(*, exp_name, args, script_args):
         
     commands.append(f"cd {temp_dir}")
 
+    submit_dir = osp.abspath(os.getcwd())
     at_end_cmds = [f"echo \"Ran in {temp_dir}\"",
-        # f"rm -r {temp_dir}",
+        f"echo \"Moving back to {submit_dir}\"",
         f"cd {osp.abspath(os.getcwd())}"]
 
-    return "\n" + "\n".join(commands) + "\n", "\n" + "\n".join(at_end_cmds)
+    if args.remove_temp_dir:
+        at_end_cmds += [f"echo \"Removing {temp_dir}\"", f"rm -rf {temp_dir}"]
+
+    return "\n" + "\n".join(commands) + "\n", "\n" + "\n".join(at_end_cmds) + "\n"
 
     
 
@@ -293,6 +297,8 @@ if __name__ == "__main__":
         help="Tries to add --wandb online if not specified")
     P.add_argument("-n", "--new_dir", default=1, type=int, choices=[0, 1],
         help="Runs in an isolated directory if possible")
+    P.add_argument("--remove_temp_dir", default=1, type=int, choices=[0, 1],
+        help="Removes the temporary directory at the end if --new_dir is set")
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_cc():
