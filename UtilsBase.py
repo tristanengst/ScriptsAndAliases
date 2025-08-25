@@ -207,7 +207,6 @@ def namespace_to_dict(n):
 
 def flatten(xs):
     """Returns collection [xs] after recursively flattening into a list."""
-    print(f"Flattening {xs} of type {type(xs)}")
     if isinstance(xs, list | set | tuple):
         result = []
         for x in xs:
