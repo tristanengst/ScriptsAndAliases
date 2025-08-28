@@ -36,16 +36,11 @@ if __name__ == "__main__":
                  osp.expanduser("~/Development/IMLE-SSL-Dev")],
         help="Directories to search in")
 
-    try:
-        args = P.parse_args()
-    except:
-        argv = sys.argv[1:]
-        for idx,a in enumerate(argv):
-            if a == "--substr":
-                argv[idx+1] = UtilsBase.strip_left(argv[idx+1], "-")
-                break
-        args = P.parse_args(argv)
-
+    # Ensure that the argument to --substr isn't misinterpreted as a flag even if it
+    # has a leading dash
+    argv = [(idx,a) for idx,a in enumerate(sys.argv[1:])]
+    argv = [UtilsBase.strip_left(a, "-") if argv[idx-1][1] == "--substr" else a for idx,a in argv]
+    args = P.parse_args(argv)
 
     args.search_dirs = [s for s in args.search_dirs if osp.exists(s)]
     if not len(args.search_dirs):
