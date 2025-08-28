@@ -148,7 +148,8 @@ def job_dict_with_formatted_time_delta(jd, key="TIME_LEFT"):
             mm, ss = delta.split(":")
             hh, mm, ss = 0, int(mm), int(ss)
         else:
-            raise ValueError(f"Unexpected time left format: {delta}")
+            print(f"[INFO] jobid={jd['JOBID']} got unexpected TIME_LEFT={delta}")
+            return jd | {key: delta}
     
     result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
     result = " " * (9 - len(result)) + result
