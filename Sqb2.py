@@ -265,7 +265,6 @@ def job_dict_with_heartbeat_analysis(jd):
             h_status, color = "", "red"
 
         jd['STATE'] = colorize(f"{jd['STATE']}{h_status}", color=color)
-        print(f"[INFO] jd_state={jd['STATE']} for jobid={jd['JOBID']} with heartbeat={jd['HEARTBEAT']}  last_possible_heartbeat={last_possible_heartbeat}  heartbeat_time={heartbeat_time}     (elapsed={elapsed}) ------ {jd['START_TIME']}")
         return jd
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
