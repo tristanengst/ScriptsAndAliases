@@ -244,19 +244,14 @@ def job_dict_with_heartbeat_analysis(jd):
         elapsed = last_possible_heartbeat - heartbeat_time
         UtilsBase.twrite(elapsed=elapsed, heartbeat_time=heartbeat_time, last_possible_heartbeat=last_possible_heartbeat, job_running=job_running)
         if elapsed.total_seconds() < 600:
-            h_status, color = "[H]", "green" # Heartbeat within last 10 minutes
+            h_status, color = "", "green" # Heartbeat within last 10 minutes
         elif elapsed.total_seconds() < 1800:
-            h_status, color = "[W]", "yellow" # Heartbeat within last 30 minutes
+            h_status, color = "", "yellow" # Heartbeat within last 30 minutes
         else:
-            h_status, color = "[!]", "red"
+            h_status, color = "", "red"
 
-        jd['STATE'] = colorize(f"{jd['STATE']} {h_status}", color=color)
+        jd['STATE'] = colorize(f"{jd['STATE']}{h_status}", color=color)
         return jd
-            
-        
-
-
-
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
