@@ -105,7 +105,7 @@ def job_dict_with_queue_time(jd):
     
     queue_time = start_time - eligible_time
     queue_time = f"{queue_time.total_seconds() / 3600:.2f}H"
-    return jd | dict(QUEUE_TIME=queue_time) 
+    return jd | dict(QUEUE_TIME=queue_time)
 
 def job_dict_with_formatted_date_time(jd, *, key):
     """Returns job dict [jd] with the date/time key [key] formatted. This function should be run last!"""
@@ -186,9 +186,81 @@ def job_dict_without_preempt_me_name(jd):
     name = jd["NAME"].replace("preempt_me_", "") if jd["NAME"].startswith("preempt_me_") else jd["NAME"]
     return jd | dict(NAME=name)
 
+def job_dict_with_heartbeat(jd):
+    """Returns job dict [jd] with the heartbeat time added if possible."""
+    if "COMMENT" in jd:
+        if "exp_name" in jd["COMMENT"]:
+            exp_name = jd["COMMENT"]["exp_name"]
+        elif "exp_name_trunc" in jd["COMMENT"] and "uid" in jd["COMMENT"]:
+            exp_name = f"{jd['COMMENT']['exp_name_trunc']}*{jd['COMMENT']['uid']}*"
+        else:
+            return jd | dict(HEARTBEAT="no exp_name found")
+
+        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
+        if len(found_exp_folders) == 0:
+            return jd | dict(HEARTBEAT="no exp folders found")
+        elif len(found_exp_folders) > 1:
+            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
+            return jd | dict(HEARTBEAT="multiple exp names")
+        elif osp.exists(osp.join(found_exp_folders[0], "heartbeat.txt")):
+            with open(osp.join(found_exp_folders[0], "heartbeat.txt"), "r") as f:
+                heartbeat = f.read().strip().split()
+                heartbeat = f"{heartbeat[0]}T{heartbeat[1]}" # Matches a SLURM date-time format even though it came from Python
+            jd = jd | dict(HEARTBEAT=heartbeat)
+            return job_dict_with_formatted_date_time(jd, key="HEARTBEAT")
+        else:
+            return jd | dict(HEARTBEAT="no hearbeat file")
+    else:
+        return jd | dict(HEARTBEAT="-")
+
+
+
+def job_dict_with_heartbeat_analysis(jd):
+    """Returns job dict [jd] with the heartbeat time analyzed if possible."""
+    def colorize(text, color="reset"):
+        """Returns [text] colorized with ANSI escape codes."""
+        colors = dict(red="\033[31m", green="\033[32m", yellow="\033[33m", reset="\033[0m")
+        return f"{colors[color]}{text}{colors['reset']}"
+    
+    if not "HEARTBEAT" in jd:
+        raise ValueError("job_dict must have a HEARTBEAT key")
+    elif not jd["HEARTBEAT"][0].isnumeric():
+        return jd
+    else:
+        heartbeat_time = datetime.strptime(jd["HEARTBEAT"], "%m-%d-%H:%M")
+        job_running = jd["STATE"] in ["RUNNING", "COMPLETING"]
+        
+        # Last possible time a heartbeat could've been written is the submit time for
+        # pending jobs (ie. the completion time of a prior chunk) or the current time.
+        if job_running:
+            last_possible_heartbeat = datetime.now()
+        else:
+            last_possible_heartbeat = datetime.strptime(jd["SUBMIT_TIME"], "%m-%d-%H:%M")
+
+        # Since the year isn't given in the heartbeat time, it is assumed to be 1900.
+        # Obviously this is wrong.
+        heartbeat_time = heartbeat_time.replace(year=last_possible_heartbeat.year)
+ 
+        elapsed = last_possible_heartbeat - heartbeat_time
+        UtilsBase.twrite(elapsed=elapsed, heartbeat_time=heartbeat_time, last_possible_heartbeat=last_possible_heartbeat, job_running=job_running)
+        if elapsed.total_seconds() < 600:
+            h_status, color = "[H]", "green" # Heartbeat within last 10 minutes
+        elif elapsed.total_seconds() < 1800:
+            h_status, color = "[W]", "yellow" # Heartbeat within last 30 minutes
+        else:
+            h_status, color = "[!]", "red"
+
+        jd['STATE'] = colorize(f"{jd['STATE']} {h_status}", color=color)
+        return jd
+            
+        
+
+
+
+
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
-    excluded=False,
+    excluded=False, heartbeat=False, heartbeat_analysis=False,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
@@ -206,7 +278,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
-    if submit_time:
+    if submit_time or heartbeat_analysis:
         job2info = {j: job_dict_with_formatted_date_time(v, key="SUBMIT_TIME") for j,v in job2info.items()}
     if eligible_time:
         job2info = {j: job_dict_with_formatted_date_time(v, key="ELIGIBLE_TIME") for j,v in job2info.items()}
@@ -214,12 +286,20 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
     if latest_checkpoint:
         job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
+    if heartbeat or heartbeat_analysis:
+        job2info = {j: job_dict_with_heartbeat(v) for j,v in job2info.items()}
 
     job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
     job2info = {j: job_dict_with_formatted_date_time(info, key="START_TIME") for j,info in job2info.items()}
     job2info = {j: job_dict_with_formatted_time_delta(info, key="TIME_LEFT") for j,info in job2info.items()}
     job2info = {j: job_dict_with_formatted_reason(info) for j,info in job2info.items()}
     job2info = {j: job_dict_without_preempt_me_name(info) for j,info in job2info.items()}
+
+    if heartbeat_analysis:
+        job2info = {j: job_dict_with_heartbeat_analysis(info) for j,info in job2info.items()}
+
+
+
 
     # Combine an abbreviated partition name with the user name on Solar
     if Utils.is_solar() and not cur_user:
@@ -237,7 +317,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         "ELIGIBLE_TIME" if eligible_time else None,
         "QUEUE_TIME" if queue_time else None,
         "CHKPT" if latest_checkpoint else None,
-        "START_TIME", "GPUS", "NAME", "TIME_LEFT", "REASON",]
+        "START_TIME",
+        "HEARTBEAT" if heartbeat else None,
+        "GPUS", "NAME", "TIME_LEFT", "REASON",]
     col_names = [c for c in col_names if not c is None]        
     
     # On Solar, sort all the running jobs by the node name. The node name is printed
@@ -326,11 +408,11 @@ def job_dict_with_latest_str(*, args, jd):
         else:
             return jd | dict(CHKPT="no exp_name found")
 
-        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.latest_checkpoint_search_dirs])
+        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
         if len(found_exp_folders) == 0:
             return jd | dict(CHKPT="no exp folders found")
         elif len(found_exp_folders) > 1:
-            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.latest_checkpoint_search_dirs}: {found_exp_folders}")
+            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return jd | dict(CHKPT="multiple exp names")
         else:
             exp_folder = found_exp_folders[0]
@@ -344,7 +426,7 @@ def job_dict_with_latest_str(*, args, jd):
 
 
 if __name__ == "__main__":
-    P = argparse.ArgumentParser()
+    P = argparse.ArgumentParser(add_help=False)
     P.add_argument("-u", "--users", action="store_true", default=False,
         help="Show only jobs for all users")
     P.add_argument("-a", "-c", "--next_chunks", action="store_true", default=False,
@@ -365,9 +447,16 @@ if __name__ == "__main__":
     P.add_argument("-x", "--exclude", action="store_true", default=False,
         help="Show excluded nodes")
 
+    P.add_argument("-h", "--heartbeat", action="store_true", default=False,
+        help="For jobs that write to a heartbeat.txt file, show the last heartbeat time")
+    P.add_argument("--heartbeat_analysis", action="store_true", default=True,
+        help="Like --heartbeat but does analysis instead of showing raw values")
+    P.add_argument("--help", action="help",
+        help="Show this help message and exit")
+
     P.add_argument("-l", "--latest_checkpoint", action="store_true", default=False,
         help="Try and find the latest checkpoint associated to each job with a UID")
-    P.add_argument("--latest_checkpoint_search_dirs", nargs="+",
+    P.add_argument("--exp_search_dirs", nargs="+",
         default=[osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
             osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
             osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
@@ -384,6 +473,8 @@ if __name__ == "__main__":
             submit_time=args.submit_time,
             eligible_time=args.eligible_time,
             queue_time=args.queue_time,
+            heartbeat=args.heartbeat,
+            heartbeat_analysis=args.heartbeat_analysis,
             latest_checkpoint=args.latest_checkpoint,
             verbose=args.verbose)
         job_datas = [{c: c for c in colnames}] + job_datas
@@ -398,6 +489,8 @@ if __name__ == "__main__":
                 submit_time=args.submit_time,
                 eligible_time=args.eligible_time,
                 queue_time=args.queue_time,
+                heartbeat=args.heartbeat,
+                heartbeat_analysis=args.heartbeat_analysis,
                 latest_checkpoint=args.latest_checkpoint,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
