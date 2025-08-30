@@ -231,14 +231,11 @@ def job_dict_with_heartbeat(jd):
     else:
         return jd | dict(HEARTBEAT="-")
 
-
-
 def job_dict_with_heartbeat_analysis(jd):
     """Returns job dict [jd] with the heartbeat time analyzed if possible."""
     if not "HEARTBEAT" in jd:
         raise ValueError("job_dict must have a HEARTBEAT key")
     elif not jd["HEARTBEAT"][0].isnumeric():
-        print(f"[INFO] jd_state={jd['STATE']} for jobid={jd['JOBID']} has no heartbeat analysis: heartbeat={jd['HEARTBEAT']}")
         return jd
     else:
         heartbeat_time = datetime.strptime(jd["HEARTBEAT"], "%m-%d-%H:%M")
