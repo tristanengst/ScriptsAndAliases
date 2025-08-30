@@ -188,6 +188,7 @@ def job_dict_without_preempt_me_name(jd):
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
+    excluded=False,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
@@ -226,8 +227,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
             partition = info["PARTITION"].replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
             job2info[jobid]["USER"] = f"{info['USER']}/{partition}"
 
-
-    col_names = ["HOST" if Utils.is_solar() or nodes else None,
+    col_names = [
+        "HOST" if Utils.is_solar() or nodes else None,
+        "EXC_NODES" if excluded else None,
         "JOBID", "UID",
         "USER" if not cur_user else None,
         "STATE",
@@ -360,6 +362,9 @@ if __name__ == "__main__":
     P.add_argument("-r", "--record", default=False,
         help="Save outputs to this file for recording. 'default' saves to ~/.ClusterData/SqbOutputs/sqb_output_TIMESTR.json")
 
+    P.add_argument("-x", "--exclude", action="store_true", default=False,
+        help="Show excluded nodes")
+
     P.add_argument("-l", "--latest_checkpoint", action="store_true", default=False,
         help="Try and find the latest checkpoint associated to each job with a UID")
     P.add_argument("--latest_checkpoint_search_dirs", nargs="+",
@@ -375,6 +380,7 @@ if __name__ == "__main__":
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
             next_chunks=args.next_chunks,
             nodes=args.nodes,
+            excluded=args.exclude,
             submit_time=args.submit_time,
             eligible_time=args.eligible_time,
             queue_time=args.queue_time,
@@ -388,6 +394,7 @@ if __name__ == "__main__":
             job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
                 next_chunks=args.next_chunks,
                 nodes=args.nodes,
+                excluded=args.exclude,
                 submit_time=args.submit_time,
                 eligible_time=args.eligible_time,
                 queue_time=args.queue_time,

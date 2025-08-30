@@ -4,6 +4,24 @@ import argparse
 import os.path as osp
 import re
 
+start_str = """
+# .bashrc
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+. /etc/bashrc
+fi
+
+# Uncomment the following line if you don't like systemctl's auto-paging feature:
+# export SYSTEMD_PAGER=
+
+# USEFUL
+# "salloc --time=1:0:0 --ntasks=1 --account=rrg-keli --mem=100G --nodes=1 --cpus-per-task=12 --gres=gpu:h100:1"
+
+# LOAD PYTHON
+source ~/py311IMLESSL/bin/activate
+"""
+
 aliases = [
     "# START USEFUL ML ALIASES",
 
@@ -40,7 +58,9 @@ aliases = [
 
     "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
-    "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\"",
+    "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\" -n",
+    "alias include_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py\" +n",
+    "alias modify_node_exclusion=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py \"",
     "alias check_duplicate_jobs=\"python ~/.ScriptsAndAliases/CheckDuplicateJobs.py\"",
 
     # Prints a job's output and/or SLURM script given a substring from its name
@@ -95,19 +115,27 @@ def write_aliases_to_file(fname):
     aliases_names = set([alias_to_name(a) for a in aliases])
     with open(fname, "r") as f:
         existing_lines = f.readlines()
-    
-    lines = [e for e in existing_lines if not alias_to_name(e) in aliases_names]
-    lines = lines + aliases
-    lines = [l.strip() for l in lines]
-    lines_str = "\n".join(lines)
-    
-    all_multi_empty_lines = re.findall(r'\n{3,}', lines_str)
-    for multi_empty_line in all_multi_empty_lines:
-        lines_str = lines_str.replace(multi_empty_line, "\n")
-    lines = lines_str.split("\n")
+
+    # Aliases are only edited between the START and END comments if they exist;
+    # otherwise they are added to the end
+    if any(l.startswith("# START USEFUL ML ALIASES") for l in existing_lines) and any(l.startswith("# END USEFUL ML ALIASES") for l in existing_lines):
+        start_idx = existing_lines.index("# START USEFUL ML ALIASES\n")
+        end_idx = existing_lines.index("# END USEFUL ML ALIASES\n")
+        lines_before = existing_lines[:start_idx]
+        lines_after = existing_lines[end_idx+1:]
+    else:
+        lines_before = existing_lines
+        lines_after = []
+
+    new_lines = lines_before + ["\n"] + aliases + ["\n"] + lines_after
+    new_lines = [l.strip() if not l == "\n" else l for l in new_lines]
+    new_lines_str = "\n".join(new_lines)
+
+    # Allow at most two newlines in a row
+    new_lines_str = re.sub(r"\n{3,}", "\n\n", new_lines_str)
 
     with open(fname, "w") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(new_lines_str)
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
