@@ -253,7 +253,6 @@ def job_dict_with_heartbeat_analysis(jd):
         heartbeat_time = heartbeat_time.replace(year=last_possible_heartbeat.year)
  
         elapsed = last_possible_heartbeat - heartbeat_time
-        UtilsBase.twrite(elapsed=elapsed, heartbeat_time=heartbeat_time, last_possible_heartbeat=last_possible_heartbeat, job_running=job_running)
         if elapsed.total_seconds() < 600:
             h_status, color = "", "green" # Heartbeat within last 10 minutes
         elif elapsed.total_seconds() < 1800:
