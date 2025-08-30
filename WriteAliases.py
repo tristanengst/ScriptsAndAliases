@@ -58,8 +58,8 @@ aliases = [
 
     "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
-    "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py -n\"",
-    "alias include_nodes=\"python ~/.ScriptsAndAliases/ExcludeNodes.py +n\"",
+    "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py -n\"",
+    "alias include_nodes=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py +n\"",
     "alias modify_node_exclusion=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py \"",
     "alias check_duplicate_jobs=\"python ~/.ScriptsAndAliases/CheckDuplicateJobs.py\"",
 
