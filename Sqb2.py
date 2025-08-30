@@ -7,6 +7,7 @@ from datetime import datetime
 import glob
 import os
 import os.path as osp
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,23 @@ import sys
 from ShowCluster import Node
 import Utils
 import UtilsBase
+
+##### Colorization utilities #########################################################
+colors = dict(red="\033[31m", green="\033[32m", yellow="\033[33m", reset="\033[0m")
+def colorize(text, color="reset"):
+    """Returns [text] colorized with ANSI escape codes."""
+    return f"{colors[color]}{text}{colors['reset']}".strip()
+
+def decolorize(text):
+    """Returns [text] with ANSI escape codes removed. This is crucial for measuring
+    their lengths.
+    """
+    return text.replace("\033[31m", "").replace("\033[32m", "").replace("\033[33m", "").replace("\033[0m", "")
+
+######################################################################################
+######################################################################################
+######################################################################################
+
 
 def job_datas_with_to_prints(*, job_datas, col2max_chars):
     """Returns [job_datas] with a new key "to_print" that contains the string that
@@ -217,14 +235,10 @@ def job_dict_with_heartbeat(jd):
 
 def job_dict_with_heartbeat_analysis(jd):
     """Returns job dict [jd] with the heartbeat time analyzed if possible."""
-    def colorize(text, color="reset"):
-        """Returns [text] colorized with ANSI escape codes."""
-        colors = dict(red="\033[31m", green="\033[32m", yellow="\033[33m", reset="\033[0m")
-        return f"{colors[color]}{text}{colors['reset']}"
-    
     if not "HEARTBEAT" in jd:
         raise ValueError("job_dict must have a HEARTBEAT key")
     elif not jd["HEARTBEAT"][0].isnumeric():
+        print(f"[INFO] jd_state={jd['STATE']} for jobid={jd['JOBID']} has no heartbeat analysis: heartbeat={jd['HEARTBEAT']}")
         return jd
     else:
         heartbeat_time = datetime.strptime(jd["HEARTBEAT"], "%m-%d-%H:%M")
@@ -251,6 +265,7 @@ def job_dict_with_heartbeat_analysis(jd):
             h_status, color = "", "red"
 
         jd['STATE'] = colorize(f"{jd['STATE']}{h_status}", color=color)
+        print(f"[INFO] jd_state={jd['STATE']} for jobid={jd['JOBID']} with heartbeat={jd['HEARTBEAT']}  last_possible_heartbeat={last_possible_heartbeat}  heartbeat_time={heartbeat_time}     (elapsed={elapsed}) ------ {jd['START_TIME']}")
         return jd
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
@@ -501,7 +516,7 @@ if __name__ == "__main__":
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
         for c in colnames:
-            col2max_chars[c] = max(col2max_chars[c], 0 if str(job_data["JOBID"]).startswith("__") else len(str(job_data[c])))
+            col2max_chars[c] = max(col2max_chars[c], 0 if str(job_data["JOBID"]).startswith("__") else len(decolorize(str(job_data[c]))))
     col2max_chars = {c: mc for c,mc in col2max_chars.items()}
 
     # Try building the string representation for each job data.
