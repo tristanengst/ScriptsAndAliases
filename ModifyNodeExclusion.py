@@ -1,10 +1,11 @@
 import argparse
+from collections import defaultdict
 import os
 import os.path as osp
 from multiprocessing import Pool
 import subprocess
 
-import ExtractJobIds
+import UtilsBase
 
 
 def modify_exclude_list(*, included, excluded, slurm_script):
@@ -78,15 +79,24 @@ if __name__ == "__main__":
 
     # I haven't tested this with actual array jobs!
     sq_output = subprocess.getoutput(f"squeue -u $USER --noheader -O 'JobArrayID:.20,Name:.400'")
-    job_id2job_name = {s.split()[0]: " ".join(s.split()[1:]) for s in sq_output.split("\n")}
-
+    job_name2job_ids = defaultdict(list)
+    for job_id,job_name in [s.split() for s in sq_output.split("\n")]:
+        job_name2job_ids[job_name].append(job_id)
+    
     if args.substrs:
         args.substrs = [s.strip("*") for s in args.substrs]
-        job_id2job_name = {j: n for j,n in job_id2job_name.items() if any([s in n for s in args.substrs])}
+        job_name2job_ids = {n: ids for n,ids in job_name2job_ids.items() if any([s in n for s in args.substrs])}
 
-    with Pool(min(os.cpu_count(), max(1, len(sq)))) as p:
-        slurm_scripts = p.map(job_id_to_slurm_script, job_id2job_name.keys())
+    unique_job_ids = set(UtilsBase.flatten(job_name2job_ids.values()))
+    with Pool(min(os.cpu_count(), max(1, len(unique_job_ids)))) as p:
+        slurm_scripts = p.map(job_id_to_slurm_script, unique_job_ids)
+
+    if args.dry_run:
+        print(f"[INFO] Found {len(unique_job_ids)} jobs matching the given criteria: {unique_job_ids}")
+        exit(0)
 
     for slurm_script in slurm_scripts:
         _ = modify_exclude_list(included=include, excluded=exclude_nodes, slurm_script=slurm_script)
+    
+    print(f"========== SLURM scripts modified. Does NOT impact already submitted jobs, only future submissions! ==========")
 

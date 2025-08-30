@@ -207,6 +207,9 @@ def namespace_to_dict(n):
 
 def flatten(xs):
     """Returns collection [xs] after recursively flattening into a list."""
+    type_map = {type({}.items()): list, type({}.values()): list, type({}.keys()): set}
+    xs = type_map[type(xs)](xs) if type(xs) in type_map else xs
+
     if isinstance(xs, list | set | tuple):
         result = []
         for x in xs:
