@@ -4,6 +4,7 @@ job name, and time remaining. Jobs are separated by SLURM account.
 import argparse
 from collections import defaultdict
 from datetime import datetime
+from functools import partial
 import glob
 import os
 import os.path as osp
@@ -19,40 +20,229 @@ import UtilsBase
 from UtilsBase import twrite
 
 ##### Colorization utilities #########################################################
-color2value = {c: f"\033[38;5;{v}m" for c,v in dict(
+# See: https://jakob-bagterp.github.io/colorist-for-python/ansi-escape-codes/extended-256-colors/#extended-palette
+color2value_base = dict(
+    blue=21,
+    green=46,
+    yellow=226,
+    red=196,
+    purple=201,
+    lightblue=51,
+    white=231,
+)
+
+def get_color_scale(*, start, end, mid=None, num_colors=11, light_bias=0):
+    """Returns a list of [num_colors] going between [start] and [end].
+
+    Args:
+    start       -- start color name
+    end         -- end color name 
+    mid         -- mid color name. Not required for [num_colors] <= 6
+    num_colors  -- number of colors to return
+    light_bias  -- shifts the colors to be more grayscale (looks better on black background)
+    """
+    if num_colors < 2 or num_colors > 11:
+        raise ValueError(f"num_colors={num_colors} must be between 2 and 11")
+
+    start = start if isinstance(start, int) else color2value_base[start]
+    end = end if isinstance(end, int) else color2value_base[end]
+    end_color = UtilsBase.reverse_dict(color2value_base)[end]
+    start_color = UtilsBase.reverse_dict(color2value_base)[start]
+
+    # twrite(start=start, end=end, mid=mid, num_colors=num_colors, end_color=end_color, start_color=start_color)
+    
+    if num_colors >= 6 and mid is None:
+        mid = (end - start) // 2 + start
+    elif not mid is None:
+        mid = mid if isinstance(mid, int) else color2value_base[mid]
+    else:
+        pass
+        
+    if num_colors >= 6:
+        scale_delta1 = (mid - start) / 5
+        light_bias1_mul = (5+ abs(scale_delta1)) // 6 
+        scale_delta2 = (end - mid) / 5
+        light_bias2_mul = (5 + abs(scale_delta2)) // 6 
+        scale1 = [start + i * scale_delta1 + light_bias * light_bias1_mul for i in range(6)] # Total of six values, puts more resolution near start
+        scale2 = [mid + i * scale_delta2 + light_bias * light_bias2_mul for i in range(1,6)] # Total of five values, puts less resolution near end
+        scale = scale1 + scale2
+
+
+        # twrite(light_bias=light_bias, light_bias1_mul=light_bias1_mul, light_bias2_mul=light_bias2_mul, start_color=start_color, end_color=end_color, scale_delta1=scale_delta1, scale_delta2=scale_delta2, )
+    else:
+        scale_delta = (end - start) / 5
+        light_bias_mul = (5 + abs(scale_delta)) // 6
+        scale = [start + i * scale_delta + light_bias_mul * light_bias for i in range(7)]
+
+    
+    scale = [int(s) for s in scale]
+    # twrite(scale=scale, len_scale=len(scale))
+
+    scale_inner = scale[1:-1]
+    num_to_select = len(scale_inner) // (num_colors - 2)
+    scale_inner = scale_inner[::num_to_select]
+    scale_inner = scale_inner[:min(num_colors - 2, len(scale_inner))]
+
+    result = [scale[0]] + scale_inner + [scale[-1]]
+    return result
+
+color2value = {c: f"\033[38;5;{v}m" for c,v in (color2value_base | dict(
     reset=0,
     green1=46,
     green2=40,
     green3=34,
     green4=118,
     green5=154,
-    
     yellow1=190,
     yellow2=226,
     yellow3=220,
-    
     blue1=39,
     blue2=27,
-
     purple1=129,
-    purple2=165,
-    
+    purple2=165,    
     red1=208,
     red2=202,
     red3=196,
-).items()}
+)).items()}
 
 def colorize(s, color="no_change"):
     """Returns [s] colorized with ANSI escape codes."""
-    return s if color == "no_change" else f"{color2value[color]}{s}\033[0m".strip()
+    color = color2value[color] if color in color2value else color
+    color = f"\033[38;5;{color}m" if isinstance(color, int | float) else color
+    return s if color == "no_change" else f"{color}{s}\033[0m".strip()
 
 def decolorize(s):
     """Returns [s] with ANSI escape codes removed, eg. so its length is correct."""
-    for cv in color2value.values():
-        s = s.replace(cv, "")
-    s = s.replace("\x1b[0m", "")
-    return s
+    s_orig = s
+    decolorized_s = ""
+    while len(s):
+        if s.startswith("\x1b["):
+            next_valid_idx = s.index("m") + 1
+        else:
+            next_valid_idx = 1
+            decolorized_s += s[0]
+        s = s[next_valid_idx:]
 
+
+    if "\x1b" in decolorized_s:
+        raise ValueError(f"decolorized_s={decolorized_s} still has escape codes on s='{s_orig}'")
+    return decolorized_s
+
+def colorize_list(l, *, cutoffs="state", interpretaton_fn="delta", color_start=None, color_mid=None, color_end=None, light_bias=0):
+    """Returns the values in list [l] colorized.
+
+    Args:
+    l                   -- list of values to colorize
+    cutoffs             -- list of cutoff values for coloring. Must be one less than the number of colors
+    interpretaton_fn    -- sends values in the list to how they should be colorized, or None for no colorization
+    color_start         -- color name for the lowest value
+    color_mid           -- color name for the middle value
+    color_end           -- color name for the highest value
+    """
+    if len(l) == 0:
+        return l
+        
+    def parse_timestamp_to_hours_from_now(v):
+        """Returns the duration in seconds from now to the timestamp [v]."""
+        time_stamp = UtilsBase.time_stamp_to_datetime(v)
+        seconds = UtilsBase.hours_since_time(time_stamp)
+        return abs(seconds)
+
+    if callable(interpretaton_fn):
+        fn = interpretaton_fn
+    elif interpretaton_fn == "delta":
+        fn = lambda v: UtilsBase.time_to_minutes(v) if any([vc.isdigit() for vc in v]) else None
+    elif interpretaton_fn == "time_away":
+        def fn(v):
+            v = v.strip()
+            if v == "N/A":
+                return float("inf")
+            elif any([vc.isdigit() for vc in v]):
+                return parse_timestamp_to_hours_from_now(v)
+            else:
+                return None
+    elif interpretaton_fn == "try_make_number":
+        def fn(v):
+            v = UtilsBase.try_make_number(v)
+            return v if isinstance(v, (int, float)) else None
+    else:
+        raise ValueError(f"interpretaton_fn={interpretaton_fn} not recognized")
+
+
+    # Shorter duration, more is worse
+    if cutoffs == "state":
+        color_start = color_start if color_start else "green"
+        color_mid = color_mid if color_mid else "yellow"
+        color_end = color_end if color_end else "blue"
+        cutoff_values = [1, 3, 5, 10, 20, 30, 40, 50, 51, 52]
+    
+    # Longer duration, more is worse
+    elif cutoffs == "queue_time" or cutoffs == "start_time":
+        color_start = color_start if color_start else "blue"
+        color_mid = color_mid if color_mid else "purple"
+        color_end = color_end if color_end else "red"
+        light_bias = 2
+        cutoff_values = [1, 3, 12, 24, 36, 72]
+    
+    # Longer duration, more is better
+    elif cutoffs == "time_left":
+        color_start = color_start if color_start else "red"
+        color_mid = color_mid if color_mid else "purple"
+        color_end = color_end if color_end else "blue"
+        light_bias = 2
+        cutoff_values = [0.5, 1, 2, 3, 4, 5, 6, 7, 12, 24]
+        cutoff_values = [cutoff_values * 60 for cutoff_values in cutoff_values] # Convert to minutes
+
+    elif (isinstance(cutoffs, list | tuple)
+        and all([isinstance(v, (int, float)) for v in cutoffs])
+        and len(cutoffs) >= 1 and len(cutoffs) <= 10
+        and not color_start is None and not color_end is None
+        and (len(cutoffs) <= 5 or not color_mid is None)):
+        cutoff_values = cutoffs
+    else:
+        raise ValueError(f"cutoffs={cutoffs} not usable. Ensure colors are set correctly too.")
+
+    list_element_and_values = [(l1, fn(l1)) for l1 in l]
+    color_scale = get_color_scale(
+        start=color_start,
+        mid=color_mid,
+        end=color_end,
+        num_colors=len(cutoff_values)+1,
+        light_bias=light_bias
+    )
+    
+    colorized = []
+    for l1,v in list_element_and_values:
+        if v is None:
+            colorized.append(l1)
+        else:
+            idxs = [idx for idx,c in enumerate(cutoff_values) if v <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            colorized.append(colorize(l1, color=color_scale[min_valid_idx]))
+    
+    return colorized
+
+def apply_along_column(list2d, *, fn, colname_or_idx, apply_to_top=True, apply_elementwise=False):
+    """Returns [list2d] with function [fn] applied along column [colname_or_idx]."""
+    if isinstance(colname_or_idx, str):
+        for idx,c in enumerate(list2d[0]):
+            if c.strip() == colname_or_idx:
+                colname_or_idx = idx
+                break
+    if not isinstance(colname_or_idx, int):
+        raise ValueError(f"colname_or_idx={colname_or_idx} must be an int or str that is a column name in list2d={list2d}")
+    if colname_or_idx >= min([len(l) for l in list2d]):
+        raise ValueError(f"colname_or_idx={colname_or_idx} is out of bounds for list2d={list2d}\n\nwith lengths={[len(l) for l in list2d]}")
+
+    col = [l[colname_or_idx] for l in (list2d if apply_to_top else list2d[1:])]
+    col = [fn(c) for c in col] if apply_elementwise else fn(col)
+    col = col if apply_to_top else [list2d[0][colname_or_idx]] + col
+
+    assert len(col) == len(list2d), f"len(col)={len(col)} != len(list2d)={len(list2d)}"
+
+    return [l[:colname_or_idx] + [c] + l[colname_or_idx+1:] for l,c in zip(list2d, col)]
+
+    
 ######################################################################################
 ######################################################################################
 ######################################################################################
@@ -100,9 +290,9 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
                 else:
                     to_append = f"{str(data_dict[c]):<{col2max_chars[c]}}"
                     s.append(to_append.upper() if append_upper else to_append)
-                
-            s = "  ".join(s)
-            j.to_print = s
+        
+            j.to_print_list = s
+            j.to_print = "  ".join(s)
         
         return job_datas
     except ValueError as e:
@@ -111,8 +301,6 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
             sys.exit(1)
         else:
             raise e
-        
-
 
 def job_name_without_gpu_time_spec(jn):
     """Returns job name [jn] without the GPU and time specification if it exists."""
@@ -663,8 +851,24 @@ if __name__ == "__main__":
             col2max_chars["name"] = max(col2max_chars["name"], len(job_name_))
         
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
-    lines = "\n".join([j.to_print for j in job_datas])
+    to_prints_lists = [j.to_print_list for j in job_datas]
     
+    # Now, colorize some of the columns if they appear
+    if "time_left" in col2max_chars:
+        to_prints_lists = apply_along_column(to_prints_lists,
+            colname_or_idx="TIME_LEFT",
+            fn=partial(colorize_list, interpretaton_fn="delta", cutoffs="time_left"))
+    if "queue_time" in col2max_chars:
+        to_prints_lists = apply_along_column(to_prints_lists,
+            colname_or_idx="QUEUE_TIME",
+            fn=partial(colorize_list, interpretaton_fn="delta", cutoffs="queue_time"))
+    if "start_time" in col2max_chars:
+        to_prints_lists = apply_along_column(to_prints_lists,
+            colname_or_idx="START_TIME",
+            fn=partial(colorize_list, interpretaton_fn="time_away", cutoffs="start_time"))
+    
+    lines = ["  ".join(tpl) for tpl in to_prints_lists]
+    lines = "\n".join(lines)
     if args.verbose:
         print(lines)
 
