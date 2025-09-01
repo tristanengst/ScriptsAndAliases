@@ -22,10 +22,10 @@ if __name__ == "__main__":
             if uid2job_ids is None:
                 uid2job_ids = dict()
                 for job_id,info in jobid2info.items():
-                    if not info["UID"] is None and not info["UID"] in uid2job_ids:
-                        uid2job_ids[info["UID"]] = [job_id]
-                    elif not info["UID"] is None:
-                        uid2job_ids[info["UID"]].append(job_id)
+                    if not info.uid is None and not info.uid in uid2job_ids:
+                        uid2job_ids[info.uid] = [job_id]
+                    elif not info.uid is None:
+                        uid2job_ids[info.uid].append(job_id)
 
             if j in uid2job_ids:
                 job_ids_to_cancel += uid2job_ids[j]
