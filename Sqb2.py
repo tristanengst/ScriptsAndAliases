@@ -211,13 +211,13 @@ def colorize_reasons(job_infos):
         elif ji.state == "PENDING" and (ji.reason.startswith("Priority")
             or ji.reason.startswith("ReqNodeNotAvail")
             or ji.reason.startswith("Resources")):
-            reason = colorize(ji.reason, color="yellow")
+            reason = colorize(ji.reason, color="orange")
             return UtilsBase.updated_namespace(ji, reason=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
-            reason = colorize(ji.reason, color="orange")
+            reason = colorize(ji.reason, color="red1")
             return UtilsBase.updated_namespace(ji, reason=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("JobHeld"):
-            reason = colorize(ji.reason, color="orange")
+            reason = colorize(ji.reason, color="red1")
             return UtilsBase.updated_namespace(ji, reason=reason)
         else:
             reason = colorize(ji.reason, color="red")
