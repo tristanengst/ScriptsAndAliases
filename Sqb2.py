@@ -210,7 +210,8 @@ def colorize_reasons(job_infos):
             return UtilsBase.updated_namespace(ji, reason=reason)
         elif ji.state == "PENDING" and (ji.reason.startswith("Priority")
             or ji.reason.startswith("ReqNodeNotAvail")
-            or ji.reason.startswith("Resources")):
+            or ji.reason.startswith("Resources")
+            or ji.reason.startswith("Nodes")):
             reason = colorize(ji.reason, color="orange")
             return UtilsBase.updated_namespace(ji, reason=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
@@ -288,7 +289,7 @@ def colorize_states(job_infos):
             output_files = [ji.stderr, ji.stdout]
             output_files = [f for f in output_files if osp.exists(f)]
             output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
-            elapsed2 = min(output_file2seconds_elapsed.values()) if output_file2seconds_elapsed else None
+            elapsed2 = (min(output_file2seconds_elapsed.values()) / 60) if output_file2seconds_elapsed else None
         
         elif ji.queue_time is None or not any([vc.isdigit() for vc in ji.queue_time]):
             submit_time = UtilsBase.time_stamp_to_datetime(decolorize(ji.submit_time))
