@@ -3,6 +3,7 @@ job name, and time remaining. Jobs are separated by SLURM account.
 """
 import argparse
 from collections import defaultdict
+import copy
 from datetime import datetime
 from functools import partial
 import glob
@@ -99,7 +100,8 @@ color2value = {c: f"\033[38;5;{v}m" for c,v in (color2value_base | dict(
     blue1=39,
     blue2=27,
     purple1=129,
-    purple2=165,    
+    purple2=165,  
+    orange=214,
     red1=208,
     red2=202,
     red3=196,
@@ -113,7 +115,7 @@ def colorize(s, color="no_change"):
 
 def decolorize(s):
     """Returns [s] with ANSI escape codes removed, eg. so its length is correct."""
-    s_orig = s
+    s = copy.deepcopy(s)
     decolorized_s = ""
     while len(s):
         if s.startswith("\x1b["):
@@ -122,126 +124,193 @@ def decolorize(s):
             next_valid_idx = 1
             decolorized_s += s[0]
         s = s[next_valid_idx:]
-
-
-    if "\x1b" in decolorized_s:
-        raise ValueError(f"decolorized_s={decolorized_s} still has escape codes on s='{s_orig}'")
     return decolorized_s
 
-def colorize_list(l, *, cutoffs="state", interpretaton_fn="delta", color_start=None, color_mid=None, color_end=None, light_bias=0):
-    """Returns the values in list [l] colorized.
 
-    Args:
-    l                   -- list of values to colorize
-    cutoffs             -- list of cutoff values for coloring. Must be one less than the number of colors
-    interpretaton_fn    -- sends values in the list to how they should be colorized, or None for no colorization
-    color_start         -- color name for the lowest value
-    color_mid           -- color name for the middle value
-    color_end           -- color name for the highest value
-    """
-    if len(l) == 0:
-        return l
-        
-    def parse_timestamp_to_hours_from_now(v):
-        """Returns the duration in seconds from now to the timestamp [v]."""
-        time_stamp = UtilsBase.time_stamp_to_datetime(v)
-        seconds = UtilsBase.hours_since_time(time_stamp)
-        return abs(seconds)
-
-    if callable(interpretaton_fn):
-        fn = interpretaton_fn
-    elif interpretaton_fn == "delta":
-        fn = lambda v: UtilsBase.time_to_minutes(v) if any([vc.isdigit() for vc in v]) else None
-    elif interpretaton_fn == "time_away":
-        def fn(v):
-            v = v.strip()
-            if v == "N/A":
-                return float("inf")
-            elif any([vc.isdigit() for vc in v]):
-                return parse_timestamp_to_hours_from_now(v)
-            else:
-                return None
-    elif interpretaton_fn == "try_make_number":
-        def fn(v):
-            v = UtilsBase.try_make_number(v)
-            return v if isinstance(v, (int, float)) else None
-    else:
-        raise ValueError(f"interpretaton_fn={interpretaton_fn} not recognized")
-
-
-    # Shorter duration, more is worse
-    if cutoffs == "state":
-        color_start = color_start if color_start else "green"
-        color_mid = color_mid if color_mid else "yellow"
-        color_end = color_end if color_end else "blue"
-        cutoff_values = [1, 3, 5, 10, 20, 30, 40, 50, 51, 52]
-    
-    # Longer duration, more is worse
-    elif cutoffs == "queue_time" or cutoffs == "start_time":
-        color_start = color_start if color_start else "blue"
-        color_mid = color_mid if color_mid else "purple"
-        color_end = color_end if color_end else "red"
-        light_bias = 2
-        cutoff_values = [1, 3, 12, 24, 36, 72]
-    
-    # Longer duration, more is better
-    elif cutoffs == "time_left":
-        color_start = color_start if color_start else "red"
-        color_mid = color_mid if color_mid else "purple"
-        color_end = color_end if color_end else "blue"
-        light_bias = 2
-        cutoff_values = [0.5, 1, 2, 3, 4, 5, 6, 7, 12, 24]
-        cutoff_values = [cutoff_values * 60 for cutoff_values in cutoff_values] # Convert to minutes
-
-    elif (isinstance(cutoffs, list | tuple)
-        and all([isinstance(v, (int, float)) for v in cutoffs])
-        and len(cutoffs) >= 1 and len(cutoffs) <= 10
-        and not color_start is None and not color_end is None
-        and (len(cutoffs) <= 5 or not color_mid is None)):
-        cutoff_values = cutoffs
-    else:
-        raise ValueError(f"cutoffs={cutoffs} not usable. Ensure colors are set correctly too.")
-
-    list_element_and_values = [(l1, fn(l1)) for l1 in l]
+def colorize_submit_times(job_infos):
+    """Returns each job info in [job_infos] with the time left colorized."""
+    cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
     color_scale = get_color_scale(
-        start=color_start,
-        mid=color_mid,
-        end=color_end,
-        num_colors=len(cutoff_values)+1,
-        light_bias=light_bias
-    )
-    
-    colorized = []
-    for l1,v in list_element_and_values:
-        if v is None:
-            colorized.append(l1)
+        start="blue",
+        mid="purple",
+        end="red",
+        light_bias=2,
+        num_colors=len(cutoff_values)+1)
+
+    def colorize_submit_time(ji):
+        if ji.time_left is None or not any([vc.isdigit() for vc in ji.submit_time]):
+            return ji
         else:
-            idxs = [idx for idx,c in enumerate(cutoff_values) if v <= c]
+            time_ago = UtilsBase.hours_since_time(ji.submit_time)
+            idxs = [idx for idx,c in enumerate(cutoff_values) if time_ago <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
-            colorized.append(colorize(l1, color=color_scale[min_valid_idx]))
-    
-    return colorized
+            submit_time = colorize(ji.submit_time, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, submit_time=submit_time)
 
-def apply_along_column(list2d, *, fn, colname_or_idx, apply_to_top=True, apply_elementwise=False):
-    """Returns [list2d] with function [fn] applied along column [colname_or_idx]."""
-    if isinstance(colname_or_idx, str):
-        for idx,c in enumerate(list2d[0]):
-            if c.strip() == colname_or_idx:
-                colname_or_idx = idx
-                break
-    if not isinstance(colname_or_idx, int):
-        raise ValueError(f"colname_or_idx={colname_or_idx} must be an int or str that is a column name in list2d={list2d}")
-    if colname_or_idx >= min([len(l) for l in list2d]):
-        raise ValueError(f"colname_or_idx={colname_or_idx} is out of bounds for list2d={list2d}\n\nwith lengths={[len(l) for l in list2d]}")
+    return [colorize_submit_time(ji) for ji in job_infos]
 
-    col = [l[colname_or_idx] for l in (list2d if apply_to_top else list2d[1:])]
-    col = [fn(c) for c in col] if apply_elementwise else fn(col)
-    col = col if apply_to_top else [list2d[0][colname_or_idx]] + col
+def colorize_time_lefts(job_infos, cur_user=True):
+    """Returns each job info in [job_infos] with the time left colorized."""
+    cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
+    color_scale = get_color_scale(
+        start="red",
+        mid="purple",
+        end="blue",
+        light_bias=2,
+        num_colors=len(cutoff_values)+1)
 
-    assert len(col) == len(list2d), f"len(col)={len(col)} != len(list2d)={len(list2d)}"
+    def colorize_time_left(ji):
+        if (ji.time_left in ["N/A", None]
+            or not "user" in ji
+            or (cur_user and not ji.user == os.environ["USER"])
+            or ji.name == "HeldToProvideLevelFSEstimate"):
+            return ji
+        else:
+            time_left_hours = UtilsBase.time_to_hours(ji.time_left)
+            idxs = [idx for idx,c in enumerate(cutoff_values) if time_left_hours <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            time_left = colorize(ji.time_left, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, time_left=time_left)
 
-    return [l[:colname_or_idx] + [c] + l[colname_or_idx+1:] for l,c in zip(list2d, col)]
+    return [colorize_time_left(ji) for ji in job_infos]
 
+def colorize_start_times(job_infos):
+    """Returns each job info in [job_infos] with the start time colorized."""
+    cutoff_values = [0.25, 1, 3, 6, 12, 18, 24, 36, 48, 72] # In hours
+    color_scale = get_color_scale(
+        start="green",
+        mid="yellow",
+        end="red",
+        num_colors=len(cutoff_values)+1)
+
+    def colorize_start_time(ji):
+        if ji.name == "HeldToProvideLevelFSEstimate":
+            return ji
+        elif ji.start_time == "N/A":
+            start_time = colorize(ji.start_time, color=color_scale[-1])
+            return UtilsBase.updated_namespace(ji, start_time=start_time)
+        elif ji.start_time is None or not any([vc.isdigit() for vc in ji.start_time]):
+            return ji
+        else:
+            time_in_future = (UtilsBase.time_stamp_to_datetime(ji.start_time) - datetime.now()).total_seconds() / 3600
+            idxs = [idx for idx,c in enumerate(cutoff_values) if time_in_future <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            start_time = colorize(ji.start_time, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, start_time=start_time)
+
+    return [colorize_start_time(ji) for ji in job_infos]
+
+def colorize_reasons(job_infos):
+    """Returns each job info in [job_infos] with the reason colorized."""
+    def colorize_reason(ji):
+        if ji.jobid.startswith("__") or ji.name == "HeldToProvideLevelFSEstimate":
+            return ji
+        elif ji.state in ["RUNNING", "COMPLETING"]:
+            reason = colorize(ji.reason, color="green")
+            return UtilsBase.updated_namespace(ji, reason=reason)
+        elif ji.state == "PENDING" and (ji.reason.startswith("Priority")
+            or ji.reason.startswith("ReqNodeNotAvail")
+            or ji.reason.startswith("Resources")):
+            reason = colorize(ji.reason, color="yellow")
+            return UtilsBase.updated_namespace(ji, reason=reason)
+        elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
+            reason = colorize(ji.reason, color="orange")
+            return UtilsBase.updated_namespace(ji, reason=reason)
+        elif ji.state == "PENDING" and ji.reason.startswith("JobHeld"):
+            reason = colorize(ji.reason, color="orange")
+            return UtilsBase.updated_namespace(ji, reason=reason)
+        else:
+            reason = colorize(ji.reason, color="red")
+            return UtilsBase.updated_namespace(ji, reason=reason)
+    return [colorize_reason(ji) for ji in job_infos]
+
+def colorize_queue_times(job_infos):
+    """Returns each job info in [job_infos] with the queue time colorized."""
+    cutoff_values = [0.25, 0.5, 1, 3, 6, 12, 18, 24, 36, 72] # In hours
+    color_scale = get_color_scale(
+        start="green",
+        mid="yellow",
+        end="red",
+        num_colors=len(cutoff_values)+1)
+
+    def colorize_queue_time(ji):
+        if ji.queue_time is None or not any([vc.isdigit() for vc in ji.queue_time]):
+            return ji
+        else:
+            time_in_past = UtilsBase.time_to_minutes(ji.queue_time)
+            idxs = [idx for idx,c in enumerate(cutoff_values) if time_in_past <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            queue_time = colorize(ji.queue_time, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, queue_time=queue_time)
+
+    return [colorize_queue_time(ji) for ji in job_infos]
+
+def colorize_states(job_infos):
+    """Returns each job info in [job_infos] with the state colorized.
+
+    The first half of the state value reflects a potential heartbeat key, while the
+    rest reflects the time since the job's output was written to.
+    """
+    cutoff_values = [1, 2, 5, 10, 20, 30, 40, 50, 60, 90] # In minutes
+    color_scale = get_color_scale(
+        start="green",
+        mid="yellow",
+        end="red",
+        num_colors=len(cutoff_values)+1)
+
+    def colorize_state(ji):
+        if ji.name == "HeldToProvideLevelFSEstimate" or ji.jobid.startswith("__"):
+            return ji
+
+        job_running = ji.state in ["RUNNING", "COMPLETING"]
+        if not "user" in ji:
+            return ji
+        elif ji.user == os.environ["USER"] and (not "heartbeat" in ji or not decolorize(ji.heartbeat[0]).isnumeric()):
+            color1 = color_scale[-1] if job_running else None
+        elif not ji.user == os.environ["USER"]:
+            # Here there's no 
+            color1 = 142 if job_running else 174
+        else:
+            # Last possible time a heartbeat could've been written is the submit time for
+            # pending jobs (ie. the completion time of a prior chunk) or the current time.
+            heartbeat_time = UtilsBase.time_stamp_to_datetime(decolorize(ji.heartbeat))
+            if job_running:
+                last_possible_heartbeat = datetime.now()
+            else:
+                last_possible_heartbeat = UtilsBase.time_stamp_to_datetime(decolorize(ji.submit_time))
+            elapsed1 = (last_possible_heartbeat - heartbeat_time).total_seconds() / 60
+            idxs = [idx for idx,c in enumerate(cutoff_values) if elapsed1 <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            color1 = color_scale[min_valid_idx]
+
+        if job_running:
+            now = time.time()
+            output_files = [ji.stderr, ji.stdout]
+            output_files = [f for f in output_files if osp.exists(f)]
+            output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
+            elapsed2 = min(output_file2seconds_elapsed.values()) if output_file2seconds_elapsed else None
+        
+        elif ji.queue_time is None or not any([vc.isdigit() for vc in ji.queue_time]):
+            submit_time = UtilsBase.time_stamp_to_datetime(decolorize(ji.submit_time))
+            elapsed2 = (datetime.now() - submit_time).total_seconds() / 60
+        else:
+            elapsed2 = UtilsBase.time_to_minutes(decolorize(ji.queue_time))
+
+        if elapsed2 is None:
+            color2 = color1
+        else:
+            idxs = [idx for idx,c in enumerate(cutoff_values) if elapsed2 <= c]
+            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            color2 = color_scale[min_valid_idx]
+        
+        ji_state_len = len(decolorize(ji.state))
+        state_part1 = ji.state[:ji_state_len//2]
+        state_part1 = colorize(state_part1, color=color1)
+        state_part2 = ji.state[ji_state_len //2:]
+        state_part2 = colorize(state_part2, color=color2)
+        return UtilsBase.updated_namespace(ji, state=state_part1 + state_part2)
+
+    return [colorize_state(ji) for ji in job_infos]
     
 ######################################################################################
 ######################################################################################
@@ -277,21 +346,23 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
                 
                 elif c == "name" and j.name.startswith("next chunks"):
                     to_append = f"------ {j.name} ------"
-                    to_append = f"{to_append:^{col2max_chars[c]}}"
+                    to_append = to_append.center(col2max_chars[c])
                     s.append(to_append)
 
                 elif c == "name" and j.name == "name" and Utils.is_cc():
                     account = j.jobid.replace("__account ", "")
                     to_append = f"------ {account} ------"
-                    to_append = f"{to_append:^{col2max_chars[c] - len(c) * 2}}"
+                    to_append = to_append.center(col2max_chars[c] - len("NAME"))
                     to_append = "NAME" + to_append
                     s.append(to_append)
                 
                 else:
-                    to_append = f"{str(data_dict[c]):<{col2max_chars[c]}}"
+                    # Handles colorization better
+                    chars_to_append = col2max_chars[c] - len(decolorize(str(data_dict[c])))
+                    chars_to_append = max(chars_to_append, 0)
+                    to_append = f"{str(data_dict[c])}{' ' * chars_to_append}"
                     s.append(to_append.upper() if append_upper else to_append)
         
-            j.to_print_list = s
             j.to_print = "  ".join(s)
         
         return job_datas
@@ -381,7 +452,7 @@ def job_dict_with_formatted_time_delta(jd, key="time_left"):
             mm, ss = delta.split(":")
             hh, mm, ss = 0, int(mm), int(ss)
         else:
-            print(f"[INFO] jobid={jd['jobid']} got unexpected time_left={delta}")
+            twrite(f"[INFO] jobid={jd['jobid']} got unexpected time_left={delta}")
             return argparse.Namespace(**vars(jd) | {key: delta})
     
     result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
@@ -433,7 +504,7 @@ def job_dict_with_heartbeat(jd):
         if len(found_exp_folders) == 0:
             return UtilsBase.updated_namespace(jd, heartbeat="no exp folders found")
         elif len(found_exp_folders) > 1:
-            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
+            twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return UtilsBase.updated_namespace(jd, heartbeat="multiple exp names")
         elif osp.exists(osp.join(found_exp_folders[0], "heartbeat.txt")):
             with open(osp.join(found_exp_folders[0], "heartbeat.txt"), "r") as f:
@@ -445,116 +516,6 @@ def job_dict_with_heartbeat(jd):
             return UtilsBase.updated_namespace(jd, heartbeat="no hearbeat file")
     else:
         return UtilsBase.updated_namespace(jd, heartbeat="-")
-
-def job_dict_with_heartbeat_analysis(jd):
-    """Returns job dict [jd] with the STATE key colorized to indicate job health.
-    
-    The state key is colorized in two ways:
-    1. The first half is colored based on the job's recorded heartbeat if it exists
-    2. The second half is colored differently, depending on if the state.
-        - For running jobs, based on how recently the job's output file was modified (green -> red)
-        - For pending jobs, based on how long the job has been pending (blue -> red)
-    """
-    def seconds_to_color_green_to_red(seconds):
-        if seconds is None:
-            return "no_change"
-    
-        minutes = seconds / 60
-        # Zero to 20 minutes, everything is probably fine
-        # 20-30 minutes, probably okay
-        # 30-60 minutes, problem
-        if minutes < 1:
-            return "green1"
-        elif minutes < 2:
-            return "green2"
-        elif minutes < 5:
-            return "green3"
-        elif minutes < 10:
-            return "green4"
-        elif minutes < 20:
-            return "green5"
-        elif minutes < 30:
-            return "yellow1"
-        elif minutes < 40:
-            return "yellow2"
-        elif minutes < 50:
-            return "yellow3"
-        elif minutes < 60:
-            return "red1"
-        elif minutes < 90:
-            return "red2"
-        else:
-            return "red3"
-        
-    def seconds_to_color_blue_to_red(seconds):
-        if seconds is None:
-            return "no_change"
-    
-        hours = seconds / 3600
-        # Less than 1H, good
-        # 1-3H, okay
-        # 3-12H, meh
-        # 12-24H, not great
-        # 24-36H, worse
-        # 36H-72H, bad
-        # 72H+, terrible
-        if hours < 1:
-            return "blue1"
-        elif hours < 3:
-            return "blue2"
-        elif hours < 12:
-            return "purple1"
-        elif hours < 24:
-            return "purple2"
-        elif hours < 36:
-            return "red1"
-        elif hours < 72:
-            return "red2"
-        else:
-            return "red3"
-
-    job_running = jd.state in ["RUNNING", "COMPLETING"]
-    if job_running:
-        now = time.time()
-        output_files = [jd.stderr, jd.stdout]
-        output_files = [f for f in output_files if osp.exists(f)]
-        output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
-        _ = twrite(f"[INFO] No output files found for jobid={jd.jobid} with stderr={jd.stderr} and stdout={jd.stdout}", verbose=not output_files)
-        elapsed2 = min(output_file2seconds_elapsed.values()) if output_file2seconds_elapsed else None
-    elif jd.queue_time in ["N/A", None]:
-        submit_time = datetime.strptime(jd.submit_time, "%m-%d-%H:%M")
-        elapsed2 = (datetime.now() - submit_time).total_seconds()
-    else:
-        elapsed2 = float(jd.queue_time.replace("H", "")) * 3600
-        
-    if not "heartbeat" in jd or not jd.heartbeat[0].isnumeric():
-        elapsed1 = None
-    else:
-        heartbeat_time = datetime.strptime(jd.heartbeat, "%m-%d-%H:%M")
-        
-        # Last possible time a heartbeat could've been written is the submit time for
-        # pending jobs (ie. the completion time of a prior chunk) or the current time.
-        if job_running:
-            last_possible_heartbeat = datetime.now()
-        else:
-            last_possible_heartbeat = datetime.strptime(jd.submit_time, "%m-%d-%H:%M")
-
-        # Since the year isn't given in the heartbeat time, it is assumed to be 1900.
-        # Obviously this is wrong.
-        heartbeat_time = heartbeat_time.replace(year=last_possible_heartbeat.year)
-        elapsed1 = (last_possible_heartbeat - heartbeat_time).total_seconds()
-
-    color1 = seconds_to_color_green_to_red(elapsed1)
-    color2_fn = seconds_to_color_green_to_red if job_running else seconds_to_color_blue_to_red
-    color2 = color2_fn(elapsed2)
-    
-    jd_state_len = len(decolorize(jd.state))
-    state_part1 = jd.state[:jd_state_len//2]
-    state_part1 = colorize(state_part1, color=color1)
-    state_part2 = jd.state[jd_state_len //2:]
-    state_part2 = colorize(state_part2, color=color2)
-    jd.state = state_part1 + state_part2
-    return jd
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
@@ -584,7 +545,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
     if latest_checkpoint:
         job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
-    if heartbeat or heartbeat_analysis:
+    if heartbeat:
         job2info = {j: job_dict_with_heartbeat(v) for j,v in job2info.items()}
 
     job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
@@ -593,8 +554,6 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     job2info = {j: job_dict_with_formatted_reason(info) for j,info in job2info.items()}
     job2info = {j: job_dict_without_preempt_me_name(info) for j,info in job2info.items()}
 
-    if heartbeat_analysis:
-        job2info = {j: job_dict_with_heartbeat_analysis(info) for j,info in job2info.items()}
 
     # Combine an abbreviated partition name with the user name on Solar
     if Utils.is_solar() and not cur_user:
@@ -716,7 +675,7 @@ def job_dict_with_latest_str(*, args, jd):
         if len(found_exp_folders) == 0:
             return UtilsBase.updated_namespace(jd, chkpt="no exp folders found")
         elif len(found_exp_folders) > 1:
-            print(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
+            twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return UtilsBase.updated_namespace(jd, chkpt="multiple exp names")
         else:
             exp_folder = found_exp_folders[0]
@@ -766,6 +725,9 @@ if __name__ == "__main__":
             osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
             osp.expanduser("~/scratch/IMLE-SSL/models_stop")],
         help="Directories to search for latest checkpoints in. If empty, no checkpoints are searched for.")
+    P.set_defaults(color=True)
+    P.add_argument("-nc", "--no_color", action="store_false", dest="color",
+        help="Do not colorize the output")
     args = P.parse_args()
 
 
@@ -802,9 +764,9 @@ if __name__ == "__main__":
                 job_datas += [colnames_job_data] + job_datas_account
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
-        print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0"))
+        twrite(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0"))
         time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        print(time_str)
+        twrite(time_str)
         sys.exit(0)
     
     col2max_chars = {c: len(c) for c in colnames}
@@ -849,27 +811,19 @@ if __name__ == "__main__":
         for job_data in job_datas:
             job_name_ = "" if job_data.name.startswith("\n\t\t") else job_data.name.strip()
             col2max_chars["name"] = max(col2max_chars["name"], len(job_name_))
-        
-    job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
-    to_prints_lists = [j.to_print_list for j in job_datas]
     
-    # Now, colorize some of the columns if they appear
-    if "time_left" in col2max_chars:
-        to_prints_lists = apply_along_column(to_prints_lists,
-            colname_or_idx="TIME_LEFT",
-            fn=partial(colorize_list, interpretaton_fn="delta", cutoffs="time_left"))
-    if "queue_time" in col2max_chars:
-        to_prints_lists = apply_along_column(to_prints_lists,
-            colname_or_idx="QUEUE_TIME",
-            fn=partial(colorize_list, interpretaton_fn="delta", cutoffs="queue_time"))
-    if "start_time" in col2max_chars:
-        to_prints_lists = apply_along_column(to_prints_lists,
-            colname_or_idx="START_TIME",
-            fn=partial(colorize_list, interpretaton_fn="time_away", cutoffs="start_time"))
     
-    lines = ["  ".join(tpl) for tpl in to_prints_lists]
-    lines = "\n".join(lines)
+    if args.color:
+        job_datas = colorize_queue_times(job_datas) if "queue_time" in col2max_chars else job_datas
+        job_datas = colorize_time_lefts(job_datas) if "time_left" in col2max_chars else job_datas
+        job_datas = colorize_start_times(job_datas) if "start_time" in col2max_chars else job_datas
+        job_datas = colorize_reasons(job_datas) if "reason" in col2max_chars else job_datas
+        job_datas = colorize_states(job_datas) if "state" in col2max_chars else job_datas
+        job_datas = colorize_submit_times(job_datas) if "submit_time" in col2max_chars else job_datas
+        job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
+
     if args.verbose:
+        lines = "\n".join([j.to_print for j in job_datas])
         print(lines)
 
     # Now describe the overall cluster status or roughly how allocated it is

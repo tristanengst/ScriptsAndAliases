@@ -253,6 +253,8 @@ def reverse_dict(d, use_defaultdict=False):
 def seconds_since_time(start_time):
     if isinstance(start_time, datetime):
         return (datetime.now() - start_time).total_seconds()
+    elif isinstance(start_time, str):
+        return (datetime.now() - time_stamp_to_datetime(start_time)).total_seconds()
     else:
         return time.time() - start_time  
 def hours_since_time(start_time): return seconds_since_time(start_time) / 3600

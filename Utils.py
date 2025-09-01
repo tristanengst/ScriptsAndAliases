@@ -75,6 +75,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False):
         state=f"%T",
         start_time=f"%S",
         time_left=f"%L",
+        time_limit=f"%l",
         gres=f"%b",
         nodes=f"%D",
         name=f"%j",
