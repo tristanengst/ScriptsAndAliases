@@ -553,7 +553,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
     if latest_checkpoint:
         job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
-    if heartbeat:
+    if heartbeat or heartbeat_analysis:
         job2info = {j: job_dict_with_heartbeat(v) for j,v in job2info.items()}
 
     job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
