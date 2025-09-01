@@ -163,12 +163,18 @@ def colorize_time_lefts(job_infos, cur_user=True):
         if (ji.time_left in ["N/A", None]
             or not "user" in ji
             or (cur_user and not ji.user == os.environ["USER"])
-            or ji.name == "HeldToProvideLevelFSEstimate"):
+            or ji.name == "HeldToProvideLevelFSEstimate"
+            or not decolorize(ji.state) in ["RUNNING", "COMPLETING"]):
             return ji
         else:
             time_left_hours = UtilsBase.time_to_hours(ji.time_left)
-            idxs = [idx for idx,c in enumerate(cutoff_values) if time_left_hours <= c]
-            min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            if time_left_hours <= 1:
+                idxs = [idx for idx,c in enumerate(cutoff_values) if time_left_hours <= c]
+                min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            else:
+                frac_remaining = time_left_hours / UtilsBase.time_to_hours(ji.time_limit)
+                min_valid_idx = min(int(frac_remaining * 8 + 3), len(cutoff_values))
+
             time_left = colorize(ji.time_left, color=color_scale[min_valid_idx])
             return UtilsBase.updated_namespace(ji, time_left=time_left)
 
@@ -211,7 +217,8 @@ def colorize_reasons(job_infos):
         elif ji.state == "PENDING" and (ji.reason.startswith("Priority")
             or ji.reason.startswith("ReqNodeNotAvail")
             or ji.reason.startswith("Resources")
-            or ji.reason.startswith("Nodes")):
+            or ji.reason.startswith("Nodes")
+            or ji.reason.startswith("None")):
             reason = colorize(ji.reason, color="orange")
             return UtilsBase.updated_namespace(ji, reason=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
