@@ -184,9 +184,10 @@ def colorize_start_times(job_infos):
     """Returns each job info in [job_infos] with the start time colorized."""
     cutoff_values = [0.25, 1, 3, 6, 12, 18, 24, 36, 48, 72] # In hours
     color_scale = get_color_scale(
-        start="green",
-        mid="yellow",
+        start="blue",
+        mid="purple",
         end="red",
+        light_bias=2,
         num_colors=len(cutoff_values)+1)
 
     def colorize_start_time(ji):
@@ -290,6 +291,8 @@ def colorize_states(job_infos):
             idxs = [idx for idx,c in enumerate(cutoff_values) if elapsed1 <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             color1 = color_scale[min_valid_idx]
+
+            twrite(uid=ji.uid, heartbeat=ji.heartbeat, elapsed1=elapsed1, color1=color1, min_valid_idx=min_valid_idx)
 
         if job_running:
             now = time.time()
