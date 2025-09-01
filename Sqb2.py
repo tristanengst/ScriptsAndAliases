@@ -266,7 +266,7 @@ def colorize_states(job_infos):
         if not "user" in ji:
             return ji
         elif ji.user == os.environ["USER"] and (not "heartbeat" in ji or not decolorize(ji.heartbeat[0]).isnumeric()):
-            color1 = color_scale[-1] if job_running else None
+            color1 = color_scale[-1] if job_running else "no_change"
         elif not ji.user == os.environ["USER"]:
             # Here there's no 
             color1 = 142 if job_running else 174
