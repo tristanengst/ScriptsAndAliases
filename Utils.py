@@ -139,7 +139,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False):
         print(f"Output:\n{sq}")
     
     if sq == "":
-        print(f"[INFO] No jobs found for cur_user={cur_user}, account={account}", cur_user=cur_user, account=account, verbose=verbose)
+        twrite(f"[INFO] No jobs found for cur_user={cur_user}, account={account}", cur_user=cur_user, account=account, verbose=verbose)
         return dict()
     
     jobs = sq.split("\n")

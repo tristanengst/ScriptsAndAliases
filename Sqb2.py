@@ -26,9 +26,17 @@ color2value = {c: f"\033[38;5;{v}m" for c,v in dict(
     green3=34,
     green4=118,
     green5=154,
+    
     yellow1=190,
     yellow2=226,
     yellow3=220,
+    
+    blue1=39,
+    blue2=27,
+
+    purple1=129,
+    purple2=165,
+    
     red1=208,
     red2=202,
     red3=196,
@@ -40,9 +48,9 @@ def colorize(s, color="no_change"):
 
 def decolorize(s):
     """Returns [s] with ANSI escape codes removed, eg. so its length is correct."""
-    if s.startswith("\033["):
-        for cv in color2value.values():
-            s = s.replace(cv, "")
+    for cv in color2value.values():
+        s = s.replace(cv, "")
+    s = s.replace("\x1b[0m", "")
     return s
 
 ######################################################################################
@@ -251,17 +259,22 @@ def job_dict_with_heartbeat(jd):
         return UtilsBase.updated_namespace(jd, heartbeat="-")
 
 def job_dict_with_heartbeat_analysis(jd):
-    """Returns job dict [jd] with the STATE key colorized to indicate job health. The
-    first half (rounded up) is colorized based on the heartbeat key, while the
-    remaining half is colored based on the how recently the job's output file was
-    modified.
+    """Returns job dict [jd] with the STATE key colorized to indicate job health.
+    
+    The state key is colorized in two ways:
+    1. The first half is colored based on the job's recorded heartbeat if it exists
+    2. The second half is colored differently, depending on if the state.
+        - For running jobs, based on how recently the job's output file was modified (green -> red)
+        - For pending jobs, based on how long the job has been pending (blue -> red)
     """
-    def seconds_to_color(seconds):
+    def seconds_to_color_green_to_red(seconds):
         if seconds is None:
             return "no_change"
     
         minutes = seconds / 60
         # Zero to 20 minutes, everything is probably fine
+        # 20-30 minutes, probably okay
+        # 30-60 minutes, problem
         if minutes < 1:
             return "green1"
         elif minutes < 2:
@@ -285,20 +298,51 @@ def job_dict_with_heartbeat_analysis(jd):
         else:
             return "red3"
         
+    def seconds_to_color_blue_to_red(seconds):
+        if seconds is None:
+            return "no_change"
+    
+        hours = seconds / 3600
+        # Less than 1H, good
+        # 1-3H, okay
+        # 3-12H, meh
+        # 12-24H, not great
+        # 24-36H, worse
+        # 36H-72H, bad
+        # 72H+, terrible
+        if hours < 1:
+            return "blue1"
+        elif hours < 3:
+            return "blue2"
+        elif hours < 12:
+            return "purple1"
+        elif hours < 24:
+            return "purple2"
+        elif hours < 36:
+            return "red1"
+        elif hours < 72:
+            return "red2"
+        else:
+            return "red3"
 
-    now = time.time()
-    output_files = [jd.stderr, jd.stdout]
-    output_files = [f for f in output_files if osp.exists(f)]
-    output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
-    _ = twrite(f"[INFO] No output files found for jobid={jd.jobid} with stderr={jd.stderr} and stdout={jd.stdout}", verbose=not output_files)
-    output_elapsed = min(output_file2seconds_elapsed.values()) if output_file2seconds_elapsed else None
-
-
+    job_running = jd.state in ["RUNNING", "COMPLETING"]
+    if job_running:
+        now = time.time()
+        output_files = [jd.stderr, jd.stdout]
+        output_files = [f for f in output_files if osp.exists(f)]
+        output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
+        _ = twrite(f"[INFO] No output files found for jobid={jd.jobid} with stderr={jd.stderr} and stdout={jd.stdout}", verbose=not output_files)
+        elapsed2 = min(output_file2seconds_elapsed.values()) if output_file2seconds_elapsed else None
+    elif jd.queue_time in ["N/A", None]:
+        submit_time = datetime.strptime(jd.submit_time, "%m-%d-%H:%M")
+        elapsed2 = (datetime.now() - submit_time).total_seconds()
+    else:
+        elapsed2 = float(jd.queue_time.replace("H", "")) * 3600
+        
     if not "heartbeat" in jd or not jd.heartbeat[0].isnumeric():
-        heartbeat_elapsed = None
+        elapsed1 = None
     else:
         heartbeat_time = datetime.strptime(jd.heartbeat, "%m-%d-%H:%M")
-        job_running = jd.state in ["RUNNING", "COMPLETING"]
         
         # Last possible time a heartbeat could've been written is the submit time for
         # pending jobs (ie. the completion time of a prior chunk) or the current time.
@@ -310,17 +354,17 @@ def job_dict_with_heartbeat_analysis(jd):
         # Since the year isn't given in the heartbeat time, it is assumed to be 1900.
         # Obviously this is wrong.
         heartbeat_time = heartbeat_time.replace(year=last_possible_heartbeat.year)
- 
-        heartbeat_elapsed = (last_possible_heartbeat - heartbeat_time).total_seconds()
+        elapsed1 = (last_possible_heartbeat - heartbeat_time).total_seconds()
 
-    heartbeat_color = seconds_to_color(heartbeat_elapsed)
-    output_color = seconds_to_color(output_elapsed)
+    color1 = seconds_to_color_green_to_red(elapsed1)
+    color2_fn = seconds_to_color_green_to_red if job_running else seconds_to_color_blue_to_red
+    color2 = color2_fn(elapsed2)
     
     jd_state_len = len(decolorize(jd.state))
     state_part1 = jd.state[:jd_state_len//2]
-    state_part1 = colorize(state_part1, color=heartbeat_color)
+    state_part1 = colorize(state_part1, color=color1)
     state_part2 = jd.state[jd_state_len //2:]
-    state_part2 = colorize(state_part2, color=output_color)
+    state_part2 = colorize(state_part2, color=color2)
     jd.state = state_part1 + state_part2
     return jd
 
@@ -348,7 +392,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_dict_with_formatted_date_time(v, key="submit_time") for j,v in job2info.items()}
     if eligible_time:
         job2info = {j: job_dict_with_formatted_date_time(v, key="eligible_time") for j,v in job2info.items()}
-    if queue_time:
+    if queue_time or heartbeat_analysis:
         job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
     if latest_checkpoint:
         job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
@@ -574,12 +618,14 @@ if __name__ == "__main__":
         time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         print(time_str)
         sys.exit(0)
-        
+    
     col2max_chars = {c: len(c) for c in colnames}
     for job_data in job_datas:
-        job_data = vars(job_data)
+        jd_dict = vars(job_data)
         for c in colnames:
-            col2max_chars[c] = max(col2max_chars[c], 0 if str(job_data["jobid"]).startswith("__") else len(decolorize(str(job_data[c]))))
+            value = decolorize(str(jd_dict[c])) if c == "state" else str(jd_dict[c])
+            length = 0 if str(jd_dict["jobid"]).startswith("__") else len(value)
+            col2max_chars[c] = max(col2max_chars[c], length)
     col2max_chars = {c: mc for c,mc in col2max_chars.items()}
 
     # Try building the string representation for each job data.
@@ -589,10 +635,10 @@ if __name__ == "__main__":
     # removing GPU and time specifications
     all_on_one_line = len(job_datas) == 0 or max([len(j.to_print) for j in job_datas]) <= shutil.get_terminal_size().columns
     if not all_on_one_line:
-        col2max_chars.name = 0
+        col2max_chars["name"] = 0
         for job_data in job_datas:
             job_data.name = job_name_without_gpu_time_spec(job_data.name)
-            col2max_chars.name = max(col2max_chars.name, len(job_data.name))
+            col2max_chars["name"] = max(col2max_chars["name"], len(job_data.name))
 
     # If any job name is still too long, re-order the output so the job name comes
     # last, and then make offending job names print on a line below the rest
@@ -611,10 +657,10 @@ if __name__ == "__main__":
                 j.name = "\n\t\t" + j.name + "\n"
         
         # Exclude jobs whose names are on a new line from the length calculation
-        col2max_chars.name = 0
+        col2max_chars["name"] = 0
         for job_data in job_datas:
             job_name_ = "" if job_data.name.startswith("\n\t\t") else job_data.name.strip()
-            col2max_chars.name = max(col2max_chars.name, len(job_name_))
+            col2max_chars["name"] = max(col2max_chars["name"], len(job_name_))
         
     job_datas = job_datas_with_to_prints(job_datas=job_datas, col2max_chars=col2max_chars)
     lines = "\n".join([j.to_print for j in job_datas])
