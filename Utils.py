@@ -83,7 +83,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False):
         account=f"%a",
         partition=f"%P",
         host=f"%N",
-        exc_nodes=f"%x",
+        exclude=f"%x",
         comment=f"%k"
     )
     sep = "  |_||_|||_|||||  "

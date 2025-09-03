@@ -20,6 +20,13 @@ import Utils
 import UtilsBase
 from UtilsBase import twrite
 
+##### Miscellaneous ##################################################################
+cc_accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
+
+######################################################################################
+######################################################################################
+######################################################################################
+
 ##### Colorization utilities #########################################################
 # See: https://jakob-bagterp.github.io/colorist-for-python/ansi-escape-codes/extended-256-colors/#extended-palette
 color2value_base = dict(
@@ -126,7 +133,6 @@ def decolorize(s):
         s = s[next_valid_idx:]
     return decolorized_s
 
-
 def colorize_submit_times(job_infos):
     """Returns each job info in [job_infos] with the time left colorized."""
     cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
@@ -145,7 +151,7 @@ def colorize_submit_times(job_infos):
             idxs = [idx for idx,c in enumerate(cutoff_values) if time_ago <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             submit_time = colorize(ji.submit_time, color=color_scale[min_valid_idx])
-            return UtilsBase.updated_namespace(ji, submit_time=submit_time)
+            return UtilsBase.updated_namespace(ji, submit_time_color=submit_time)
 
     return [colorize_submit_time(ji) for ji in job_infos]
 
@@ -163,7 +169,6 @@ def colorize_time_lefts(job_infos, cur_user=True):
         if (ji.time_left in ["N/A", None]
             or not "user" in ji
             or (cur_user and not ji.user == os.environ["USER"])
-            or ji.name == "HeldToProvideLevelFSEstimate"
             or not decolorize(ji.state) in ["RUNNING", "COMPLETING"]):
             return ji
         else:
@@ -176,7 +181,7 @@ def colorize_time_lefts(job_infos, cur_user=True):
                 min_valid_idx = min(int(frac_remaining * 8 + 3), len(cutoff_values))
 
             time_left = colorize(ji.time_left, color=color_scale[min_valid_idx])
-            return UtilsBase.updated_namespace(ji, time_left=time_left)
+            return UtilsBase.updated_namespace(ji, time_left_color=time_left)
 
     return [colorize_time_left(ji) for ji in job_infos]
 
@@ -195,7 +200,7 @@ def colorize_start_times(job_infos):
             return ji
         elif ji.start_time == "N/A":
             start_time = colorize(ji.start_time, color=color_scale[-1])
-            return UtilsBase.updated_namespace(ji, start_time=start_time)
+            return UtilsBase.updated_namespace(ji, start_time_color=start_time)
         elif ji.start_time is None or not any([vc.isdigit() for vc in ji.start_time]):
             return ji
         else:
@@ -203,37 +208,37 @@ def colorize_start_times(job_infos):
             idxs = [idx for idx,c in enumerate(cutoff_values) if time_in_future <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             start_time = colorize(ji.start_time, color=color_scale[min_valid_idx])
-            return UtilsBase.updated_namespace(ji, start_time=start_time)
+            return UtilsBase.updated_namespace(ji, start_time_color=start_time)
 
     return [colorize_start_time(ji) for ji in job_infos]
 
 def colorize_reasons(job_infos):
     """Returns each job info in [job_infos] with the reason colorized."""
     def colorize_reason(ji):
-        if ji.jobid.startswith("__") or ji.name == "HeldToProvideLevelFSEstimate":
+        if ji.jobid.startswith("__"):
             return ji
         elif ji.state in ["RUNNING", "COMPLETING"]:
             reason = colorize(ji.reason, color="green")
-            return UtilsBase.updated_namespace(ji, reason=reason)
+            return UtilsBase.updated_namespace(ji, reason_color=reason)
         elif ji.state == "PENDING" and (ji.reason.startswith("Priority")
             or ji.reason.startswith("ReqNodeNotAvail")
             or ji.reason.startswith("Resources")
             or ji.reason.startswith("Nodes")
             or ji.reason.startswith("None")):
             reason = colorize(ji.reason, color="orange")
-            return UtilsBase.updated_namespace(ji, reason=reason)
+            return UtilsBase.updated_namespace(ji, reason_color=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
             reason = colorize(ji.reason, color="red1")
-            return UtilsBase.updated_namespace(ji, reason=reason)
+            return UtilsBase.updated_namespace(ji, reason_color=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("JobHeld"):
             reason = colorize(ji.reason, color="red1")
-            return UtilsBase.updated_namespace(ji, reason=reason)
+            return UtilsBase.updated_namespace(ji, reason_color=reason)
         else:
             reason = colorize(ji.reason, color="red")
-            return UtilsBase.updated_namespace(ji, reason=reason)
+            return UtilsBase.updated_namespace(ji, reason_color=reason)
     return [colorize_reason(ji) for ji in job_infos]
 
-def colorize_queue_times(job_infos):
+def colorize_queues(job_infos):
     """Returns each job info in [job_infos] with the queue time colorized."""
     cutoff_values = [0.25, 0.5, 1, 3, 6, 12, 18, 24, 36, 72] # In hours
     color_scale = get_color_scale(
@@ -242,17 +247,17 @@ def colorize_queue_times(job_infos):
         end="red",
         num_colors=len(cutoff_values)+1)
 
-    def colorize_queue_time(ji):
-        if ji.queue_time is None or not any([vc.isdigit() for vc in ji.queue_time]):
+    def colorize_queue(ji):
+        if ji.queue is None or not any([vc.isdigit() for vc in ji.queue]):
             return ji
         else:
-            time_in_past = UtilsBase.time_to_minutes(ji.queue_time)
+            time_in_past = UtilsBase.time_to_minutes(ji.queue)
             idxs = [idx for idx,c in enumerate(cutoff_values) if time_in_past <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
-            queue_time = colorize(ji.queue_time, color=color_scale[min_valid_idx])
-            return UtilsBase.updated_namespace(ji, queue_time=queue_time)
+            queue = colorize(ji.queue, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, queue_color=queue)
 
-    return [colorize_queue_time(ji) for ji in job_infos]
+    return [colorize_queue(ji) for ji in job_infos]
 
 def colorize_states(job_infos):
     """Returns each job info in [job_infos] with the state colorized.
@@ -268,7 +273,7 @@ def colorize_states(job_infos):
         num_colors=len(cutoff_values)+1)
 
     def colorize_state(ji):
-        if ji.name == "HeldToProvideLevelFSEstimate" or ji.jobid.startswith("__"):
+        if ji.jobid.startswith("__"):
             return ji
 
         job_running = ji.state in ["RUNNING", "COMPLETING"]
@@ -301,11 +306,11 @@ def colorize_states(job_infos):
             output_file2seconds_elapsed = {f: now - osp.getmtime(f) for f in output_files}
             elapsed2 = (min(output_file2seconds_elapsed.values()) / 60) if output_file2seconds_elapsed else None
         
-        elif ji.queue_time is None or not any([vc.isdigit() for vc in ji.queue_time]):
+        elif ji.queue is None or not any([vc.isdigit() for vc in ji.queue]):
             submit_time = UtilsBase.time_stamp_to_datetime(decolorize(ji.submit_time))
             elapsed2 = (datetime.now() - submit_time).total_seconds() / 60
         else:
-            elapsed2 = UtilsBase.time_to_minutes(decolorize(ji.queue_time))
+            elapsed2 = UtilsBase.time_to_minutes(decolorize(ji.queue))
 
         if elapsed2 is None:
             color2 = color1
@@ -314,12 +319,12 @@ def colorize_states(job_infos):
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             color2 = color_scale[min_valid_idx]
         
-        ji_state_len = len(decolorize(ji.state))
+        ji_state_len = len(ji.state)
         state_part1 = ji.state[:ji_state_len//2]
         state_part1 = colorize(state_part1, color=color1)
         state_part2 = ji.state[ji_state_len //2:]
         state_part2 = colorize(state_part2, color=color2)
-        return UtilsBase.updated_namespace(ji, state=state_part1 + state_part2)
+        return UtilsBase.updated_namespace(ji, state_color=state_part1 + state_part2)
 
     return [colorize_state(ji) for ji in job_infos]
     
@@ -369,9 +374,13 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
                 
                 else:
                     # Handles colorization better
-                    chars_to_append = col2max_chars[c] - len(decolorize(str(data_dict[c])))
+                    value = data_dict[f"{c}_color"] if f"{c}_color" in data_dict else data_dict[c]
+                    value = str(value)
+                    value_len = len(decolorize(value)) if f"{c}_color" else len(value)
+                    
+                    chars_to_append = col2max_chars[c] - value_len
                     chars_to_append = max(chars_to_append, 0)
-                    to_append = f"{str(data_dict[c])}{' ' * chars_to_append}"
+                    to_append = f"{value}{' ' * chars_to_append}"
                     s.append(to_append.upper() if append_upper else to_append)
         
             j.to_print = "  ".join(s)
@@ -402,10 +411,10 @@ def start_time_to_comparable(start_time):
     else:
         return start_time
 
-def job_dict_with_queue_time(jd):
-    """Returns job dict [jd] with the queue time added."""
+def job_info_with_queue(jd):
+    """Returns job info [jd] with the queue time added."""
     if "eligible_time" in jd and jd.eligible_time in ["Unknown", "N/A"]:
-        return UtilsBase.updated_namespace(jd, queue_time="N/A")
+        return UtilsBase.updated_namespace(jd, queue="N/A")
     elif "eligible_time" in jd and jd.eligible_time:
         eligible_time = datetime.strptime(jd.eligible_time, "%Y-%m-%dT%H:%M:%S")
     elif not "eligible_time" in jd:
@@ -418,12 +427,12 @@ def job_dict_with_queue_time(jd):
     else:
         start_time = datetime.now()
     
-    queue_time = start_time - eligible_time
-    queue_time = f"{queue_time.total_seconds() / 3600:.2f}H"
-    return UtilsBase.updated_namespace(jd, queue_time=queue_time)
+    queue = start_time - eligible_time
+    queue = f"{queue.total_seconds() / 3600:.2f}H"
+    return UtilsBase.updated_namespace(jd, queue=queue)
 
-def job_dict_with_formatted_date_time(jd, *, key):
-    """Returns job dict [jd] with the date/time key [key] formatted. This function should be run last!"""
+def job_info_with_formatted_date_time(jd, *, key):
+    """Returns job info [jd] with the date/time key [key] formatted. This function should be run last!"""
     date_time = vars(jd)[key]
 
     # If [start_time] starts with four numbers, these are the year and are removed.
@@ -447,8 +456,8 @@ def job_dict_with_formatted_date_time(jd, *, key):
 
     return argparse.Namespace(**vars(jd) | {key: date_time})
 
-def job_dict_with_formatted_time_delta(jd, key="time_left"):
-    """Returns job dict [jd] with the time delta key [key] formatted."""
+def job_info_with_formatted_time_delta(jd, key="time_left"):
+    """Returns job info [jd] with the time delta key [key] formatted."""
     delta = vars(jd)[key]
     if "-" in delta:
         days, hhmmss = delta.split("-")
@@ -471,8 +480,8 @@ def job_dict_with_formatted_time_delta(jd, key="time_left"):
 
     return argparse.Namespace(**vars(jd) | {key: result})
 
-def job_dict_with_formatted_resources(jd, num_nodes=1):
-    """Returns job dict [jd] with the resources formatted."""
+def job_info_with_formatted_resources(jd, num_nodes=1):
+    """Returns job info [jd] with the resources formatted."""
     known_gpu = ["h100", "a100", "l40s", "a40", "a5000", "v100"]
     
     gres_gpu = "N/A" if not jd.gres else jd.gres
@@ -488,32 +497,32 @@ def job_dict_with_formatted_resources(jd, num_nodes=1):
         gpu_type = None if len(gpus) < 2 else gpus[-2]
         gpus =  f"{num_gpus * int(num_nodes)}"
 
-    return UtilsBase.updated_namespace(jd, gpus=gpus,)
+    return UtilsBase.updated_namespace(jd, gpus=gpus)
 
-def job_dict_with_formatted_reason(jd):
-    """Returns job dict [jd] with the reason formatted."""
+def job_info_with_formatted_reason(jd):
+    """Returns job info [jd] with the reason formatted."""
     reason = " ".join(jd.reason) if isinstance(jd.reason, list) else jd.reason
     reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return UtilsBase.updated_namespace(jd, reason=reason)
 
-def job_dict_without_preempt_me_name(jd):
-    """Returns job dict [jd] with the name without the 'preempt_me_' prefix."""
+def job_info_without_preempt_me_name(jd):
+    """Returns job info [jd] with the name without the 'preempt_me_' prefix."""
     name = jd.name.replace("preempt_me_", "") if jd.name.startswith("preempt_me_") else jd.name
     return UtilsBase.updated_namespace(jd, name=name)
 
-def job_dict_with_heartbeat(jd):
-    """Returns job dict [jd] with the heartbeat time added if possible."""
+def job_info_with_heartbeat(jd):
+    """Returns job info [jd] with the heartbeat time added if possible."""
     if "comment" in jd:
         if "exp_name" in jd.comment:
             exp_name = jd.comment["exp_name"]
         elif "exp_name_trunc" in jd.comment and "uid" in jd.comment:
             exp_name = f"{jd.comment['exp_name_trunc']}*{jd.comment['uid']}*"
         else:
-            return UtilsBase.updated_namespace(jd, heartbeat="no exp_name found")
+            return UtilsBase.updated_namespace(jd, heartbeat="no name found")
 
         found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
         if len(found_exp_folders) == 0:
-            return UtilsBase.updated_namespace(jd, heartbeat="no exp folders found")
+            return UtilsBase.updated_namespace(jd, heartbeat="no folders found")
         elif len(found_exp_folders) > 1:
             twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return UtilsBase.updated_namespace(jd, heartbeat="multiple exp names")
@@ -522,14 +531,54 @@ def job_dict_with_heartbeat(jd):
                 heartbeat = f.read().strip().split()
                 heartbeat = f"{heartbeat[0]}T{heartbeat[1]}" # Matches a SLURM date-time format even though it came from Python
             jd = UtilsBase.updated_namespace(jd, heartbeat=heartbeat)
-            return job_dict_with_formatted_date_time(jd, key="heartbeat")
+            return job_info_with_formatted_date_time(jd, key="heartbeat")
         else:
-            return UtilsBase.updated_namespace(jd, heartbeat="no hearbeat file")
+            return UtilsBase.updated_namespace(jd, heartbeat="no hearbeat")
     else:
-        return UtilsBase.updated_namespace(jd, heartbeat="-")
+        return UtilsBase.updated_namespace(jd, heartbeat="")
+
+def job_info_with_latest_str(*, args, jd):
+    """Returns the latest checkoint for job data [jd] per a heuristic."""
+    def checkpoint_to_sort_value(c):
+        """Returns the prefix for checkpoint [c]."""
+        if c.startswith("probe_pretep"):
+            pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
+            probe_epoch = UtilsBase.digits_after(c, "prbep")
+            return float(f"{pretrain_epoch}.{probe_epoch}")
+        elif c.startswith("fn"):
+            fn_epoch = UtilsBase.digits_after(c, "fn")
+            return float(f"0.{fn_epoch}")
+        elif c[0].isnumeric():
+            pretrain_epoch = UtilsBase.digits_after(c, "")
+            return float(f"{pretrain_epoch}.0")
+        else:
+            return 0
+
+    if "comment" in jd:
+        if "exp_name" in jd.comment:
+            exp_name = jd.comment["exp_name"]
+        elif "exp_name_trunc" in jd.comment and "uid" in jd.comment:
+            exp_name = f"{jd.comment['exp_name_trunc']}*{jd.comment['uid']}*"
+        else:
+            return UtilsBase.updated_namespace(jd, chkpt="no name found")
+
+        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
+        if len(found_exp_folders) == 0:
+            return UtilsBase.updated_namespace(jd, chkpt="no folders found")
+        elif len(found_exp_folders) > 1:
+            twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
+            return UtilsBase.updated_namespace(jd, chkpt="multiple exp names")
+        else:
+            exp_folder = found_exp_folders[0]
+            checkpoints = [f for f in os.listdir(exp_folder) if f.endswith(".pt") and not f.startswith("wandb_data")]
+            checkpoints = sorted(checkpoints, key=checkpoint_to_sort_value, reverse=True)
+            checkpoint = checkpoints[0] if len(checkpoints) > 0 else "no checkpoints"
+            return UtilsBase.updated_namespace(jd, chkpt=checkpoint)
+    else:
+        return UtilsBase.updated_namespace(jd, chkpt="")
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
-    submit_time=False, eligible_time=False, queue_time=False, latest_checkpoint=False,
+    submit_time=False, eligible_time=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
@@ -543,27 +592,29 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
     eligible_time -- if True, include the eligible time for all jobs
-    queue_time  -- if True, include the queue time for all jobs
-    latest_checkpoint -- if True, try to find the latest checkpoint for each job
+    queue  -- if True, include the queue time for all jobs
+    checkpoint -- if True, try to find the latest checkpoint for each job
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
-    if submit_time or heartbeat_analysis:
-        job2info = {j: job_dict_with_formatted_date_time(v, key="submit_time") for j,v in job2info.items()}
-    if eligible_time:
-        job2info = {j: job_dict_with_formatted_date_time(v, key="eligible_time") for j,v in job2info.items()}
-    if queue_time or heartbeat_analysis:
-        job2info = {j: job_dict_with_queue_time(v) for j,v in job2info.items()}
-    if latest_checkpoint:
-        job2info = {j: job_dict_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
-    if heartbeat or heartbeat_analysis:
-        job2info = {j: job_dict_with_heartbeat(v) for j,v in job2info.items()}
+    job2info = {j: info for j,info in job2info.items() if not info.name in args.hidden}
 
-    job2info = {j: job_dict_with_formatted_resources(info) for j,info in job2info.items()}
-    job2info = {j: job_dict_with_formatted_date_time(info, key="start_time") for j,info in job2info.items()}
-    job2info = {j: job_dict_with_formatted_time_delta(info, key="time_left") for j,info in job2info.items()}
-    job2info = {j: job_dict_with_formatted_reason(info) for j,info in job2info.items()}
-    job2info = {j: job_dict_without_preempt_me_name(info) for j,info in job2info.items()}
+    if submit_time or heartbeat_analysis:
+        job2info = {j: job_info_with_formatted_date_time(v, key="submit_time") for j,v in job2info.items()}
+    if eligible_time:
+        job2info = {j: job_info_with_formatted_date_time(v, key="eligible_time") for j,v in job2info.items()}
+    if queue or heartbeat_analysis:
+        job2info = {j: job_info_with_queue(v) for j,v in job2info.items()}
+    if checkpoint:
+        job2info = {j: job_info_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
+    if heartbeat or heartbeat_analysis:
+        job2info = {j: job_info_with_heartbeat(v) for j,v in job2info.items()}
+
+    job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
+    job2info = {j: job_info_with_formatted_date_time(info, key="start_time") for j,info in job2info.items()}
+    job2info = {j: job_info_with_formatted_time_delta(info, key="time_left") for j,info in job2info.items()}
+    job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
+    job2info = {j: job_info_without_preempt_me_name(info) for j,info in job2info.items()}
 
 
     # Combine an abbreviated partition name with the user name on Solar
@@ -574,14 +625,14 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
 
     col_names = [
         "host" if Utils.is_solar() or nodes else None,
-        "exc_nodes" if excluded else None,
+        "exclude" if excluded else None,
         "jobid", "uid",
         "user" if not cur_user else None,
         "state",
         "submit_time" if submit_time else None,
         "eligible_time" if eligible_time else None,
-        "queue_time" if queue_time else None,
-        "chkpt" if latest_checkpoint else None,
+        "queue" if queue else None,
+        "chkpt" if checkpoint else None,
         "start_time",
         "heartbeat" if heartbeat else None,
         "gpus", "name", "time_left", "reason",]
@@ -656,54 +707,44 @@ def build_record(*, job_datas, account2lfs):
         user=os.environ.user,  # Maybe useful if multiple people run this and end up with different LevelFS user fields?
         )
 
-
-def job_dict_with_latest_str(*, args, jd):
-    """Returns the latest checkoint for job data [jd] per a heuristic."""
-    def checkpoint_to_sort_value(c):
-        """Returns the prefix for checkpoint [c]."""
-        if c.startswith("probe_pretep"):
-            pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
-            probe_epoch = UtilsBase.digits_after(c, "prbep")
-            return float(f"{pretrain_epoch}.{probe_epoch}")
-        elif c.startswith("fn"):
-            fn_epoch = UtilsBase.digits_after(c, "fn")
-            return float(f"0.{fn_epoch}")
-        elif c[0].isnumeric():
-            pretrain_epoch = UtilsBase.digits_after(c, "")
-            return float(f"{pretrain_epoch}.0")
+def get_cluster_usage_str(job_infos=None, cur_user=False):
+    """Returns a string giving the cluster GPU usage."""
+    if job_infos is None:
+        job2info = Utils.get_slurm_status(cur_user=cur_user, account=None)
+        job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
+        job_infos = list(job2info.values())
+    
+    gpu_data = argparse.Namespace(running=0, allocated=0, running_user=0, allocated_user=0)
+    for ji in job_infos:
+        if (ji.jobid.startswith("__")
+            or not ji.gpus.isdigit()
+            or any([ji.reason.startswith(r) for r in ["Dependency", "JobHeld"]])):
+            continue
+        
+        num_gpus = int(ji.gpus) if ji.gpus.isdigit() else 0
+        if ji.state in ["RUNNING", "COMPLETING"]:
+            gpu_data.running += num_gpus
+            gpu_data.running_user += num_gpus if ji.user == os.environ["USER"] else 0
+        elif ji.state in ["PENDING"]:
+            gpu_data.allocated += num_gpus
+            gpu_data.allocated_user += num_gpus if ji.user == os.environ["USER"] else 0
         else:
-            return 0
+            twrite(f"[WARNING] write_cluster_allocated_data(): jobid={ji.jobid} has unexpected state={ji.state}. Skipping.")
+            continue
+    gpu_data.total = gpu_data.running + gpu_data.allocated
+    gpu_data.total_user = gpu_data.running_user + gpu_data.allocated_user
+    
+    s = f"GPUS:    {os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
+    s += "" if cur_user else f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
+    return s
 
-    if "comment" in jd:
-        if "exp_name" in jd.comment:
-            exp_name = jd.comment["exp_name"]
-        elif "exp_name_trunc" in jd.comment and "uid" in jd.comment:
-            exp_name = f"{jd.comment['exp_name_trunc']}*{jd.comment['uid']}*"
-        else:
-            return UtilsBase.updated_namespace(jd, chkpt="no exp_name found")
-
-        found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
-        if len(found_exp_folders) == 0:
-            return UtilsBase.updated_namespace(jd, chkpt="no exp folders found")
-        elif len(found_exp_folders) > 1:
-            twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
-            return UtilsBase.updated_namespace(jd, chkpt="multiple exp names")
-        else:
-            exp_folder = found_exp_folders[0]
-            checkpoints = [f for f in os.listdir(exp_folder) if f.endswith(".pt") and not f.startswith("wandb_data")]
-            checkpoints = sorted(checkpoints, key=checkpoint_to_sort_value, reverse=True)
-            checkpoint = checkpoints[0] if len(checkpoints) > 0 else "no checkpoints found"
-            return UtilsBase.updated_namespace(jd, chkpt=checkpoint)
-    else:
-        return UtilsBase.updated_namespace(jd, chkpt="-")
-
-
+    
 
 if __name__ == "__main__":
-    P = argparse.ArgumentParser(add_help=False)
+    P = argparse.ArgumentParser(add_help=False, prefix_chars="-+")
     P.add_argument("-u", "--users", action="store_true", default=False,
         help="Show only jobs for all users")
-    P.add_argument("-a", "-c", "--next_chunks", action="store_true", default=False,
+    P.add_argument("-a", "--next_chunks", action="store_true", default=False,
         help="Show next chunk jobs too")
     P.add_argument("-n", "--nodes", action="store_true", default=False,
         help="Show show the node list for all jobs")
@@ -711,16 +752,31 @@ if __name__ == "__main__":
         help="Show show the submit time for all jobs")
     P.add_argument("-e", "--eligible_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
-    P.add_argument("-q", "--queue_time", action="store_true", default=False,
-        help="Show show the submit time for all jobs")
+
+    P.set_defaults(queue=True)
+    P.add_argument("-q", "--queue", action="store_true",
+        help="Show the queue times")
+    P.add_argument("--no_queue", "--noq", action="store_false", dest="queue",
+        help="Do not show the queue times")
+
     P.add_argument("-v", "--verbose", default=1, choices=[0, 1, 2], type=int,
         help="Verbosity: 0=no output, 1=default output, 2=default+commands being run")
+    
+    P.set_defaults(hidden=["HeldToProvideLevelFSEstimate"])
+    P.add_argument("--hidden", nargs="+", action="append",
+        help="Hidden jobs whose names aren't shown")
+    P.add_argument("--no_hidden", "--show_hidden", action="store_const", dest="hidden", const=[],
+        help="Do not hide jobs whose names aren't shown")
+
     P.add_argument("-r", "--record", default=False,
         help="Save outputs to this file for recording. 'default' saves to ~/.ClusterData/SqbOutputs/sqb_output_TIMESTR.json")
 
-    P.add_argument("-x", "--exclude", action="store_true", default=False,
+    P.set_defaults(exclude=True)
+    P.add_argument("-x", "--exclude", action="store_true", dest="exclude",
         help="Show excluded nodes")
-
+    P.add_argument("--no_exclude", "--nox", action="store_false", dest="exclude",
+        help="Do not show excluded nodes")
+    
     P.add_argument("-h", "--heartbeat", action="store_true", default=False,
         help="For jobs that write to a heartbeat.txt file, show the last heartbeat time")
     P.add_argument("--heartbeat_analysis", action="store_true", default=True,
@@ -728,8 +784,13 @@ if __name__ == "__main__":
     P.add_argument("--help", action="help",
         help="Show this help message and exit")
 
-    P.add_argument("-l", "--latest_checkpoint", action="store_true", default=False,
+    P.set_defaults(checkpoint=True)
+    P.add_argument("-c", "--checkpoint", action="store_true", dest="checkpoint",
         help="Try and find the latest checkpoint associated to each job with a UID")
+    P.add_argument("--no_checkpoint", "--noc", action="store_false", dest="checkpoint",
+        help="Do not try and find the latest checkpoint associated to each job with a UID")
+    
+    
     P.add_argument("--exp_search_dirs", nargs="+",
         default=[osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
             osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
@@ -737,7 +798,7 @@ if __name__ == "__main__":
             osp.expanduser("~/scratch/IMLE-SSL/models_stop")],
         help="Directories to search for latest checkpoints in. If empty, no checkpoints are searched for.")
     P.set_defaults(color=True)
-    P.add_argument("-nc", "--no_color", action="store_false", dest="color",
+    P.add_argument("--no_color", action="store_false", dest="color",
         help="Do not colorize the output")
     args = P.parse_args()
 
@@ -749,26 +810,26 @@ if __name__ == "__main__":
             excluded=args.exclude,
             submit_time=args.submit_time,
             eligible_time=args.eligible_time,
-            queue_time=args.queue_time,
+            queue=args.queue,
             heartbeat=args.heartbeat,
             heartbeat_analysis=args.heartbeat_analysis,
-            latest_checkpoint=args.latest_checkpoint,
+            checkpoint=args.checkpoint,
             verbose=args.verbose)
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas        
     elif Utils.is_cc():
-        accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
+        
         job_datas = []
-        for account in accounts:
+        for account in cc_accounts:
             job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
                 next_chunks=args.next_chunks,
                 nodes=args.nodes,
                 excluded=args.exclude,
                 submit_time=args.submit_time,
                 eligible_time=args.eligible_time,
-                queue_time=args.queue_time,
+                queue=args.queue,
                 heartbeat=args.heartbeat,
                 heartbeat_analysis=args.heartbeat_analysis,
-                latest_checkpoint=args.latest_checkpoint,
+                checkpoint=args.checkpoint,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = argparse.Namespace(**{c: f"__account {account}" if c == "jobid" else c for c in colnames})
@@ -784,7 +845,7 @@ if __name__ == "__main__":
     for job_data in job_datas:
         jd_dict = vars(job_data)
         for c in colnames:
-            value = decolorize(str(jd_dict[c])) if c == "state" else str(jd_dict[c])
+            value = str(jd_dict[c])
             length = 0 if str(jd_dict["jobid"]).startswith("__") else len(value)
             col2max_chars[c] = max(col2max_chars[c], length)
     col2max_chars = {c: mc for c,mc in col2max_chars.items()}
@@ -825,7 +886,7 @@ if __name__ == "__main__":
     
     
     if args.color:
-        job_datas = colorize_queue_times(job_datas) if "queue_time" in col2max_chars else job_datas
+        job_datas = colorize_queues(job_datas) if "queue" in col2max_chars else job_datas
         job_datas = colorize_time_lefts(job_datas) if "time_left" in col2max_chars else job_datas
         job_datas = colorize_start_times(job_datas) if "start_time" in col2max_chars else job_datas
         job_datas = colorize_reasons(job_datas) if "reason" in col2max_chars else job_datas
@@ -840,6 +901,10 @@ if __name__ == "__main__":
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     meta_str = f"--- Overall Cluster Status ({time_str}) ---\n"
+    if args.verbose:
+        usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
+        meta_str += "\t|\t" + usage_str + "\n"
+    
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
         account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
