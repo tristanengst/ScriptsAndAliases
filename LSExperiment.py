@@ -59,7 +59,7 @@ if __name__ == "__main__":
         ls_args_str += " -s" if args.s else ""
 
         files = subprocess.getoutput(f"ls {ls_args_str} {experiment}")
-        _ = print(f"Found experiment={osp.join(osp.basename(osp.dirname(experiment)), osp.basename(experiment))}")
+        _ = print(experiment)
         _ = print(files)
     else:
         experiment_list = "\n".join([f"{idx+1}. {exp}" for idx,exp in enumerate(experiments)])
@@ -79,5 +79,5 @@ if __name__ == "__main__":
         ls_args_str += " -s" if args.s else ""
 
         files = subprocess.getoutput(f"ls --color=always {ls_args_str} {experiment}", shell=True, capture_output=True)
-        _ = print(f"Found experiment={osp.join(osp.basename(osp.dirname(experiment)), osp.basename(experiment))}")
+        _ = print(experiment)
         _ = print(files)
