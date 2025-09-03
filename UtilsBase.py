@@ -1,5 +1,7 @@
 """Utility functions I think should by in Python's standard library."""
 import argparse
+import copy
+from collections import defaultdict
 from datetime import datetime
 import functools
 import json
@@ -152,6 +154,17 @@ def digits_after(s, substr):
             continue
     return None  # No numeric substring found
 
+def try_make_number(s):
+    """Tries to convert [s] to an int or float, and returns [s] otherwise."""
+    try:
+        return int(s)
+    except ValueError:
+        try:
+            return float(s)
+        except ValueError:
+            return s
+    
+
 ######################################################################################
 ######################################################################################
 ######################################################################################
@@ -207,7 +220,9 @@ def namespace_to_dict(n):
 
 def flatten(xs):
     """Returns collection [xs] after recursively flattening into a list."""
-    print(f"Flattening {xs} of type {type(xs)}")
+    type_map = {type({}.items()): list, type({}.values()): list, type({}.keys()): set}
+    xs = type_map[type(xs)](xs) if type(xs) in type_map else xs
+
     if isinstance(xs, list | set | tuple):
         result = []
         for x in xs:
@@ -216,25 +231,73 @@ def flatten(xs):
     else:
         return xs
 
+def reverse_dict(d, use_defaultdict=False):
+    """Returns dictionary [d] with the keys and values swapped. Set [use_defaultdict]
+    to handle when multiple keys could the same value.
+    """
+    if use_defaultdict:
+        result = defaultdict(list)
+        for k,v in d.items():
+            rd[v].append(k)
+        return result
+    else:
+        return {v: k for k,v in d.items()}
+
+
 ######################################################################################
 ######################################################################################
 ######################################################################################
 
 
 ###### Time Functions ################################################################
-def seconds_since_time(start_time): return time.time() - start_time    
+def seconds_since_time(start_time):
+    if isinstance(start_time, datetime):
+        return (datetime.now() - start_time).total_seconds()
+    elif isinstance(start_time, str):
+        return (datetime.now() - time_stamp_to_datetime(start_time)).total_seconds()
+    else:
+        return time.time() - start_time  
 def hours_since_time(start_time): return seconds_since_time(start_time) / 3600
 def minutes_since_time(start_time): return seconds_since_time(start_time) / 60
 def seconds_to_minutes(seconds): return seconds / 60
 def seconds_to_hours(seconds): return seconds / 3600
 
+def time_stamp_to_datetime(time_stamp):
+    """Converts a time stamp to a datetime object."""
+    if isinstance(time_stamp, datetime):
+        return time_stamp
+    
+    time_stamp = time_stamp.strip()
+    # Common custom time stamp format to make life easier
+    if time_stamp.find("-") in [1,2]:
+        dt = datetime.strptime(time_stamp, "%m-%d-%H:%M")
+        dt = dt.replace(year=datetime.now().year)
+        return dt
+    elif "T" in time_stamp:
+        return datetime.strptime(time_stamp, "%Y-%m-%dT%H:%M:%S")
+    elif "-" in time_stamp:
+        return datetime.strptime(time_stamp, "%Y-%m-%d-%H:%M:%S")
+    else:
+        raise ValueError(f"Could not parse time stamp: {time_stamp}")
 
 def time_to_seconds(time_str):
     """Returns [time_str] as a number of seconds. Tries to fit as many possible ways
     [time_str] could be interpreted as a duration; it need not actually be a string.
+
+    This sort of time string would indicate a duration.
     """
     if isinstance(time_str, int | float):
         return time_str
+
+    time_str = time_str.strip()
+    if time_str.lower().endswith("s"):
+        return float(time_str[:-1])
+    elif time_str.lower().endswith("m"):
+        return float(time_str[:-1]) * 60
+    elif time_str.lower().endswith("h"):
+        return float(time_str[:-1]) * 3600
+    elif time_str.lower().endswith("d"):
+        return float(time_str[:-1]) * 24 * 3600
     elif "-" in time_str:
         days, time_str = time_str.split("-")
         

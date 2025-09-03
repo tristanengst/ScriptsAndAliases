@@ -11,7 +11,7 @@ def apply_to_jobid(*, jobid, cmd, job2info=None, force=False):
 	# general we don't want to do this!
 	if "TimeLimit" in cmd:
 		job2info = job2info if job2info else Utils.get_slurm_status(cur_user=True)
-		if jobid in job2info and not job2info[jobid]["STATE"] == "PENDING" and not force:
+		if jobid in job2info and not job2info[jobid].state == "PENDING" and not force:
 			return False, "Job is not pending, cannot change TimeLimit."
 		elif not jobid in job2info:
 			return False, f"JobID={jobid} not found in job2info."
