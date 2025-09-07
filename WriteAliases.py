@@ -104,6 +104,7 @@ aliases = [
     "alias get_wandb_id=\"python -c 'import wandb ; print(wandb.util.generate_id())'\"",
     "alias find_free_gpus=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --hosts \"",
     "alias killwandb=\"pkill -u $USER -9 wandb\"",
+    "alias rsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     
     "# END USEFUL ML ALIASES"]
 
