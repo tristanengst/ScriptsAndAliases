@@ -7,6 +7,7 @@ import copy
 from datetime import datetime
 from functools import partial
 import glob
+import io
 import os
 import os.path as osp
 import re
@@ -577,6 +578,95 @@ def job_info_with_latest_str(*, args, jd):
     else:
         return UtilsBase.updated_namespace(jd, chkpt="")
 
+# def job_info_with_diagnosis(ji):
+#     """Returns [jd] with a diagnosis field. Basically, look at the past stderr/stdout
+#     and use a heuristic to figure out what bad things have happened.
+
+#     Essentialy, we want to check for 
+#     """
+#     def line_iter(s):
+#         """Returns an iterator over the lines in [s]."""
+#         s = s.strip()
+#         while len(s):
+#             if "\n" in s:
+#                 next_newline = s.index("\n") + 1
+#             else:
+#                 next_newline = len(s)
+#             yield s[:next_newline]
+#             s = s[next_newline:]
+
+#     def parse_nodes(s):
+#         """Returns a list of nodes in [s]."""
+#         s = s.strip()
+#         if "[" in s:
+#             prefix = s[:s.index("[")]
+#             if "," in s:
+#                 nodes = s[s.index("[")+1:s.index("]")].split(",")
+#             elif "-" in s:
+#                 range_part = s[s.index("[")+1:s.index("]")]
+#                 range_parts = range_part.split("-")
+#                 range_start, range_end = int(range_parts[0]), int(range_parts[1])
+#                 nodes = [n for n in range(range_start, range_end+1)]
+            
+#             nodes = [f"{prefix}{n}" for n in nodes]
+#         else:
+#             nodes = [s]
+
+#     def diagnose(job_output):
+#         """Basically, we want to see if a known set of errors occur."""
+#         diagnosis_indicators = ["ERROR", "Traceback", "Killed", "OOM", "OutOfMemory",
+#             "CUDA out of memory", "RuntimeError", "Segmentation fault", "Aborted",
+#             "Aborted (core dumped)", "Bus error", "MemoryError", "std::bad_alloc",
+#             "AssertionError", "ValueError", "KeyboardInterrupt"]
+
+#         interesting_line_starts = ["[rank", "srun", "slurm"]
+#         interesting_strs = interesting_line_starts + diagnosis_indicators
+        
+#         problem_dict = dict()
+#         sio = io.StringIO(job_output)
+        
+#         # The first line won't contain an error (probably), but does contain the nodes running the job and the job ID
+#         first_line = sio.readline()
+#         first_line_parts = first_line.split("")
+#         job, nodes = None, []
+#         for p in first_line_parts:
+#             job = p.replace("job=", "") if p.startswith("job=") else job
+#             nodes = parse_nodes(p.replace("nodes=", "")) if p.startswith("nodes=") else nodes
+
+#         for line in sio:
+#             if any([line.startswith(s) for s in interesting_strs]):
+#                 if " DUE TO TIME LIMIT ***" in line:
+#                     break
+#                 else:
+#                     for indicator in diagnosis_indicators:
+#                         indicator_idx = line.find(indicator)
+#                         if indicator_idx >= 0:
+#                             problem_dict[indicator] = line[indicator_idx:].strip()
+#                             _ = diagnosis_indicators.remove(indicator) # Not needed to count again, speeds list iteration
+#                             interesting_strs = interesting_line_starts + diagnosis_indicators
+#             else:
+#                 continue
+
+#         return dict(job=int(job_key), nodes=nodes, problems=problem_dict)
+
+#     if (ji.jobid.startswith("__")
+#         or not osp.exists(ji.stderr)
+#         or not ji.user == os.environ["USER"]):
+#         return UtilsBase.updated_namespace(ji, diagnosis="")
+
+#     job_output = UtilsBase.load_file_lite(ji.stderr)
+#     job_output = job_output.split("Starting job=")
+
+#     chunk_jobids2diagnosis = [diagnose(jo) for jo in job_output]
+
+
+    
+        
+
+
+
+
+
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
@@ -708,10 +798,20 @@ def build_record(*, job_datas, account2lfs):
         )
 
 def get_cluster_usage_str(job_infos=None, cur_user=False):
-    """Returns a string giving the cluster GPU usage."""
-    if job_infos is None:
-        job2info = Utils.get_slurm_status(cur_user=cur_user, account=None)
+    """Returns a string giving the cluster GPU usage.
+
+    Basically, want to show for the current user the running and queueing GPUs,
+    their sum, and the same for all uses in the accounts.
+
+    Args:
+    job_infos   -- if not None, use this list of job infos instead of querying SLURM
+    cur_user    -- whether [job_infos] was collected for the current user only
+    
+    """
+    if job_infos is None or cur_user:
+        job2info = Utils.get_slurm_status(cur_user=False, account=None, keys=["jobid", "user", "state", "nodes", "gres", "reason"])
         job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
+        job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
         job_infos = list(job2info.values())
     
     gpu_data = argparse.Namespace(running=0, allocated=0, running_user=0, allocated_user=0)
@@ -735,10 +835,8 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     gpu_data.total_user = gpu_data.running_user + gpu_data.allocated_user
     
     s = f"GPUS:    {os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
-    s += "" if cur_user else f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
+    s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
     return s
-
-    
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser(add_help=False, prefix_chars="-+")
@@ -900,10 +998,13 @@ if __name__ == "__main__":
 
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    meta_str = f"--- Overall Cluster Status ({time_str}) ---\n"
+    meta_str0 = f"--- Overall Cluster Status ({time_str}) ---"
     if args.verbose:
         usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
-        meta_str += "\t|\t" + usage_str + "\n"
+        meta_str1 = "\t|\t" + usage_str
+    if args.verbose:
+        print(meta_str0)
+        print(meta_str1)
     
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
@@ -912,11 +1013,11 @@ if __name__ == "__main__":
         level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
         level_fs_str = "\t|\tLevelFS: " + "\t".join(level_fs_strs)
         level_fs_str = level_fs_str.replace("_gpu", "")
-        meta_str += level_fs_str
+        meta_str2 = level_fs_str
     
-    meta_str +=  "\t|\t" + Node.cluster_stats_to_str()
+    meta_str2 +=  "\t|\t" + Node.cluster_stats_to_str()
     if args.verbose:
-        print(meta_str)
+        print(meta_str2)
 
     # If on ComputeCanada and --record is set, save the data that was computed so we
     # can reference it later.
