@@ -16,6 +16,9 @@ from collections import defaultdict
 import UtilsBase
 from UtilsBase import twrite
 
+known_clusters = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A99", "emily",
+    "S1", "S2", "S3", "solar", "trillium", "cedar", "narval", "rorqual", "fir", "nibi"]
+
 def get_current_shell():
     """Returns the current shell."""
     shell = os.getenv("SHELL", "bash")
@@ -113,14 +116,46 @@ if __name__ == "__main__":
         help="When it is ambigous which files to send for a particular substring, only send the one coming from the first search_dir that matches (with the current working directory taking precedence, followed by anything in --extra_search_dirs)")
     P.add_argument("--extra_search_dirs", type=str, nargs="+", default=[],
         help="Extra directories to search for files matching the substrings")
-    args = P.parse_args()
+    
+    # If parsing fails, most likely cause is that an element of [files] starts with a
+    # dash. In this case, assume that only the first element of the command line
+    # arguments should have flags. 
+    try:
+        args = P.parse_args()
+    except:
+        fixed_argv = []
+        for a in sys.argv[1:]:
+            if a.startswith("--"):
+                fixed_argv.append(a)
+            elif a.startswith("-") and not (set(a[1:]) - set("rvha")):
+                fixed_argv.append(a)
+            else:
+                fixed_argv.append(UtilsBase.strip_left(a, "-"))
+        args = P.parse_args(fixed_argv)
 
-    # If --clusters wasn't specified, then the last element of --files is the cluser
-    if len(args.clusters) == 0 and len(args.files) >= 2:
-        args.clusters = [args.files[-1]]
-        args.files = args.files[:-1]
-    else:
-        raise ValueError()
+    # If --clusters wasn't specified, then either the first or last element of
+    # --files is the cluser. If there's a colon or @ symbol in either element, then
+    # that's the one. Otherwise, find the one that's a member of [known_clusters]
+    if not args.clusters:
+        send_to_cluster = args.files[-1]
+        send_from_cluster = args.files[0]
+        if not ((":" in send_to_cluster) or ("@" in send_to_cluster) or (send_to_cluster.split("@")[-1].split(":")[0] in known_clusters)):
+            send_to_cluster = False
+            args.files = args.files[1:]
+        if not ((":" in send_from_cluster) or ("@" in send_from_cluster) or (send_from_cluster.split("@")[-1].split(":")[0] in known_clusters)):
+            send_from_cluster = False
+            args.files = args.files[:-1]
+            
+        
+        if not send_to_cluster and not send_from_cluster:
+            raise ValueError(f"Could not deduce cluster from command line arguments, got not clusters: {args.files}")
+        elif send_to_cluster and send_from_cluster:
+            raise ValueError(f"Could not deduce cluster from command line arguments, got multiple clusters: {args.files}")
+        else:
+            args.clusters = [send_to_cluster if send_to_cluster else send_from_cluster]
+    
+    twrite(f"[INFO] Sending to clusters: {args.clusters}", quiet=not args.verbose)
+    twrite(f"[INFO] files={args.files}", quiet=not args.verbose)
 
     # Concatenate search directories and append the current working directory
     args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
@@ -163,8 +198,14 @@ if __name__ == "__main__":
     #         cmd = f"ssh -t {c} bash 'Connected to {c}'"
     #         result = subprocess.run(cmd, shell=True, check=True)
 
-    
-    commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
+    if send_to_cluster:
+        commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
+    elif send_from_cluster:
+        commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
+    else:
+        raise ValueError()
+
+
     twrite(f"[INFO] Commands to run:\n" + "\n\t".join(commands))
 
     for c in UtilsBase.tqdm(commands):

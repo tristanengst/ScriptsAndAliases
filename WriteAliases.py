@@ -105,6 +105,8 @@ aliases = [
     "alias find_free_gpus=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --hosts \"",
     "alias killwandb=\"pkill -u $USER -9 wandb\"",
     "alias rsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
+    "alias send=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
+    "alias getfrom=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     
     "# END USEFUL ML ALIASES"]
 
