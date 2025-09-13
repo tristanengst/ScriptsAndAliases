@@ -1,7 +1,10 @@
 import argparse
+from collections import defaultdict
 import os
 import os.path as osp
 import subprocess
+
+import UtilsBase
 from UtilsBase import twrite
 
 def get_cluster_type():
@@ -77,6 +80,20 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
             result |= get_slurm_status(cur_user=cur_user, account=account)
         return result
 
+    key2required_keys = defaultdict(list, dict(
+        uid=["comment"],
+    ))
+
+    def find_required_keys(k):
+        """Recursively finds all required keys for key [k]."""
+        req_keys = key2required_keys[k]
+        extra = [find_required_keys(kr) for kr in req_keys if not kr == k and not kr in keys]
+        extra = UtilsBase.flatten(extra) if extra else extra
+        return req_keys + extra
+
+    extra_keys = list(set(UtilsBase.flatten([find_required_keys(k) for k in keys])))
+    keys += extra_keys
+
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}" if account else ""
     sep = "  |_||_|||_|||||  "
@@ -134,17 +151,22 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     if len(key2sq_format_O) == 0 or list(key2sq_format_O.keys()) == ["jobid"]:
         result = {j: argparse.Namespace(**info) for j,info in job2info.items()}
     
-    
-    
     sq_key_str = f"{sep},".join(key2sq_format_O.values())
     sq_cmd = f"squeue {user_str} {account_str} -h -O \"{sq_key_str}\""
     sq = subprocess.getoutput(sq_cmd).strip()
     if verbose:
         print(f"Running command: {sq_cmd}")
         print(f"Output:\n{sq}")
+
     
     jobs = sq.split("\n")
-    jobs = [j.strip().split(sep) for j in jobs]
+
+    # Hack because Solar's SLURM is different?
+    if is_solar():
+        jobs = [j.strip().split()[:len(key2sq_format_O.values())] for j in jobs]
+    else:
+        jobs = [j.strip().split(sep) for j in jobs]
+
     jobs = [[j1.strip() for j1 in j] for j in jobs]
     infos = [dict(list(zip(key2sq_format_O.keys(), j))) for j in jobs]
     job2info_ = {info["jobid"]: info for info in infos}

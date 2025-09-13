@@ -298,7 +298,7 @@ def colorize_states(job_infos):
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             color1 = color_scale[min_valid_idx]
 
-            twrite(uid=ji.uid, heartbeat=ji.heartbeat, elapsed1=elapsed1, color1=color1, min_valid_idx=min_valid_idx)
+            # twrite(uid=ji.uid, heartbeat=ji.heartbeat, elapsed1=elapsed1, color1=color1, min_valid_idx=min_valid_idx)
 
         if job_running:
             now = time.time()
@@ -998,13 +998,13 @@ if __name__ == "__main__":
 
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    meta_str0 = f"--- Overall Cluster Status ({time_str}) ---"
-    if args.verbose:
+    meta_str = f"--- Overall Cluster Status ({time_str}) ---"
+    if Utils.is_cc():
         usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
-        meta_str1 = "\t|\t" + usage_str
+        meta_str = "\n\t|\t" + usage_str
+    
     if args.verbose:
-        print(meta_str0)
-        print(meta_str1)
+        print(meta_str)
     
     if Utils.is_cc():
         accounts = ["rrg-keli_gpu", "def-keli_gpu"]
@@ -1014,6 +1014,9 @@ if __name__ == "__main__":
         level_fs_str = "\t|\tLevelFS: " + "\t".join(level_fs_strs)
         level_fs_str = level_fs_str.replace("_gpu", "")
         meta_str2 = level_fs_str
+    elif Utils.is_solar():
+        account2lfs = None
+        meta_str2 = ""
     
     meta_str2 +=  "\t|\t" + Node.cluster_stats_to_str()
     if args.verbose:
