@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 import functools
 import json
+import math
 import os
 import os.path as osp
 import uuid
@@ -164,6 +165,27 @@ def try_make_number(s):
         except ValueError:
             return s
     
+def list_to_pretty_str(l, one_per_line=False, sep="\t"):
+    """Returns list [l] as a pretty string. The intended usage is to get its elements nicely displayed to the terminal."""
+    l = [str(ll) for ll in l]
+    if one_per_line:
+        return "\n\t".join(l)
+
+    max_len = max([len(ll) for ll in l]) if l else 0
+    terminal_size = os.get_terminal_size().columns
+
+    num_cols = max(1, terminal_size // (max_len + 2))
+    num_rows = math.ceil(len(l) / num_cols)
+    chars_per_col = terminal_size // num_cols
+    
+    sublists = [l[idx * num_cols:max(len(l), (idx + 1) * num_cols)] for idx in range(num_rows)]
+    sublists = [sep.join([s.ljust(chars_per_col) for s in sublist]) for sublist in sublists]
+    return "\n".join(sublists)
+
+
+
+
+
 
 ######################################################################################
 ######################################################################################

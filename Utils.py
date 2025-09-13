@@ -1,5 +1,6 @@
 import argparse
 from collections import defaultdict
+import glob
 import os
 import os.path as osp
 import subprocess
@@ -186,3 +187,147 @@ def jobid2info_to_uid2jobids(job2info=None):
         if not info.uid is None:
             uid2jobids[info.uid].append(jobid)
     return dict(uid2jobids)
+
+
+
+
+######################################################################################
+# Maps between instances of an experiment: UID <-> experiment folder <-> SLURM job
+######################################################################################
+exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
+    osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
+    osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
+
+file_search_dirs = [osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
+    osp.expanduser("~/Development/IMLE-SSL-2/finetune_results"),
+    osp.expanduser("~/Development/IMLE-SSL-2/slurm")]
+
+def str_to_slurm_info(s, job2info=None, verbose=False):
+    """Tries to find the slurm info for a given string [s]."""
+    return get_slurm_info_by_key(s, key="name", job2info=job2info, verbose=verbose)
+def uid_to_slurm_info(s, job2info=None, verbose=False):
+    """Tries to find the slurm info for a given string [s]."""
+    return get_slurm_info_by_key(s, key="uid", job2info=job2info, verbose=verbose)
+def get_slurm_info_by_key(s, key, job2info=None, verbose=False, resolve="pos", search_dirs=exp_search_dirs):
+    """Tries to find the slurm info for a given string [s]."""
+    job2info = job2info if job2info else get_slurm_status(cur_user=True, verbose=verbose)
+    job2info = {j: info for j,info in job2info.items() if s in vars(info).get(key, "")}
+
+    if len(job2info) == 0:
+        _ = twrite(f"[INFO] No jobs found for str={s}", verbose=verbose)
+        return None
+    elif len(job2info) == 1:
+        return list(job2info.values())[0]
+    elif len(job2info) > 1 and resolve in ["pos"]:
+        job2info = sorted(job2info.values(), key=lambda info: len(info) - info.name.rfind(s))
+        return job2info[0]
+    else:
+        raise NotImplementedError(f"[ERROR] get_slurm_info_by_key(): Multiple jobs found for str={s} with key={key}")
+
+def uid_to_exp_folder(uid, search_dirs=exp_search_dirs, verbose=False, resolve="pos"):
+    """Tries to find the experiment folder for a given UID."""
+    return str_to_exp_folder(uid, search_dirs=search_dirs, resolve=resolve, verbose=verbose)
+
+def exp_folder_to_uid(exp_folder, verbose=False):
+    """Tries to find the UID for an experiment folder."""
+    if not osp.exists(exp_folder) or not osp.isdir(exp_folder):
+        _ = twrite(f"[WARNING] exp_folder={exp_folder} does not exist or is not a folder", verbose=verbose)
+        return None
+    
+    if osp.exists(osp.join(exp_folder, "config.json")):
+        content = UtilsBase.load_file_lite(osp.join(exp_folder, "config.json"))
+        if "uid" in content:
+            return content["uid"]
+    
+    _ = twrite(f"[WARNING] Could not find UID for exp_folder={exp_folder}", verbose=verbose)
+    return None
+
+
+
+def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=False, matches=None):
+    """Returns the experiment folder that matches the string [s]. If there are multiple possible matches, then one of several strategies can be used to resolve them.
+
+    Args:
+    s           -- string to match. Does not need pre-globbing
+    search_dirs -- directories to search in if [s] does not exist directly
+    resolve     -- how to resolve multiple matches. One of:
+                    ps -- the one where the match ends nearest to the end of the string is chosen
+                    user -- the user is prompted to choose
+                    half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
+                    latest -- the one with the most recent modification time is chosen
+    matches     -- if provided, use this list of matches instead of searching
+    verbose     -- whether to print verbose messages
+    """
+    s = s.strip()
+    if osp.exists(s) and osp.isdir(s):
+        return s
+    
+    matches = str_to_all_exp_folders(s, search_dirs=search_dirs, verbose=verbose) if matches is None else matches
+
+    if len(matches) == 0:
+        raise FileNotFoundError(f"str_to_exp_folder(): No experiment folders found matching {s} in {search_dirs}")
+    elif len(matches) == 1:
+        return matches[0]
+    elif resolve == "pos":
+        matches = sorted(matches, key=lambda m: len(s) - m.rfind(s))
+        return matches[0]
+    elif resolve == "user":
+        print(f"[INFO] Found multiple matches for {s}:")
+        for i,m in enumerate(matches):
+            print(f"\t{idx+1}: {m}")
+        
+        while True:
+            choice = input(f"Enter the number of the experiment folder to choose (1-{len(matches)}), or 0 to cancel: ")
+            if choice.isdigit() and int(choice) == 0:
+                raise KeyboardInterrupt()
+            elif choice.isdigit() and 1 <= int(choice) <= len(matches):
+                return [matches[int(choice)-1]]
+            else:
+                print(f"[WARNING] Invalid choice: {choice} -> try again")
+    elif resolve == "half_then_user":
+        basename2halves = {osp.basename(m): (osp.basename(m)[:len(osp.basename(m) // 2)], osp.basename(m)[len(osp.basename(m) // 2):]) for m in matches}
+        matches = [m for m in matches if s in basename2halves[osp.basename(m)][1] and not s in basename2halves[osp.basename(m)][0]]
+        if len(matches) == 0:
+            raise ValueError(f"[ERROR] str_to_exp_folder(): unable to resolve multiple matches for {s} using resolve='half_then_user'")
+        else:
+            return str_to_exp_folder(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches)
+    elif resolve == "latest":
+        matches = sorted(matches, key=lambda m: os.path.getmtime(m), reverse=True)
+        return matches[0]
+    else:
+        raise ValueError(f"str_to_exp_folder(): Unknown resolve method {resolve}")
+
+
+def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
+    """Returns the list of experiment folders that match the string [s].
+    
+    Args:
+    s               -- string to match. Does not need pre-globbing
+    search_dirs     -- directories to search in if [s] is not an absolute path
+    last_pos_unique -- If there are multiple matches, the one where the match ends
+                        nearest to the end of the string is chosen
+    """
+    s = s.strip()
+    s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
+    s_glob = f"*{s}*"
+
+    matches = []
+    for d in search_dirs:
+        if not osp.exists(d):
+            continue
+        matches += glob.glob(osp.join(d, s_glob))
+    return [m for m in matches if osp.exists(m) and osp.isdir(m)]
+
+def query_yes_no(msg="Proceed? (y/n): "):
+    """Queries the user to proceed. Returns True if the user wants to proceed, False otherwise."""
+    print(msg)
+    while True:
+        choice = input("")
+        if choice.lower() in ["y", "yes"]:
+            return True
+        elif choice.lower() in ["n", "no"]:
+            return False
+        else:
+            print(f"[WARNING] Invalid choice: {choice} -> try again")
+
+

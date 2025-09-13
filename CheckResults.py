@@ -84,7 +84,7 @@ def fname_to_exp_folder(*, fname, args):
     return None
 
 
-def exp_folder_to_status_dict(exp_folder, uid, slurm_status="check"):
+def exp_folder_to_status_dict(*, exp_folder, uid, args, slurm_status="check"):
     """Given an experiment folder, return a status line for it. This should include:
     1. UID of the experiment
     2. If there are any '..._latest.pt' files, and if so, their modification time, or if there is 'finished.txt' and its modification time
@@ -113,7 +113,10 @@ def exp_folder_to_status_dict(exp_folder, uid, slurm_status="check"):
     else:
         slurm_state = "N/A"
 
-    exp_folder = osp.join(osp.basename(osp.dirname(exp_folder)), osp.basename(exp_folder))
+    if args.abspath:
+        exp_folder = osp.abspath(exp_folder)
+    else:
+        exp_folder = osp.join(osp.basename(osp.dirname(exp_folder)), osp.basename(exp_folder))
     return dict(uid=uid, latest_file=latest_file, latest_time=latest_time_str, slurm_state=slurm_state, exp_folder=exp_folder)
 
 
@@ -143,6 +146,8 @@ if __name__ == "__main__":
 
     P.add_argument("-s", "--sort", choices=["uid", "latest_time", "latest_file", "state"], default="latest_time",
         help="How to sort the output")
+    P.add_argument("-a", "--abspath", action="store_true",
+        help="If set, will print absolute paths instead of shorter paths")
     args = P.parse_args()
 
     args.files = UtilsBase.flatten([ff.split()[-1] for f in args.files for ff in f.split("\n")])
@@ -193,7 +198,7 @@ if __name__ == "__main__":
         job2info = None
 
     columns = ["uid", "latest_file", "latest_time", "exp_folder", "slurm_state"]
-    status_dicts = [exp_folder_to_status_dict(exp_folder, uid, slurm_status=job2info) for exp_folder,uid in file2exp_folder_uid.values()]
+    status_dicts = [exp_folder_to_status_dict(exp_folder=exp_folder, uid=uid, args=args, slurm_status=job2info) for exp_folder,uid in file2exp_folder_uid.values()]
 
     col2max_chars = {c: len(c) for c in columns}
     for status in status_dicts:
