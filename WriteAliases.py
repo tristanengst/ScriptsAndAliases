@@ -109,6 +109,7 @@ aliases = [
     "alias getfrom=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
+    "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
     
     "# END USEFUL ML ALIASES"]
 
