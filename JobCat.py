@@ -87,7 +87,7 @@ if __name__ == "__main__":
         if len(slurm_file2halfname.values()) == 1:
             subprocess.run(f"cat {list(slurm_file2halfname.keys())[0]}", shell=True)
         else:
-            _ = handle_multiple_files(files=list(result_file2halfname.keys()))
+            _ = handle_multiple_files(files=list(slurm_file2halfname.keys()))
 
 
     print("") # So that the new terminal prompt is on a new line.
