@@ -7,6 +7,7 @@ Should be more portable, but a hacky, horrible thing to undo once possibe.
 """
 import argparse
 from collections import defaultdict
+import json
 import os
 import os.path as osp
 import subprocess
@@ -56,7 +57,7 @@ def get_cpus_from_gpus(*, gpus):
         
     return ",".join(f"{cr[0]}-{cr[-1]}" if len(cr) > 1 else f"{cr[0]}" for cr in cpu_ranges)
 
-def inset_arg_into_arg_list(*, arg_list, k, v):
+def insert_arg_into_arg_list(*, arg_list, k, v):
     """Returns [arg_list] with argument --k inserted with values [v] before the first
     keyword argument that is alphabetically after [k].
 
@@ -98,7 +99,7 @@ def get_script_from_alias(alias):
         return alias
 
 def try_add_wandb(script_args):
-    if script in ["TrainSSL2.py", "EvalFinetune.py", "EvalLinear.py"]:
+    if script in ["TrainSSL2.py", "TrainNorMAE.py", "EvalLinear.py", "EvalFinetune.py"] and not "wandb" in script_args:
         script_args_to_get_wandb = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], wandb="online"))
         script_args_to_get_wandb = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_wandb)
         script_args_to_get_wandb = " ".join(script_args_to_get_wandb)  # Ensure it's a string
@@ -111,14 +112,22 @@ def try_add_wandb(script_args):
 
 def get_experiment_name(*, script, script_args):
     """Returns the file to which the file should write results to."""
-    if script in ["TrainSSL2.py", "EvalLinear.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
+    if script in ["TrainSSL2.py", "TrainNorMAE.py", "EvalLinear.py", "EvalFinetune.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
         script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
         script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
         script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
-        experiment_name = subprocess.getoutput(script_args_to_get_name).split()[-1]
-        return osp.join(osp.expanduser(experiment_name))
+        output = subprocess.getoutput(script_args_to_get_name)
+        experiment_name = output.split()[-1]
+
+        if "__BEGIN_META__" and "__END_META__" in output:
+            metadata = output.split("__BEGIN_META__")[-1].split("__END_META__")[0].strip()
+            metadata = json.loads(metadata)
+        else:
+            metadata = dict()
+        return osp.join(osp.expanduser(experiment_name)), metadata
     else:
-        return None
+        print(f"Could not determine experiment name for script {script} with args {script_args}")
+        return None, None
     
 def unparsed_args_to_args(unparsed_args):
     """Returns an argpare Namespace of [unparsed_args]. It requires that the Python
@@ -219,6 +228,11 @@ def get_new_directory_strs(*, exp_name, args, script_args):
     # from a directory capable of executing the script, ie. paths will be right.
     # Because these paths are being copied explicitly and with symlinks, we will
     # assume they should not be copied again, sym- or hardlinked.
+    if "data_path" in script_args and osp.exists(script_args.data_path):
+        symlinked_files.append(get_rel_root(script_args.data_path))
+        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_path)
+        if not cmd in commands:
+            commands.append(cmd)
     if "data_tr" in script_args and osp.exists(script_args.data_tr):
         symlinked_files.append(get_rel_root(script_args.data_tr))
         cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_tr)
@@ -262,6 +276,8 @@ def get_new_directory_strs(*, exp_name, args, script_args):
         commands.append(f"echo {sha} > {osp.join(exp_name, 'cur_git_sha.txt')}")
         
     commands.append(f"cd {temp_dir}")
+    # commands.append(f"echo \"Changed to directory $PWD -> found files are:\"")
+    # commands.append(f"ls -lh")
 
     submit_dir = osp.abspath(os.getcwd())
     at_end_cmds = [f"echo \"Ran in {temp_dir}\"",
@@ -328,12 +344,15 @@ if __name__ == "__main__":
     cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}"
 
     # Try and get the experiment name so we can do nice things: log.txt, and is desired, isolated working directory
-    exp_name = get_experiment_name(script=script, script_args=script_args)
+    exp_name, metadata = get_experiment_name(script=script, script_args=script_args)
     if exp_name is None:
         new_directory_str = ""
         log_file = None
         start_cmd, end_cmd = "", ""
     else:
+        if "include_in_args" in metadata:
+            script_args = argparse.Namespace(**vars(script_args) | metadata["include_in_args"])
+
         _ = os.makedirs(exp_name, exist_ok=True)
         log_file = osp.join(exp_name, "log.txt")
         start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_name, args=args, script_args=script_args)
