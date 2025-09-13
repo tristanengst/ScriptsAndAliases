@@ -98,7 +98,7 @@ def get_script_from_alias(alias):
         return alias
 
 def try_add_wandb(script_args):
-    if script in ["TrainSSL2.py", "EvalFinetune.py"]:
+    if script in ["TrainSSL2.py", "EvalFinetune.py", "EvalLinear.py"]:
         script_args_to_get_wandb = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], wandb="online"))
         script_args_to_get_wandb = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_wandb)
         script_args_to_get_wandb = " ".join(script_args_to_get_wandb)  # Ensure it's a string
@@ -111,7 +111,7 @@ def try_add_wandb(script_args):
 
 def get_experiment_name(*, script, script_args):
     """Returns the file to which the file should write results to."""
-    if script in ["TrainSSL2.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
+    if script in ["TrainSSL2.py", "EvalLinear.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
         script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
         script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
         script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
