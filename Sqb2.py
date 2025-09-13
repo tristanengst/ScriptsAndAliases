@@ -1001,7 +1001,7 @@ if __name__ == "__main__":
     meta_str = f"--- Overall Cluster Status ({time_str}) ---"
     if Utils.is_cc():
         usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
-        meta_str = "\n\t|\t" + usage_str
+        meta_str += "\n\t|\t" + usage_str
     
     if args.verbose:
         print(meta_str)
