@@ -112,7 +112,7 @@ def try_add_wandb(script_args):
 
 def get_experiment_name(*, script, script_args):
     """Returns the file to which the file should write results to."""
-    if script in ["TrainSSL2.py", "TrainNorMAE.py", "EvalLinear.py", "EvalFinetune.py"] and "save_iter" in script_args and int(script_args.save_iter) > 0:
+    if script in ["TrainSSL2.py", "TrainNorMAE.py", "EvalLinear.py", "EvalFinetune.py"]:
         script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
         script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
         script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
