@@ -245,7 +245,7 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
-        cluster2send_command = {c: f"rsyncb --output_as_meta  {' '.join(args.files)} --clusters {c}" for c in args.clusters}
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py --output_as_meta  {' '.join(args.files)} --clusters {c}" for c in args.clusters}
         cluster2output = {c: subprocess.getoutput(f"ssh -t {c} bash -c '{command}'").strip() for c,command in cluster2send_command.items()}
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
 
