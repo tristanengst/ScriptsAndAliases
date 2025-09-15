@@ -258,7 +258,7 @@ if __name__ == "__main__":
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
             
             try:
-                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c '{command}'")
+                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c 'which python ; {command}'")
                 os.chdir(cwd)
             except subprocess.CalledProcessError as e:
                 print(e)
