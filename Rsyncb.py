@@ -221,7 +221,7 @@ if __name__ == "__main__":
             dest2files_desc = "\n".join([f"~/{osp.relpath(dest)} <- [\n\t{files_desc.strip()}\n]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
             
-            commands = [f"{rsync_str} {cluster}:{osp.relpath(f)} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
+            commands = [f"{rsync_str} {cluster}:{osp.relpath(f)} ~/{osp.relpath(dest)}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
             
             _ = UtilsBase.write_meta(commands=commands)
             sys.exit(0)
