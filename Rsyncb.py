@@ -129,7 +129,7 @@ def get_args(args=None):
     # dash. In this case, assume that only the first element of the command line
     # arguments should have flags. 
     try:
-        args = P.parse_args()
+        args = P.parse_args(args if args else None)
     except:
         fixed_argv = []
         for a in sys.argv[1:]:
@@ -146,6 +146,8 @@ def get_args(args=None):
         sys_args = UtilsBase.load_file_lite(sys_args_file).split()
         args = get_args(args=sys_args)
         os.remove(sys_args_file)
+    
+    
     return args
 
 if __name__ == "__main__":
