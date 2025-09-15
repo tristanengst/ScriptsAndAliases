@@ -144,7 +144,7 @@ def get_args(args=None):
     if args.argparse_input_file:
         sys_args_file = osp.expanduser(args.argparse_input_file)
         sys_args = UtilsBase.load_file_lite(sys_args_file).split()
-        args = get_args(rgs=sys_args)
+        args = get_args(args=sys_args)
         os.remove(sys_args_file)
     return args
 
