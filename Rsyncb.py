@@ -13,67 +13,13 @@ import subprocess
 import sys
 from collections import defaultdict
 
+import FileFinding
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
 
 known_clusters = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A99", "emily",
     "S1", "S2", "S3", "solar", "trillium", "cedar", "narval", "rorqual", "fir", "nibi"]
-
-def get_current_shell():
-    """Returns the current shell."""
-    shell = os.getenv("SHELL", "bash")
-    return osp.basename(shell)
-
-def file_substr_to_glob(f, *, args):
-    """Returns the list of files that match the substring [f], but in a way where existing globs would be treated nicely by bash."""
-    if osp.exists(f):
-        return [f]
-    else:
-        fw = "*" + UtilsBase.strip_left(UtilsBase.strip_right(f, "*"), "*") + "*"
-        
-        globs = []
-        all_matched_files = set()
-        for d in args.search_dirs:
-            if not osp.exists(d):
-                continue
-
-            test_file = osp.join(d, fw)
-            matched_files = glob.glob(test_file)
-            if matched_files:
-                globs.append(test_file)
-                all_matched_files |= set(matched_files)
-                
-                if args.one_match_per_substr:
-                    break
-        
-        if len(globs) == 0:
-            raise ValueError(f"No files found matching substring {f} in search_dirs={args.search_dirs}")
-        elif not "*" in f and len(all_matched_files) > 1:
-            globs = "\n\t".join(sorted(globs))
-            _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
-        else:
-            return globs
-
-def file_to_nonambiguous_path(f):
-    """Returns the non-ambiguous path to file [f]."""
-    abs_f = osp.abspath(osp.realpath(osp.expanduser(f)))
-    
-    abs_prefix2non_ambiguous_prefix = {
-        osp.abspath(osp.expanduser("~/scratch")): "~/scratch",
-        osp.abspath(osp.expanduser("~")): "~",
-        "/NAS": "~/scratch",
-    }
-
-    non_ambiguous_f = [osp.join(v, abs_f[len(k)+1:]) for k,v in abs_prefix2non_ambiguous_prefix.items() if abs_f.startswith(k)]
-    non_ambiguous_f = list(set(non_ambiguous_f))
-    if len(non_ambiguous_f) == 0:
-        return f
-    elif len(non_ambiguous_f) > 1:
-        _ = twrite(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
-        return f
-    else:
-        return non_ambiguous_f[0]
 
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
@@ -107,11 +53,7 @@ def get_args(args=None):
     P.add_argument("--dry_run", action="store_true")
     P.add_argument("--verbose", action="store_true", help="Print out extra information")
 
-    P.add_argument("--search_dirs", type=str, nargs="+", default=[
-        osp.expanduser("~/scratch/IMLE-SSL"),
-        osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
-        osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
-        osp.expanduser("~/scratch/IMLE-SSL/finetunes")],
+    P.add_argument("--search_dirs", type=str, nargs="+", default=FileFinding.exp_search_dirs,
         help="Directories to search for files matching the substrings")
     P.add_argument("--one_match_per_substr", action="store_true",
         help="When it is ambigous which files to send for a particular substring, only send the one coming from the first search_dir that matches (with the current working directory taking precedence, followed by anything in --extra_search_dirs)")
@@ -141,6 +83,9 @@ def get_args(args=None):
                 fixed_argv.append(UtilsBase.strip_left(a, "-"))
         args = P.parse_args(fixed_argv)
 
+    # If there is an --argparse_input_file, then we should read the the file it points
+    # to for as the command-line input, and then remove it. This is useful as it can
+    # resolve awkward quoting issues.
     if args.argparse_input_file:
         sys_args_file = osp.expanduser(args.argparse_input_file)
         sys_args = UtilsBase.load_file_lite(sys_args_file).split()
@@ -210,11 +155,12 @@ if __name__ == "__main__":
         args.files = list(set(args.files))
         
         # These globs represent the files that will actually be sent with rsync
-        sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
+        sources = FileFinding.[file_substr_to_glob(f, search_dirs=args.search_dirs) for f in args.files]
+        sources = UtilsBase.flatten(sources)
         _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.verbose)
 
         # These files represent where the files will actually end up on the destination
-        dests = [file_to_nonambiguous_path(s) for s in sources]
+        dests = [FileFinding.file_to_nonambiguous_path(s) for s in sources]
         _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.verbose)
 
         # Essentially, this is the mapping from destination directories to the files that will
@@ -308,9 +254,8 @@ if __name__ == "__main__":
         for cluster,output in UtilsBase.tqdm(cluster2output.items()):
             dest2files_desc = output["dest2files_desc"]
             commands = [f"{c}/" if not c.endswith("/") else c for c in output["commands"]]
-            hostname_pretty = Utils.get_cluster_type() if Utils.is_slurm() else MachineInfo.hostname_to_machine(os.uname().nodename)
 
-            _ = twrite(f"[INFO] {cluster} -> {hostname_pretty}:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.get_current_machine()}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
             

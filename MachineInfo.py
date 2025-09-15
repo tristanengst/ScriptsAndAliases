@@ -68,10 +68,16 @@ def get_ssh_config():
                 machine2ssh_config[cur_host][k] = v
     return machine2ssh_config
 
+
+def get_current_machine():
+    """Returns the machine name of the current machine, or None if it can't be found."""
+    return Utils.get_cluster_type() if Utils.is_slurm() else machine_to_ssh_name(os.uname().nodename)
+
 def machine_to_ssh_name(m):
     """Returns the SSH-able name corresponding to the machine [m], or  None if it
     can't be found. The mapping should exist in your ~/.ssh/config file.
     """
+    m = os.uname().nodename if m is None else m
     machine2ssh_config = get_ssh_config()
     if m in machine2info:
         possible_ssh_names = machine2info[m]["ssh_names"]

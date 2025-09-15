@@ -504,7 +504,33 @@ def persisted_state_clear():
 ######################################################################################
 ######################################################################################
 
+def query_among_list(*, prompt, options):
+    """Returns the element of [options] chosen by the user given [prompt]."""
+    assert len(options) > 0, "Cannot query among empty list"
+    print(prompt)
+    for idx,m in enumerate(options):
+        print(f"\t{idx+1}: {m}")
+    
+    while True:
+        choice = input(f"Enter the number of the choice (1-{len(options)}), or 0 to cancel: ")
+        if choice.isdigit() and int(choice) == 0:
+            raise KeyboardInterrupt()
+        elif choice.isdigit() and 1 <= int(choice) <= len(options):
+            return options[int(choice)-1]
+        else:
+            print(f"[WARNING] Invalid choice: {choice} -> try again")
 
+def query_yes_no(msg="Proceed? (y/n): "):
+    """Queries the user to proceed. Returns True if the user wants to proceed, False otherwise."""
+    print(msg)
+    while True:
+        choice = input("")
+        if choice.lower() in ["y", "yes"]:
+            return True
+        elif choice.lower() in ["n", "no"]:
+            return False
+        else:
+            print(f"[WARNING] Invalid choice: {choice} -> try again")
 
 
 

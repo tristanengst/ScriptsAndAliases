@@ -328,7 +328,7 @@ if __name__ == "__main__":
         help="Removes the temporary directory at the end if --new_dir is set")
     args, unparsed_args = P.parse_known_args()
 
-    if Utils.is_cc():
+    if Utils.is_slurm():
         print("tpython_ddpX not for use on ComputeCanada.")
         sys.exit(1)
 

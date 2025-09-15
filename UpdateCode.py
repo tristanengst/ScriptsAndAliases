@@ -8,6 +8,7 @@ import os.path as osp
 import subprocess
 import sys
 
+import FileFinding
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
@@ -21,7 +22,7 @@ if __name__ == "__main__":
     P.add_argument("-v", "--verbose", action="store_true")
     args = P.parse_args()
 
-    experiment_names = [Utils.str_to_exp_folder(s, search_dirs=args.exp_search_dirs, verbose=True, resolve="half_then_user") for s in args.substrs]
+    experiment_names = [FileFinding.str_to_exp_folder(s, search_dirs=args.exp_search_dirs, verbose=True, resolve="half_then_user") for s in args.substrs]
     empty = [e for e in experiment_names if not e]
     if empty:
         _ = tqdm.write(f"[INFO] Some experiment substrings did not resolve to anything:\n\t" + "\n\t".join(empty))
