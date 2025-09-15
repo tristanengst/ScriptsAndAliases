@@ -119,7 +119,7 @@ if __name__ == "__main__":
         help="Extra directories to search for files matching the substrings")
     
     P.add_argument("--output_as_meta", action="store_true")
-    P.add_argument("--terminal_size", type=int, default=os.get_terminal_size().columns,
+    P.add_argument("--terminal_size", type=int, default=None,
         help="If provided, use this as the terminal size instead of querying")
 
     
@@ -268,8 +268,9 @@ if __name__ == "__main__":
             return result
                 
 
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {args.terminal_size}" for c in args.clusters}
-
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
+        
+        
         print(cluster2send_command)
 
     ##################################################################################
