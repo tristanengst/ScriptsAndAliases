@@ -34,14 +34,15 @@ def is_tarfile(f):
 ######################################################################################
 
 ####### I/O Functions ################################################################
-def write_meta(**kwargs):
+def write_meta(meta_key=None, **kwargs):
     """Prints [s] in a way that indicates it's meta information. The intended use case
     is essentially as a way to return information to a function called via bash.
     """
+    s = json.dumps(kwargs) | {"__meta_key__": meta_key}
     print(f"__WRITE_META_SEP____START_META__{json.dumps(kwargs)}__END_META__")
     
 
-def load_meta(s, as_dict=True, index_key="__first_key__"):
+def load_meta(s, as_dict=True, meta_key="__first_key__"):
     """Loads meta information from [s] that was printed by write_meta().
     
     There are multiple possible meta informations, each separated by a string
@@ -71,17 +72,14 @@ def load_meta(s, as_dict=True, index_key="__first_key__"):
             twrite(f"[ERROR] load_meta() could not parse metas:\n{m}")
             raise ValueError("[ERROR] load_meta() could not parse metas")
 
-    print("\n\n\n\n\n")
-    print(results)
-    assert 0
 
-    index_keys = ["__meta_name__"]
-    if as_dict and index_key == "__first_key__":
+    index_keys = ["__meta_key__"]
+    if as_dict and meta_key == "__first_key__":
         result = dict()
         for r in results:
             first_key = (list(r.keys())[0]) if r else None
             if first_key in r:
-                result[r[first_key]] = {k: v for k,v in r.items() if not k in index_keys and not k == first_key}
+                result[first_key] = {k: v for k,v in r.items() if not k in index_keys and not k == first_key}
         return result
     else:
         return [{k: v for k,v in r.items() if not k in index_keys} for r in results]
