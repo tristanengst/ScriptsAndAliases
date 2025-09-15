@@ -218,7 +218,8 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
 
-        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2files.items()}
+        dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
+        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
         dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
 
         # dest2files_desc = "dest2files_desc"
