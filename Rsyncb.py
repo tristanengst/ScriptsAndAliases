@@ -177,11 +177,15 @@ if __name__ == "__main__":
         else:
             args.clusters = [send_to_cluster if send_to_cluster else send_from_cluster]
 
-    print("AAAAAAAAAAAA")
+    
+
     if not args.output_as_meta:
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
         twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}", quiet=not args.verbose)
         twrite(f"[INFO] files={args.files}", quiet=not args.verbose)
+    else:
+        print("AAAAAAAAAAAA")
+        sys.exit(0)
 
     
     # If we are sending from the cluster in question, then we can simply find the
@@ -259,6 +263,9 @@ if __name__ == "__main__":
 
         cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {c} {' '.join(args.files)} --output_as_meta " for c in args.clusters}
 
+        print(cluster2send_command)
+
+    ##################################################################################
         
     #     cluster2output = {c: subprocess.run(f"ssh -t {c} bash -c '{command}'", shell=True,
     # capture_output=True,
