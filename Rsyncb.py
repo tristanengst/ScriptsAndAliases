@@ -184,7 +184,7 @@ if __name__ == "__main__":
         print(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
         print(f"[INFO] files={args.files}")
     else:
-        UtilsBase.atomic_append_lite(data="AAAA", fname="~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data=f"AAAA {args}\n", fname="~/.ScriptsAndAliases/out.txt")
 
     
     # If we are sending from the cluster in question, then we can simply find the
