@@ -221,7 +221,7 @@ if __name__ == "__main__":
             dest2files_desc = "\n".join([f"~/{osp.relpath(dest)} <- [\n\t{files_desc.strip()}\n]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
             
-            commands = [f"{rsync_str} {cluster}:{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
+            commands = [f"{rsync_str} {cluster}:{osp.relpath(f)} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
             
             _ = UtilsBase.write_meta(commands=commands)
             sys.exit(0)
@@ -269,7 +269,10 @@ if __name__ == "__main__":
             commands = output["commands"]
 
             _ = twrite(f"[INFO] {cluster} -> {MachineInfo.machine_to_hostname(os.uname()[1])}:\n{dest2files_desc}")
-            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{commands}")
+            commands_str = "\n\t".join(commands)
+            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
+            
+            
             if not args.dry_run:
                 result = subprocess.run(f"bash -c '{commands}'", shell=True, check=True)
 
