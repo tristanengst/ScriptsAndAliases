@@ -181,8 +181,8 @@ if __name__ == "__main__":
 
     if not args.output_as_meta:
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
-        twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}", quiet=not args.verbose)
-        twrite(f"[INFO] files={args.files}", quiet=not args.verbose)
+        print(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
+        print(f"[INFO] files={args.files}")
     else:
         print("AAAAAAAAAAAA")
         sys.exit(0)
@@ -199,11 +199,11 @@ if __name__ == "__main__":
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
-        _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.v)
+        _ = print(f"[INFO] Files/globs to send: {sources}")
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
-        _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.v)
+        _ = print(f"[INFO] Non-ambiguous paths to send: {dests}")
 
         # Essentially, this is the mapping from destination directories to the files that will
         # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
@@ -212,9 +212,10 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
 
-        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
-        dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
+        # dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
+        # dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
 
+        dest2files_desc = "dest2files_desc"
         UtilsBase.atomic_save_lite(dest2files_desc, "~/.ScriptsAndAliases/out.txt")
 
 
