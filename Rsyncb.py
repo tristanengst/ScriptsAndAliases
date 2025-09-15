@@ -183,9 +183,6 @@ if __name__ == "__main__":
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
         twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
         twrite(f"[INFO] files={args.files}")
-    else:
-        UtilsBase.atomic_append_lite(data=f"AAAA {args}             send_to_cluster={send_to_cluster}\n", fname="~/.ScriptsAndAliases/out.txt")
-
     
     # If we are sending from the cluster in question, then we can simply find the
     # paths and either (a) output the rsync commands that'd allow another cluster to
@@ -196,16 +193,14 @@ if __name__ == "__main__":
         # args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
         args.search_dirs = args.search_dirs + args.extra_search_dirs
         args.files = list(set(args.files))
-
-        UtilsBase.atomic_append_lite(data="BBBB",fname="~/.ScriptsAndAliases/out2.txt")
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
-        _ = twrite(f"[INFO] Files/globs to send: {sources}")
+        _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.verbose)
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
-        _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}")
+        _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.verbose)
 
         # Essentially, this is the mapping from destination directories to the files that will
         # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
@@ -214,20 +209,17 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
 
-        dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
-        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
-        dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
-
-        # dest2files_desc = "dest2files_desc"
-        # UtilsBase.atomic_save_lite(dest2files_desc, "~/.ScriptsAndAliases/out.txt")
-
 
         # If [output_as_meta] is set, then another cluster is calling essentially
         # asking for the rsync commands that will put the files on the current host on
         # the right place on it. Otherwise, we want to run the commands ourselves to
         # send the files to the destination cluster.
         if args.output_as_meta:
+            dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
+            dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
+            dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
+            
             commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
             _ = UtilsBase.write_meta(commands=commands)
             sys.exit(0)
@@ -255,7 +247,6 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
-
         def run_cmd(ssh_name, command):
             """Runs [command] on machine [ssh_name], either locally or via ssh."""
             cwd = os.getcwd()
@@ -264,43 +255,16 @@ if __name__ == "__main__":
             os.chdir(cwd)
             return result
                 
-
         cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
-        
-        
-        twrite(cluster2send_command)
-
-    ##################################################################################
-        
-    #     cluster2output = {c: subprocess.run(f"ssh -t {c} bash -c '{command}'", shell=True,
-    # capture_output=True,
-    # text=True,
-    # check=True).stdout.strip() for c,command in cluster2send_command.items()}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
 
-        twrite("\n\n\n\n")
-        twrite(cluster2output)
-
-        twrite("\n\n\n\n")
-
-
-
-        
-
-        cluster2dest2files_desc = {c: o["dest2files_desc"] for c,o in cluster2output.items()}
-        cluster2get_command = {c: o["commands"] for c,o in cluster2output.items()}
-
-
-
-
-
         for c in UtilsBase.tqdm(cluster2get_command.keys()):
-            dest2files_desc = cluster2dest2files_desc[c]
-            commands = cluster2get_command[c] 
+            dest2files_desc = cluster2output[c]["dest2files_desc"]
+            commands = cluster2output[c]["commands"]
 
-            _ = twrite(f"[INFO] From cluster={c}, files and destinations are:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.machine_to_hostname()}:\n{dest2files_desc}")
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{commands}")
             if not args.dry_run:
                 result = subprocess.run(f"bash -c '{commands}'", shell=True, check=True)
