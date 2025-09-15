@@ -250,19 +250,35 @@ if __name__ == "__main__":
 
     else:
         import MachineInfo
+        import shlex
 
         def run_cmd(ssh_name, command):
             """Runs [command] on machine [ssh_name], either locally or via ssh."""
             cwd = os.getcwd()
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-            result = subprocess.getoutput(f"ssh {ssh_name} '{command}'")
-            os.chdir(cwd)
+            
+            try:
+                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c {command}")
+                os.chdir(cwd)
+            except subprocess.CalledProcessError as e:
+                print(e)
+                os.chdir(cwd)
+                raise e
             return result
+
+        def cluster_to_python_activation(cluster):
+            return "conda activate base ;" if cluster in MachineInfo.machine2info else ""
                 
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
+        cluster2send_command = {c: shlex.quote(f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}") for c in args.clusters}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
-        cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
+
+
+        try:
+            cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
+        except:
+            _ = twrite(f"[ERROR] Could not parse output from Rsyncb.py on remote cluster, got:\n{cluster2output}")
+            sys.exit(1)
 
         for cluster,output in UtilsBase.tqdm(cluster2output.items()):
             dest2files_desc = output["dest2files_desc"]
