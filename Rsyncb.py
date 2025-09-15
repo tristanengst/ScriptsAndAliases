@@ -268,13 +268,16 @@ if __name__ == "__main__":
             dest2files_desc = output["dest2files_desc"]
             commands = output["commands"]
 
+            commands = [f"{c}/" if not c.endswith("/") else c for c in commands]
+
             _ = twrite(f"[INFO] {cluster} -> {MachineInfo.hostname_to_machine(os.uname()[1])}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
             
             
             if not args.dry_run:
-                result = subprocess.run(f"bash -c '{commands}'", shell=True, check=True)
+                for c in UtilsBase.tqdm(commands):
+                    result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
 
 
