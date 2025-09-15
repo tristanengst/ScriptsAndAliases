@@ -177,7 +177,7 @@ if __name__ == "__main__":
         else:
             args.clusters = [send_to_cluster if send_to_cluster else send_from_cluster]
 
-    
+    print("AAAAAAAAAAAA")
     if not args.output_as_meta:
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
         twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}", quiet=not args.verbose)
@@ -210,6 +210,8 @@ if __name__ == "__main__":
 
         dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
         dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
+
+        UtilsBase.atomic_save_lite(dest2files_desc, "~/.ScriptsAndAliases/out.txt")
 
 
         # If [output_as_meta] is set, then another cluster is calling essentially
@@ -245,8 +247,30 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py --output_as_meta  {' '.join(args.files)} --clusters {c}" for c in args.clusters}
-        cluster2output = {c: subprocess.getoutput(f"ssh -t {c} bash -c '{command}'").strip() for c,command in cluster2send_command.items()}
+
+        def run_cmd(ssh_name, command):
+            """Runs [command] on machine [ssh_name], either locally or via ssh."""
+            cwd = os.getcwd()
+            os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
+            result = subprocess.getoutput(f"ssh {ssh_name} '{command}'")
+            os.chdir(cwd)
+            return result
+                
+
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {c} {' '.join(args.files)} --output_as_meta " for c in args.clusters}
+
+        
+    #     cluster2output = {c: subprocess.run(f"ssh -t {c} bash -c '{command}'", shell=True,
+    # capture_output=True,
+    # text=True,
+    # check=True).stdout.strip() for c,command in cluster2send_command.items()}
+
+        cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
+
+        print(cluster2output)
+
+
+
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
 
         cluster2dest2files_desc = {c: o["dest2files_desc"] for c,o in cluster2output.items()}
