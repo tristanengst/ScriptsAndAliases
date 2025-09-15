@@ -183,9 +183,6 @@ if __name__ == "__main__":
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
         print(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
         print(f"[INFO] files={args.files}")
-    else:
-        print("AAAAAAAAAAAA")
-        sys.exit(0)
 
     
     # If we are sending from the cluster in question, then we can simply find the
