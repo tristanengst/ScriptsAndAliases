@@ -165,17 +165,6 @@ def path_from_home(f):
     abspath = osp.abspath(osp.expanduser(f))
     home = osp.abspath(osp.expanduser("~"))
     return f"~/{abspath[len(home)+1:]}"
-
-
-
-    if abspath.startswith(home):
-        return f"~/{abspath[len(home)+1:]}"
-    else:
-        return abspath
-
-
-
-
     
 ######################################################################################
 ######################################################################################
