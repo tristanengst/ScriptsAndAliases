@@ -75,7 +75,7 @@ def file_to_nonambiguous_path(f):
     else:
         return non_ambiguous_f[0]
 
-if __name__ == "__main__":
+def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     
     # Note that in zsh, files with * in them would not be interpreted sensibly
     # (ie. bash-style.) so we will have to expand them manually.
-    P.add_argument("files", type=str, nargs="+",
+    P.add_argument("files", type=str, nargs="*",
         help="Substrings of files or folders to send")
     P.add_argument("--clusters", type=str, nargs="+", default=[],
         help="Clusters to send to")
@@ -121,6 +121,8 @@ if __name__ == "__main__":
     P.add_argument("--output_as_meta", action="store_true")
     P.add_argument("--terminal_size", type=int, default=None,
         help="If provided, use this as the terminal size instead of querying")
+    P.add_argument("--argparse_input_file", type=str, default=None,
+        help="If provided, read command line arguments from this file")
 
     
     # If parsing fails, most likely cause is that an element of [files] starts with a
@@ -138,6 +140,16 @@ if __name__ == "__main__":
             else:
                 fixed_argv.append(UtilsBase.strip_left(a, "-"))
         args = P.parse_args(fixed_argv)
+
+    if args.argparse_input_file:
+        sys_args = UtilsBase.load_file_lite(args.argparse_input_file).split()
+        os.remove(argparse_input_file)
+        args = get_args(args=sys_args)
+    return args
+
+if __name__ == "__main__":
+    args = get_args()
+    
 
     ##################################################################################
     ##################################################################################
@@ -251,14 +263,32 @@ if __name__ == "__main__":
     else:
         import MachineInfo
         import shlex
+        import uuid
 
         def run_cmd(ssh_name, command):
-            """Runs [command] on machine [ssh_name], either locally or via ssh."""
+            """Runs [command] on machine [ssh_name], either locally or via ssh. There
+            can be a lot of quoting issues, so it's easier to send the command as a
+            file that gets read and removed.
+            
+            
+            
+            """
             cwd = os.getcwd()
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
             
             try:
-                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c 'which python ; {command}'")
+                file_uid = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
+                file_uid = osp.join(osp.dirname(osp.abspath(__file__)), file_uid)
+                
+                UtilsBase.atomic_save_lite(data=command, fname=file_uid)
+                cmd0 = f"rsync {file_uid} {ssh_name}:"
+                result1 = subprocess.getoutput(cmd0)
+
+                cmd1 = f"python ~/.ScriptsAndAliases/Rsyncb.py --argparse_input_file {file_uid}"
+                cmd1 = shlex.quote(cmd1)
+                cmd = f"ssh -t {ssh_name} \" bash -lic {cmd1} \""
+                print(f"[DEBUG] Running command: {cmd}")
+                result = subprocess.getoutput(cmd)
                 os.chdir(cwd)
             except subprocess.CalledProcessError as e:
                 print(e)
@@ -269,7 +299,7 @@ if __name__ == "__main__":
         def cluster_to_python_activation(cluster):
             return "conda activate base ;" if cluster in MachineInfo.machine2info else ""
                 
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
+        cluster2send_command = {c: f"--files {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 

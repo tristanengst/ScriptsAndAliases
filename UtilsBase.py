@@ -125,7 +125,7 @@ def atomic_save_lite(*, data, fname, **kwargs):
     """Atomically saves [data] to [fname] with [kwargs]. The kind of save function is
     inferred from the file extension. This version does not support .pt files.
     """
-    _ = os.makedirs(osp.dirname(fname), exist_ok=True)
+    _ = os.makedirs(osp.dirname(fname), exist_ok=True) if osp.dirname(fname) else None
     fname_base, ext = osp.splitext(fname)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
     tmp_file = osp.join(osp.dirname(fname), tmp_file)
