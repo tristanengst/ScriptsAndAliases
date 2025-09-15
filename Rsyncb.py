@@ -223,6 +223,7 @@ if __name__ == "__main__":
         dest2files = defaultdict(list)
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
+        dest2files = {dest: set(files) for dest,files in dest2files.items()}
 
 
         # If [output_as_meta] is set, then another cluster is calling essentially
@@ -304,7 +305,7 @@ if __name__ == "__main__":
         def cluster_to_python_activation(cluster):
             return "conda activate base ;" if cluster in MachineInfo.machine2info else ""
                 
-        cluster2send_command = {c: f"--files {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
+        cluster2send_command = {c: f"{' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
