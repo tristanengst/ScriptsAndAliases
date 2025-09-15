@@ -119,7 +119,7 @@ if __name__ == "__main__":
         help="Extra directories to search for files matching the substrings")
     
     P.add_argument("--output_as_meta", action="store_true")
-    P.add_argument("--terminal_size", type=int, default=None,
+    P.add_argument("--terminal_size", type=int, default=os.get_terminal_size().columns,
         help="If provided, use this as the terminal size instead of querying")
 
     
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
 
-        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
+        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=) for d,files in dest2files.items()}
         dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
 
         # dest2files_desc = "dest2files_desc"
@@ -268,7 +268,7 @@ if __name__ == "__main__":
             return result
                 
 
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta " for c in args.clusters}
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {args.terminal_size}" for c in args.clusters}
 
         print(cluster2send_command)
 
