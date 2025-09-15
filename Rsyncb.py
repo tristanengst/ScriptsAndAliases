@@ -258,7 +258,7 @@ if __name__ == "__main__":
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
             
             try:
-                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c {command}")
+                result = subprocess.getoutput(f"ssh {ssh_name} bash -l -c '{command}'")
                 os.chdir(cwd)
             except subprocess.CalledProcessError as e:
                 print(e)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
         def cluster_to_python_activation(cluster):
             return "conda activate base ;" if cluster in MachineInfo.machine2info else ""
                 
-        cluster2send_command = {c: shlex.quote(f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}") for c in args.clusters}
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
