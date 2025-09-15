@@ -51,7 +51,7 @@ def file_substr_to_glob(f, *, args):
             raise ValueError(f"No files found matching substring {f} in search_dirs={args.search_dirs}")
         elif not "*" in f and len(all_matched_files) > 1:
             globs = "\n\t".join(sorted(globs))
-            _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
+            _ = print(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
         else:
             return globs
 
@@ -70,7 +70,7 @@ def file_to_nonambiguous_path(f):
     if len(non_ambiguous_f) == 0:
         return f
     elif len(non_ambiguous_f) > 1:
-        _ = twrite(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
+        _ = print(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
         return f
     else:
         return non_ambiguous_f[0]
