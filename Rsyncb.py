@@ -268,7 +268,7 @@ if __name__ == "__main__":
             return result
                 
 
-        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {c} {' '.join(args.files)} --output_as_meta " for c in args.clusters}
+        cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta " for c in args.clusters}
 
         print(cluster2send_command)
 
