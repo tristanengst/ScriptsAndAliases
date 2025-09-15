@@ -197,19 +197,19 @@ if __name__ == "__main__":
         args.search_dirs = args.search_dirs + args.extra_search_dirs
         args.files = list(set(args.files))
 
-        UtilsBase.atomic_append_lite(data="BBBB",fname="~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="BBBB",fname="~/.ScriptsAndAliases/out2.txt")
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
         _ = print(f"[INFO] Files/globs to send: {sources}")
 
-        UtilsBase.atomic_append_lite(data="CCCCCC",fname="~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="CCCCCC",fname="~/.ScriptsAndAliases/out3.txt")
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
         _ = print(f"[INFO] Non-ambiguous paths to send: {dests}")
 
-        UtilsBase.atomic_append_lite(data="DDDDD", fname="~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="DDDDD", fname="~/.ScriptsAndAliases/out4.txt")
 
         # Essentially, this is the mapping from destination directories to the files that will
         # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
