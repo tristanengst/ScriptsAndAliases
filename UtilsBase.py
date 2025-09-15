@@ -141,6 +141,7 @@ def atomic_save_lite(*, data, fname, **kwargs):
     os.rename(tmp_file, fname)
 
 def atomic_append_lite(*, data, fname, **kwargs):
+    fname = osp.expanduser(fname)
     if fname.endswith(".pt"):
         raise NotImplementedError("Appending to .pt files is not supported")
     elif fname.endswith(".json"):
