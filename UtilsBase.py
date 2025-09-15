@@ -160,6 +160,23 @@ def dict_to_json(d, f): return atomic_save_lite(data=d, fname=f, indent=4, sort_
 def json_to_dict(f): return load_file_lite(f)
 def dict_append_json(d, f): atomic_append_lite(data=d, fname=f)
 
+def path_from_home(f):
+    """Returns a path to [f] that will work from any home directory."""
+    abspath = osp.abspath(osp.expanduser(f))
+    home = osp.abspath(osp.expanduser("~"))
+    return f"~/{abspath[len(home)+1:]}"
+
+
+
+    if abspath.startswith(home):
+        return f"~/{abspath[len(home)+1:]}"
+    else:
+        return abspath
+
+
+
+
+    
 ######################################################################################
 ######################################################################################
 ######################################################################################
