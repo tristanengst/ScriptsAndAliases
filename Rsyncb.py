@@ -184,7 +184,7 @@ if __name__ == "__main__":
         print(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
         print(f"[INFO] files={args.files}")
     else:
-        UtilsBase.atomic_append_lite("AAAA", "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="AAAA", fname="~/.ScriptsAndAliases/out.txt")
 
     
     # If we are sending from the cluster in question, then we can simply find the
@@ -196,19 +196,19 @@ if __name__ == "__main__":
         args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
         args.files = list(set(args.files))
 
-        UtilsBase.atomic_append_lite("BBBB", "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="BBBB",fname= "~/.ScriptsAndAliases/out.txt")
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
         _ = print(f"[INFO] Files/globs to send: {sources}")
 
-        UtilsBase.atomic_append_lite("CCCCCC", "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="CCCCCC",fname= "~/.ScriptsAndAliases/out.txt")
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
         _ = print(f"[INFO] Non-ambiguous paths to send: {dests}")
 
-        UtilsBase.atomic_append_lite("DDDDD", "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="DDDDD", fname="~/.ScriptsAndAliases/out.txt")
 
         # Essentially, this is the mapping from destination directories to the files that will
         # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
