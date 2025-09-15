@@ -13,8 +13,9 @@ import subprocess
 import sys
 from collections import defaultdict
 
+import Utils
 import UtilsBase
-from UtilsBase import twrite
+from UtilsBase import twrite, tqdm
 
 known_clusters = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A99", "emily",
     "S1", "S2", "S3", "solar", "trillium", "cedar", "narval", "rorqual", "fir", "nibi"]
@@ -74,6 +75,33 @@ def file_to_nonambiguous_path(f):
     else:
         return non_ambiguous_f[0]
 
+
+
+
+
+
+
+
+
+def symlink_paths_under_dir(*paths, * tempdir):
+    """Symlinks all files in [paths] under [tempdir], preserving directory structure."""
+    _ = os.makedirs(tempdir, exist_ok=True)
+    for p in paths:
+        abs_p = osp.abspath(osp.expanduser(p))
+        subprocess.run(f"ln -s {abs_p} {tempdir}/{osp.basename(p)}", shell=True, check=True)
+        
+def get_files_from_existing_tempdir(*, rsync_str, args)
+    """Fetches files from under a temporary directory on a remote cluster."""
+    _ = twrite(f"[INFO] Fetching from tempdir={args.tempdir} on clusters={args.clusters}")
+    tempdir = FileFinding.compress_user(args.tempdir)
+
+
+
+    _ = os.makedirs(osp.expanduser(f"~/scratch/.rsyncb_temp_{args.tempdir}"), exist_ok=True)
+
+    command = f"rsync_str {args.clusters[0]}:
+
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
@@ -117,6 +145,11 @@ if __name__ == "__main__":
     P.add_argument("--extra_search_dirs", type=str, nargs="+", default=[],
         help="Extra directories to search for files matching the substrings")
     
+    P.add_argument("--output_as_meta", action="store_true")
+    P.add_argument("--terminal_size", type=int, default=None,
+        help="If provided, use this as the terminal size instead of querying")
+
+    
     # If parsing fails, most likely cause is that an element of [files] starts with a
     # dash. In this case, assume that only the first element of the command line
     # arguments should have flags. 
@@ -132,6 +165,23 @@ if __name__ == "__main__":
             else:
                 fixed_argv.append(UtilsBase.strip_left(a, "-"))
         args = P.parse_args(fixed_argv)
+
+    ##################################################################################
+    ##################################################################################
+    ##################################################################################
+
+    # Build the initial part of the rsync string
+    rsync_str = "rsync "
+    rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
+    rsync_str += "r" if args.r else ""
+    rsync_str += "v" if args.v else ""
+    rsync_str += "h" if args.h else ""
+    rsync_str += "a" if args.a else ""
+    rsync_str += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
+    rsync_str += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
+    rsync_str += f" --info={args.info} " if args.info else ""
+    
+
 
     # If --clusters wasn't specified, then either the first or last element of
     # --files is the cluser. If there's a colon or @ symbol in either element, then
@@ -153,65 +203,101 @@ if __name__ == "__main__":
             raise ValueError(f"Could not deduce cluster from command line arguments, got multiple clusters: {args.files}")
         else:
             args.clusters = [send_to_cluster if send_to_cluster else send_from_cluster]
+
     
-    twrite(f"[INFO] Sending to clusters: {args.clusters}", quiet=not args.verbose)
-    twrite(f"[INFO] files={args.files}", quiet=not args.verbose)
+    if not args.output_as_meta:
+        sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
+        twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}", quiet=not args.verbose)
+        twrite(f"[INFO] files={args.files}", quiet=not args.verbose)
 
-    # Concatenate search directories and append the current working directory
-    args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
-    args.files = list(set(args.files))
-        
-    rsync_str = "rsync "
-    rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
-    rsync_str += "r" if args.r else ""
-    rsync_str += "v" if args.v else ""
-    rsync_str += "h" if args.h else ""
-    rsync_str += "a" if args.a else ""
-    rsync_str += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
-    rsync_str += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
-    rsync_str += f" --info={args.info} " if args.info else ""
-
-    # These globs represent the files that will actually be sent with rsync
-    sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
-    _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.v)
-
-    # These files represent where the files will actually end up on the destination
-    dests = [file_to_nonambiguous_path(s) for s in sources]
-    _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.v)
-
-    # Essentially, this is the mapping from destination directories to the files that will
-    # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
-    # most specific destination directory, but this isn't the usual case.
-    dest2files = defaultdict(list)
-    for g,d in zip(sources, dests):
-        dest2files[f"{osp.dirname(d)}/"].append(g)
-
-    # If there are multiple clusters, we want to open a connection to each immediately.
-    # This ensures that any MFA authentication happens presently, rather than at some
-    # indeterminate time in the future when, say, one might be asleep.
-    # This requires your ssh config to have ControlMaster enabled well
-
-    # TODO: not implemented yet
-    # if len(args.clusters) > 1:
-    #     _ = twrite(f"[INFO] Multiple clusters={args.clusters} -> open connections now")
-    #     for c in args.clusters:
-    #         cmd = f"ssh -t {c} bash 'Connected to {c}'"
-    #         result = subprocess.run(cmd, shell=True, check=True)
-
+    
+    # If we are sending from the cluster in question, then we can simply find the
+    # paths and either (a) output the rsync commands that'd allow another cluster to
+    # get the files, or (b) run the rsync commands ourselves to send the files.
     if send_to_cluster:
-        commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
-    elif send_from_cluster:
-        commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
+
+        # Concatenate search directories and append the current working directory
+        args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
+        args.files = list(set(args.files))
+        
+        # These globs represent the files that will actually be sent with rsync
+        sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
+        _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.v)
+
+        # These files represent where the files will actually end up on the destination
+        dests = [file_to_nonambiguous_path(s) for s in sources]
+        _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.v)
+
+        # Essentially, this is the mapping from destination directories to the files that will
+        # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
+        # most specific destination directory, but this isn't the usual case.
+        dest2files = defaultdict(list)
+        for g,d in zip(sources, dests):
+            dest2files[f"{osp.dirname(d)}/"].append(g)
+
+        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
+        dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
+
+
+        # If [output_as_meta] is set, then another cluster is calling essentially
+        # asking for the rsync commands that will put the files on the current host on
+        # the right place on it. Otherwise, we want to run the commands ourselves to
+        # send the files to the destination cluster.
+        if args.output_as_meta:
+            _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
+            commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
+            _ = UtilsBase.write_meta(commands=commands)
+            sys.exit(0)
+        else:
+            commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
+
+        # If there are multiple clusters, we want to open a connection to each immediately.
+        # This ensures that any MFA authentication happens presently, rather than at some
+        # indeterminate time in the future when, say, one might be asleep.
+        # This requires your ssh config to have ControlMaster enabled well
+
+        # TODO: not implemented yet
+        # if len(args.clusters) > 1:
+        #     _ = twrite(f"[INFO] Multiple clusters={args.clusters} -> open connections now")
+        #     for c in args.clusters:
+        #         cmd = f"ssh -t {c} bash 'Connected to {c}'"
+        #         result = subprocess.run(cmd, shell=True, check=True)
+
+
+        twrite(f"[INFO] Commands to run:\n" + "\n\t".join(commands))
+
+        for c in UtilsBase.tqdm(commands):
+            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{c}")
+            if not args.dry_run:
+                result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
+
     else:
-        raise ValueError()
+        cluster2send_command = {c: f"rsyncb --output_as_meta  {.join(args.files)} --clusters {c}" for c in args.clusters}
+        cluster2output = {c: subprocess.getoutput(f"ssh -t {c} bash -c '{command}'").strip() for c,command in cluster2command.items()}
+        cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
+
+        cluster2dest2files_desc = {c: o["dest2files_desc"] for c,o in cluster2output.items()}
+        cluster2get_command = {c: o["commands"] for c,o in cluster2output.items()}
+
+        twrite(f"[INFO] Commands to run:\n" + "\n\t".join(cluster2get_command.values()))
+
+        for c in UtilsBase.tqdm(cluster2get_command.keys()):
+            dest2files_desc = cluster2dest2files_desc[c]
+            commands = cluster2get_command[c] 
+
+            _ = twrite(f"[INFO] From cluster={c}, files and destinations are:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{command}")
+            if not args.dry_run:
+                result = subprocess.run(f"bash -c '{command}'", shell=True, check=True)
 
 
-    twrite(f"[INFO] Commands to run:\n" + "\n\t".join(commands))
 
-    for c in UtilsBase.tqdm(commands):
-        _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{c}")
-        if not args.dry_run:
-            result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
+
+
+
+
+
+    
 
 
 

@@ -34,6 +34,57 @@ def is_tarfile(f):
 ######################################################################################
 
 ####### I/O Functions ################################################################
+def write_meta(meta_name=None, **kwargs):
+    """Prints [s] in a way that indicates it's meta information. The intended use case
+    is essentially as a way to return information to a function called via bash.
+    """
+    s = kwargs | ({"__meta_name__": meta_name} if not "__meta_name__" in kwargs else dict())
+    s = json.dumps(s)
+    print(f"__WRITE_META_SEP____START_META__{s}__END_META__")
+    
+
+def load_meta(s, as_dict=True, index_key="__first_key__"):
+    """Loads meta information from [s] that was printed by write_meta().
+    
+    There are multiple possible meta informations, each separated by a string
+    '__WRITE_META_SEP__'. Within each is a dictionary containing meta information as
+    JSON. If [as_dict] is set, return the result as a dictionary mapping meta names to
+    their corresponding meta information.
+    """
+    s = s.strip()
+    metas = s.split("__WRITE_META_SEP__")
+    metas = metas[1:] if len(metas) > 1 else metas
+
+    results = []
+    
+    # If we ever wrote a meta-string, then the first element of splitting by
+    # '__WRITE_META_SEP___' would not include a meta string.
+    for m in metas:
+        if and "__START_META__" in m and not "__END_META__" in m:
+            start = m.find("__START_META__") + len("__START_META__")
+            end = m.find("__END_META__")
+            meta_str = m[start:end]
+            try:
+                results.append(json.loads(meta_str))
+            except json.JSONDecodeError as e:
+                twrite(f"[ERROR] load_meta() could not parse meta string:\n{meta_str}")
+                raise e
+        else:
+            twrite(f"[ERROR] load_meta() could not parse metas:\n{m}")
+            raise ValueError("[ERROR] load_meta() could not parse metas")
+
+    index_keys = ["__meta_name__"]
+    if as_dict and index_key == "__first_key__":
+        result = dict()
+        for r in results:
+            first_key = list(r.keys())[0] if r else None
+            if first_key in r:
+                result[r[first_key]] = {k: v for k,v in r.items() if not k in index_keys and not k == first_key}
+        return result
+    else:
+        return [{k: v for k,v in r.items() if not k in index_keys} for r in results]
+
+
 def twrite(*args, time=True, verbose=1, quiet=False, offset=False, **kwargs):
     """Lite version of twrite(). Doesn't support multiple processes."""
     if quiet or verbose < 1:
@@ -165,14 +216,21 @@ def try_make_number(s):
         except ValueError:
             return s
     
-def list_to_pretty_str(l, one_per_line=False, sep="\t"):
-    """Returns list [l] as a pretty string. The intended usage is to get its elements nicely displayed to the terminal."""
+def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
+    """Returns list [l] as a pretty string. The intended usage is to get its elements
+    nicely displayed to the terminal.
+    
+    l               -- List of elements to display
+    one_per_line    -- If True, then each element is displayed on its own line
+    sep             -- Separator between elements if not one_per_line
+    terminal_size   -- If provided, use this as the terminal size instead of querying
+    """
     l = [str(ll) for ll in l]
     if one_per_line:
         return "\n\t".join(l)
 
     max_len = max([len(ll) for ll in l]) if l else 0
-    terminal_size = os.get_terminal_size().columns
+    terminal_size = terminal_size if terminal_size else os.get_terminal_size().columns 
 
     num_cols = max(1, terminal_size // (max_len + 2))
     num_rows = math.ceil(len(l) / num_cols)
@@ -264,6 +322,24 @@ def reverse_dict(d, use_defaultdict=False):
         return result
     else:
         return {v: k for k,v in d.items()}
+
+def unparse_args(args, return_as="str"):
+    """Returns a string that would recreate the argparse Namespace [args]."""
+    args = vars(args) if isinstance(args, argparse.Namespace) else args
+    
+    for k,v in args.items():
+        
+        # It's inherently dangerous to represent booleans this way, as it's not clear
+        # what not having the flag would mean. Still, this is the most likely option
+        if isinstance(v, bool):
+            result += f" --{k}" if v else ""
+                
+        elif isinstance(v, list | tuple):
+            v = " ".join([f"\'{vv}\'" if isinstance(vv, str) else str(vv) for vv in v])
+            arg_strs.append(f"--{k} {v}")
+        else:
+            arg_strs.append(f"--{k} {v}")
+    return " ".join(arg_strs) if return_as == "str" else arg_strs
 
 
 ######################################################################################
