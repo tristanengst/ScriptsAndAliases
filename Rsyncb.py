@@ -289,6 +289,7 @@ if __name__ == "__main__":
                 cmd1 = f"ssh -t {ssh_name} \" bash -lic {shlex.quote(cmd1)} \""
                 twrite(f"[INFO] Running command to get meta info of files: \n{cmd1}")
                 result = subprocess.getoutput(cmd1)
+                os.remove(dir_rsync_tmp_file)
                 os.chdir(cwd)
             except subprocess.CalledProcessError as e:
                 os.chdir(cwd)
