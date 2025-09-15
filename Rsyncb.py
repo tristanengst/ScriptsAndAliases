@@ -142,9 +142,10 @@ def get_args(args=None):
         args = P.parse_args(fixed_argv)
 
     if args.argparse_input_file:
-        sys_args = UtilsBase.load_file_lite(args.argparse_input_file).split()
-        os.remove(argparse_input_file)
-        args = get_args(args=sys_args)
+        sys_args_file = osp.expanduser(args.argparse_input_file)
+        sys_args = UtilsBase.load_file_lite(sys_args_file).split()
+        args = get_args(rgs=sys_args)
+        os.remove(sys_args_file)
     return args
 
 if __name__ == "__main__":
@@ -277,14 +278,16 @@ if __name__ == "__main__":
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
             
             try:
-                file_uid = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
-                file_uid = osp.join(osp.dirname(osp.abspath(__file__)), file_uid)
+                ff1 = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
+                dir_ff1 = osp.join(osp.dirname(__file__), ff1)
                 
-                UtilsBase.atomic_save_lite(data=command, fname=file_uid)
-                cmd0 = f"rsync {file_uid} {ssh_name}:"
+                UtilsBase.atomic_save_lite(data=command, fname=dir_ff1)
+                cmd0 = f"rsync -rv {dir_ff1} {ssh_name}:{ff1}"
+                print(f"[DEBUG] Running command: {cmd0}")
                 result1 = subprocess.getoutput(cmd0)
+                print(result1)
 
-                cmd1 = f"python ~/.ScriptsAndAliases/Rsyncb.py --argparse_input_file {file_uid}"
+                cmd1 = f"python ~/.ScriptsAndAliases/Rsyncb.py --argparse_input_file ~/{ff1}"
                 cmd1 = shlex.quote(cmd1)
                 cmd = f"ssh -t {ssh_name} \" bash -lic {cmd1} \""
                 print(f"[DEBUG] Running command: {cmd}")
