@@ -218,11 +218,11 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
 
-        # dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
-        # dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
+        dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=list_to_pretty_str) for d,files in dest2files.items()}
+        dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
 
-        dest2files_desc = "dest2files_desc"
-        UtilsBase.atomic_save_lite(dest2files_desc, "~/.ScriptsAndAliases/out.txt")
+        # dest2files_desc = "dest2files_desc"
+        # UtilsBase.atomic_save_lite(dest2files_desc, "~/.ScriptsAndAliases/out.txt")
 
 
         # If [output_as_meta] is set, then another cluster is calling essentially
