@@ -273,42 +273,30 @@ if __name__ == "__main__":
             """Runs [command] on machine [ssh_name], either locally or via ssh. There
             can be a lot of quoting issues, so it's easier to send the command as a
             file that gets read and removed.
-            
-            
-            
             """
             cwd = os.getcwd()
             os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-            
             try:
-                ff1 = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
-                dir_ff1 = osp.join(osp.dirname(__file__), ff1)
+                rsync_tmp_file = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
+                dir_rsync_tmp_file = osp.join(osp.dirname(__file__), rsync_tmp_file)
                 
-                UtilsBase.atomic_save_lite(data=command, fname=dir_ff1)
-                cmd0 = f"rsync -rv {dir_ff1} {ssh_name}:{ff1}"
-                print(f"[DEBUG] Running command: {cmd0}")
-                result1 = subprocess.getoutput(cmd0)
-                print(result1)
+                UtilsBase.atomic_save_lite(data=command, fname=dir_rsync_tmp_file)
+                cmd0 = f"rsync -rv {dir_rsync_tmp_file} {ssh_name}:{rsync_tmp_file}"
+                twrite(f"[INFO] Send command file to {ssh_name} via:\n{cmd0}")
+                result0 = subprocess.getoutput(cmd0)
 
-                cmd1 = f"python ~/.ScriptsAndAliases/Rsyncb.py --argparse_input_file ~/{ff1}"
-                cmd1 = shlex.quote(cmd1)
-                cmd = f"ssh -t {ssh_name} \" bash -lic {cmd1} \""
-                print(f"[DEBUG] Running command: {cmd}")
-                result = subprocess.getoutput(cmd)
+                cmd1 = f"python ~/.ScriptsAndAliases/Rsyncb.py --argparse_input_file ~/{rsync_tmp_file}"
+                cmd1 = f"ssh -t {ssh_name} \" bash -lic {shlex.quote(cmd1)} \""
+                twrite(f"[INFO] Running command to get meta info of files: \n{cmd1}")
+                result = subprocess.getoutput(cmd1)
                 os.chdir(cwd)
             except subprocess.CalledProcessError as e:
-                print(e)
                 os.chdir(cwd)
                 raise e
             return result
-
-        def cluster_to_python_activation(cluster):
-            return "conda activate base ;" if cluster in MachineInfo.machine2info else ""
                 
         cluster2send_command = {c: f"{' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
-
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
-
 
         try:
             cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
@@ -318,14 +306,11 @@ if __name__ == "__main__":
 
         for cluster,output in UtilsBase.tqdm(cluster2output.items()):
             dest2files_desc = output["dest2files_desc"]
-            commands = output["commands"]
-
-            commands = [f"{c}/" if not c.endswith("/") else c for c in commands]
+            commands = [f"{c}/" if not c.endswith("/") else c for c in output["commands"]]
 
             _ = twrite(f"[INFO] {cluster} -> {MachineInfo.hostname_to_machine(os.uname()[1])}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
-            
             
             if not args.dry_run:
                 for c in UtilsBase.tqdm(commands):
