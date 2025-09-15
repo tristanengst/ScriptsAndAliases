@@ -35,6 +35,7 @@ def get_cluster_type():
 
 def is_solar(): return get_cluster_type() == "solar"
 def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir"]
+def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 
 def get_slurm_status(cur_user=False, account=None, verbose=False,

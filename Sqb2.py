@@ -274,7 +274,7 @@ def colorize_states(job_infos):
         num_colors=len(cutoff_values)+1)
 
     def colorize_state(ji):
-        if ji.jobid.startswith("__"):
+        if ji.jobid.startswith("__") or not any([c.isdigit() for c in ji.jobid]):
             return ji
 
         job_running = ji.state in ["RUNNING", "COMPLETING"]
@@ -297,8 +297,6 @@ def colorize_states(job_infos):
             idxs = [idx for idx,c in enumerate(cutoff_values) if elapsed1 <= c]
             min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
             color1 = color_scale[min_valid_idx]
-
-            # twrite(uid=ji.uid, heartbeat=ji.heartbeat, elapsed1=elapsed1, color1=color1, min_valid_idx=min_valid_idx)
 
         if job_running:
             now = time.time()

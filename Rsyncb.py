@@ -308,8 +308,9 @@ if __name__ == "__main__":
         for cluster,output in UtilsBase.tqdm(cluster2output.items()):
             dest2files_desc = output["dest2files_desc"]
             commands = [f"{c}/" if not c.endswith("/") else c for c in output["commands"]]
+            hostname_pretty = Utils.get_cluster_type() if Utils.is_slurm() else MachineInfo.hostname_to_machine(os.uname().nodename)
 
-            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.hostname_to_machine(os.uname()[1])}:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {hostname_pretty}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
             
