@@ -38,7 +38,7 @@ def write_meta(meta_key=None, **kwargs):
     """Prints [s] in a way that indicates it's meta information. The intended use case
     is essentially as a way to return information to a function called via bash.
     """
-    s = json.dumps(kwargs) | {"__meta_key__": meta_key}
+    s = json.dumps(kwargs | {"__meta_key__": meta_key})
     print(f"__WRITE_META_SEP____START_META__{json.dumps(kwargs)}__END_META__")
     
 
@@ -72,6 +72,8 @@ def load_meta(s, as_dict=True, meta_key="__first_key__"):
             twrite(f"[ERROR] load_meta() could not parse metas:\n{m}")
             raise ValueError("[ERROR] load_meta() could not parse metas")
 
+
+    print(results)
 
     index_keys = ["__meta_key__"]
     if as_dict and meta_key == "__first_key__":
