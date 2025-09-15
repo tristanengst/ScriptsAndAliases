@@ -251,7 +251,7 @@ def get_new_directory_strs(*, exp_name, args, script_args):
 
     # Ensure that any file contained in the command line arguments is symlinked.
     for k,v in vars(script_args).items():
-        if osp.exists(v) and not v.startsiwth("/") and not v.startswith("~"):
+        if isinstance(v, str) and osp.exists(v) and not v.startswith("/") and not v.startswith("~"):
             symlinked_files.append(get_rel_root(v))
             cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=v)
             if not cmd in commands:
