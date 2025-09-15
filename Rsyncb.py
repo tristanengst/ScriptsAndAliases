@@ -216,7 +216,7 @@ if __name__ == "__main__":
         # send the files to the destination cluster.
         if args.output_as_meta:
             dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
-            dest2all_files = {d: [osp.relpath(f) for f in fs] for d,fs in dest2all_files.items()}
+            dest2all_files = {d: [f"~/{osp.relpath(f)}" for f in fs] for d,fs in dest2all_files.items()}
             dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
             dest2files_desc = "\n".join([f"~/{osp.relpath(dest)} <- [\n\t{files_desc}]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
