@@ -193,16 +193,17 @@ if __name__ == "__main__":
     if send_to_cluster:
 
         # Concatenate search directories and append the current working directory
-        args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
+        # args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
+        args.search_dirs = args.search_dirs + args.extra_search_dirs
         args.files = list(set(args.files))
 
-        UtilsBase.atomic_append_lite(data="BBBB",fname= "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="BBBB",fname="~/.ScriptsAndAliases/out.txt")
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
         _ = print(f"[INFO] Files/globs to send: {sources}")
 
-        UtilsBase.atomic_append_lite(data="CCCCCC",fname= "~/.ScriptsAndAliases/out.txt")
+        UtilsBase.atomic_append_lite(data="CCCCCC",fname="~/.ScriptsAndAliases/out.txt")
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
