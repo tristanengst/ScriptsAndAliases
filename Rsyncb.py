@@ -268,7 +268,7 @@ if __name__ == "__main__":
             dest2files_desc = output["dest2files_desc"]
             commands = output["commands"]
 
-            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.machine_to_hostname(os.uname()[1])}:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.hostname_to_machine(os.uname()[1])}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
             
