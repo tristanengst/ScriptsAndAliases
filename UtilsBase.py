@@ -113,7 +113,7 @@ def load_file_lite(fname, json_kwargs=dict(), **kwargs):
             raise NotImplementedError("Loading .pt files is not supported")
         elif fname.endswith(".json"):
             return json.load(f, **json_kwargs)
-        elif fname.endswith(".txt") or fname.endswith(".sh"):
+        elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
             return f.read()
         else:
             raise NotImplementedError(f"Unknown file extension for {fname}")
@@ -133,16 +133,28 @@ def atomic_save_lite(*, data, fname, **kwargs):
         kwargs["indent"] = 4 if not "indent" in kwargs else kwargs["indent"]
         with open(tmp_file, "w+") as f:
             json.dump(data, f, **kwargs)
-    elif fname.endswith(".txt") or fname.endswith(".sh"):
+    elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
         with open(tmp_file, "w+") as f:
             f.write(data)
     else:
         raise NotImplementedError(f"Unknown file extension for {fname}")
     os.rename(tmp_file, fname)
 
+def atomic_append_lite(*, data, fname, **kwargs):
+    if fname.endswith(".pt"):
+        raise NotImplementedError("Appending to .pt files is not supported")
+    elif fname.endswith(".json"):
+        return atomic_save_lite(data=load_file_lite(f) | d, fname=f, indent=4, sort_keys=True)
+    elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
+        with open(fname, "a") as f:
+            f.write(data)
+    else:
+        raise NotImplementedError(f"Unknown file extension for {fname}")
+
+
 def dict_to_json(d, f): return atomic_save_lite(data=d, fname=f, indent=4, sort_keys=True)
 def json_to_dict(f): return load_file_lite(f)
-def dict_append_json(d, f): return atomic_save_lite(data=load_file_lite(f) | d, fname=f, indent=4, sort_keys=True)
+def dict_append_json(d, f): atomic_append_lite(data=d, fname=f)
 
 ######################################################################################
 ######################################################################################
