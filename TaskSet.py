@@ -16,6 +16,9 @@ import uuid
 
 import MachineInfo
 import Utils
+import UtilsBase
+from UtilsBase import twrite
+
 
 shell2rc = dict(zsh="~/.zshrc", bash="~/.bashrc")
 
@@ -110,24 +113,24 @@ def try_add_wandb(script_args):
     else:
         return script_args
 
-def get_experiment_name(*, script, script_args):
-    """Returns the file to which the file should write results to."""
+def get_experiment_metadata(*, script, script_args):
+    """Returns an argparse Namespace of metadata for the experiment that will be run.
+    This can be used to configure it properly.
+    """
     if script in ["TrainSSL2.py", "TrainNorMAE.py", "EvalLinear.py", "EvalFinetune.py"]:
-        script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], print_experiment_name=1))
+        script_args_to_get_name = argparse.Namespace(**vars(script_args) | dict(gpus=[args.gpus[0]], write_metas=1))
         script_args_to_get_name = args_to_unparsed_args(before_script="python", script=script, args=script_args_to_get_name)
         script_args_to_get_name = " ".join(script_args_to_get_name)  # Ensure it's a string
         output = subprocess.getoutput(script_args_to_get_name)
-        experiment_name = output.split()[-1]
-
-        if "__BEGIN_META__" and "__END_META__" in output:
-            metadata = output.split("__BEGIN_META__")[-1].split("__END_META__")[0].strip()
-            metadata = json.loads(metadata)
-        else:
-            metadata = dict()
-        return osp.join(osp.expanduser(experiment_name)), metadata
+        
+        try:
+            return argparse.Namespace(**UtilsBase.load_meta(output))
+        except Exception as e:
+            twrite(f"[ERROR] failed to load meta. Used:\nscript_args_to_get_name={script_args_to_get_name}\noutput={output}")
+            raise e
     else:
-        print(f"Could not determine experiment name for script {script} with args {script_args}")
-        return None, None
+        twrite(f"No metadata for script {script}")
+        return argparse.Namespace()
     
 def unparsed_args_to_args(unparsed_args):
     """Returns a (before_script, script, args) triple from the list of string of
@@ -353,19 +356,23 @@ if __name__ == "__main__":
         script_args.gpus = [int(g) for g in args.gpus]
     cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}"
 
-    # Try and get the experiment name so we can do nice things: log.txt, and is desired, isolated working directory
-    exp_name, metadata = get_experiment_name(script=script, script_args=script_args)
-    if exp_name is None:
+    # Query the script that we are running for metadata about the run. In particular,
+    # this includes the experiment name, which is the folder stuff will save to, and
+    # any arguments that should be included in the script args that were
+    # auto-generated when it ran initially and thus informed the experiment name
+    exp_metas = get_experiment_metadata(script=script, script_args=script_args)
+    if "exp_name" in exp_metas:
+        _ = os.makedirs(exp_metas.exp_name, exist_ok=True)
+        log_file = osp.join(exp_metas.exp_name, "log.txt")
+        start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_metas.exp_name, args=args, script_args=script_args)
+    else:
         new_directory_str = ""
         log_file = None
         start_cmd, end_cmd = "", ""
-    else:
-        if "include_in_args" in metadata:
-            script_args = argparse.Namespace(**vars(script_args) | metadata["include_in_args"])
 
-        _ = os.makedirs(exp_name, exist_ok=True)
-        log_file = osp.join(exp_name, "log.txt")
-        start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_name, args=args, script_args=script_args)
+    if "include_in_args" in exp_metas:
+        script_args = argparse.Namespace(**vars(script_args) | exp_metas.include_in_args)
+        
 
     unparsed_args = args_to_unparsed_args(before_script=before_script, script=script, args=script_args)
     unparsed_args = " ".join(unparsed_args)  # Ensure it's a string
