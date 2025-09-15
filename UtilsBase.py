@@ -60,7 +60,7 @@ def load_meta(s, as_dict=True, index_key="__first_key__"):
     # If we ever wrote a meta-string, then the first element of splitting by
     # '__WRITE_META_SEP___' would not include a meta string.
     for m in metas:
-        if and "__START_META__" in m and not "__END_META__" in m:
+        if "__START_META__" in m and "__END_META__" in m:
             start = m.find("__START_META__") + len("__START_META__")
             end = m.find("__END_META__")
             meta_str = m[start:end]

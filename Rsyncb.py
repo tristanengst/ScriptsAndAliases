@@ -75,33 +75,6 @@ def file_to_nonambiguous_path(f):
     else:
         return non_ambiguous_f[0]
 
-
-
-
-
-
-
-
-
-def symlink_paths_under_dir(*paths, * tempdir):
-    """Symlinks all files in [paths] under [tempdir], preserving directory structure."""
-    _ = os.makedirs(tempdir, exist_ok=True)
-    for p in paths:
-        abs_p = osp.abspath(osp.expanduser(p))
-        subprocess.run(f"ln -s {abs_p} {tempdir}/{osp.basename(p)}", shell=True, check=True)
-        
-def get_files_from_existing_tempdir(*, rsync_str, args)
-    """Fetches files from under a temporary directory on a remote cluster."""
-    _ = twrite(f"[INFO] Fetching from tempdir={args.tempdir} on clusters={args.clusters}")
-    tempdir = FileFinding.compress_user(args.tempdir)
-
-
-
-    _ = os.makedirs(osp.expanduser(f"~/scratch/.rsyncb_temp_{args.tempdir}"), exist_ok=True)
-
-    command = f"rsync_str {args.clusters[0]}:
-
-
 if __name__ == "__main__":
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
@@ -272,8 +245,8 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
-        cluster2send_command = {c: f"rsyncb --output_as_meta  {.join(args.files)} --clusters {c}" for c in args.clusters}
-        cluster2output = {c: subprocess.getoutput(f"ssh -t {c} bash -c '{command}'").strip() for c,command in cluster2command.items()}
+        cluster2send_command = {c: f"rsyncb --output_as_meta  {' '.join(args.files)} --clusters {c}" for c in args.clusters}
+        cluster2output = {c: subprocess.getoutput(f"ssh -t {c} bash -c '{command}'").strip() for c,command in cluster2send_command.items()}
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
 
         cluster2dest2files_desc = {c: o["dest2files_desc"] for c,o in cluster2output.items()}

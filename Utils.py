@@ -191,9 +191,50 @@ def jobid2info_to_uid2jobids(job2info=None):
 
 
 
-######################################################################################
-# Maps between instances of an experiment: UID <-> experiment folder <-> SLURM job
-######################################################################################
+
+
+def query_yes_no(msg="Proceed? (y/n): "):
+    """Queries the user to proceed. Returns True if the user wants to proceed, False otherwise."""
+    print(msg)
+    while True:
+        choice = input("")
+        if choice.lower() in ["y", "yes"]:
+            return True
+        elif choice.lower() in ["n", "no"]:
+            return False
+        else:
+            print(f"[WARNING] Invalid choice: {choice} -> try again")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def compress_user(path):
+    """Inverse to osp.expanduser(). Tries to follow symlinks wherever possible."""
+    return osp.relpath(osp.abspath(osp.expanduser(path)), osp.expanduser("~"))
+
 exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
     osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
     osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
@@ -244,7 +285,7 @@ def exp_folder_to_uid(exp_folder, verbose=False):
 
 
 
-def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=False, matches=None):
+def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=False, matches=None):
     """Returns the experiment folder that matches the string [s]. If there are multiple possible matches, then one of several strategies can be used to resolve them.
 
     Args:
@@ -284,50 +325,39 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=Fal
                 return [matches[int(choice)-1]]
             else:
                 print(f"[WARNING] Invalid choice: {choice} -> try again")
+
+    # Valid matches are those where the match ends in the second half of the basename.
+    # This tends to be the most unique part of the name.
+    elif resolve == "half":
+        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
+        new_matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
+        if len(new_matches) == 0:
+            raise ValueError(f"[ERROR] str_to_exp_folder(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
+        elif len(new_matches) > 1:
+            raise ValueError(f"[ERROR] str_to_exp_folder(): multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
+        else:
+            return new_matches[0]
+
+    # Try first using resolve='half', and if this fails, fall back to the user.
     elif resolve == "half_then_user":
-        basename2halves = {osp.basename(m): (osp.basename(m)[:len(osp.basename(m) // 2)], osp.basename(m)[len(osp.basename(m) // 2):]) for m in matches}
-        matches = [m for m in matches if s in basename2halves[osp.basename(m)][1] and not s in basename2halves[osp.basename(m)][0]]
+        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
+        matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
+
         if len(matches) == 0:
-            raise ValueError(f"[ERROR] str_to_exp_folder(): unable to resolve multiple matches for {s} using resolve='half_then_user'")
+            raise ValueError(f"[ERROR] str_to_exp_folder(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
         else:
             return str_to_exp_folder(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches)
+    
+    # Return the most-recently modified match. Need to check all files in the folder,
+    # but assume we don't need to do so recursively.
     elif resolve == "latest":
-        matches = sorted(matches, key=lambda m: os.path.getmtime(m), reverse=True)
-        return matches[0]
+        matches2mtime = {m: max([osp.getmtime(osp.join(m, f)) for f in os.listdir(m)]) for m in matches}
+        matches = sorted(matches, key=lambda m: matches2mtime[m])
+        return matches[-1]
+    
+    elif resolve == "all":
+        return matches
     else:
         raise ValueError(f"str_to_exp_folder(): Unknown resolve method {resolve}")
-
-
-def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
-    """Returns the list of experiment folders that match the string [s].
-    
-    Args:
-    s               -- string to match. Does not need pre-globbing
-    search_dirs     -- directories to search in if [s] is not an absolute path
-    last_pos_unique -- If there are multiple matches, the one where the match ends
-                        nearest to the end of the string is chosen
-    """
-    s = s.strip()
-    s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
-    s_glob = f"*{s}*"
-
-    matches = []
-    for d in search_dirs:
-        if not osp.exists(d):
-            continue
-        matches += glob.glob(osp.join(d, s_glob))
-    return [m for m in matches if osp.exists(m) and osp.isdir(m)]
-
-def query_yes_no(msg="Proceed? (y/n): "):
-    """Queries the user to proceed. Returns True if the user wants to proceed, False otherwise."""
-    print(msg)
-    while True:
-        choice = input("")
-        if choice.lower() in ["y", "yes"]:
-            return True
-        elif choice.lower() in ["n", "no"]:
-            return False
-        else:
-            print(f"[WARNING] Invalid choice: {choice} -> try again")
 
 
