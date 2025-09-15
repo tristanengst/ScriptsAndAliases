@@ -218,7 +218,7 @@ if __name__ == "__main__":
             dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
             dest2all_files = {d: [osp.relpath(f) for f in fs] for d,fs in dest2files.items()}
             dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
-            dest2files_desc = "\n".join([f"{osp.relpath(dest)} <- [\n\t{files_desc}]" for dest,files_desc in dest2files_desc.items()])
+            dest2files_desc = "\n".join([f"~/{osp.relpath(dest)} <- [\n\t{files_desc}]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
             
             commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
