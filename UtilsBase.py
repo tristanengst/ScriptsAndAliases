@@ -71,17 +71,18 @@ def load_meta(s, as_dict=True, meta_key="__first_key__"):
         else:
             twrite(f"[ERROR] load_meta() could not parse metas:\n{m}")
             raise ValueError("[ERROR] load_meta() could not parse metas")
-
-
-    print(results)
-
+            
     index_keys = ["__meta_key__"]
     if as_dict and meta_key == "__first_key__":
         result = dict()
         for r in results:
-            first_key = (list(r.keys())[0]) if r else None
-            if first_key in r:
-                result[first_key] = {k: v for k,v in r.items() if not k in index_keys and not k == first_key}
+            if len(r) == 1:
+                result |= r
+            elif len(r) == 2:
+                first_key = (list(r.keys())[0])
+                result[first_key] = r[first_key]
+            else:
+                result |= {k: v for k,v in r.items() if not k in index_keys}
         return result
     else:
         return [{k: v for k,v in r.items() if not k in index_keys} for r in results]

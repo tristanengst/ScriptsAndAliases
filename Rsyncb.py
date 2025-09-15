@@ -51,7 +51,7 @@ def file_substr_to_glob(f, *, args):
             raise ValueError(f"No files found matching substring {f} in search_dirs={args.search_dirs}")
         elif not "*" in f and len(all_matched_files) > 1:
             globs = "\n\t".join(sorted(globs))
-            _ = print(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
+            _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
         else:
             return globs
 
@@ -70,7 +70,7 @@ def file_to_nonambiguous_path(f):
     if len(non_ambiguous_f) == 0:
         return f
     elif len(non_ambiguous_f) > 1:
-        _ = print(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
+        _ = twrite(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
         return f
     else:
         return non_ambiguous_f[0]
@@ -181,8 +181,8 @@ if __name__ == "__main__":
 
     if not args.output_as_meta:
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
-        print(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
-        print(f"[INFO] files={args.files}")
+        twrite(f"[INFO] {sending_getting_str} clusters: {args.clusters}")
+        twrite(f"[INFO] files={args.files}")
     else:
         UtilsBase.atomic_append_lite(data=f"AAAA {args}             send_to_cluster={send_to_cluster}\n", fname="~/.ScriptsAndAliases/out.txt")
 
@@ -201,15 +201,11 @@ if __name__ == "__main__":
         
         # These globs represent the files that will actually be sent with rsync
         sources = UtilsBase.flatten([file_substr_to_glob(f, args=args) for f in args.files])
-        _ = print(f"[INFO] Files/globs to send: {sources}")
-
-        UtilsBase.atomic_append_lite(data="CCCCCC",fname="~/.ScriptsAndAliases/out3.txt")
+        _ = twrite(f"[INFO] Files/globs to send: {sources}")
 
         # These files represent where the files will actually end up on the destination
         dests = [file_to_nonambiguous_path(s) for s in sources]
-        _ = print(f"[INFO] Non-ambiguous paths to send: {dests}")
-
-        UtilsBase.atomic_append_lite(data="DDDDD", fname="~/.ScriptsAndAliases/out4.txt")
+        _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}")
 
         # Essentially, this is the mapping from destination directories to the files that will
         # be sent to each. Possibly we could use fewer rsync commands by grouping by not the
@@ -272,7 +268,7 @@ if __name__ == "__main__":
         cluster2send_command = {c: f"python ~/.ScriptsAndAliases/Rsyncb.py {' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
         
         
-        print(cluster2send_command)
+        twrite(cluster2send_command)
 
     ##################################################################################
         
@@ -282,26 +278,32 @@ if __name__ == "__main__":
     # check=True).stdout.strip() for c,command in cluster2send_command.items()}
 
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
-
-        print(cluster2output)
-
-
-
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
+
+        twrite("\n\n\n\n")
+        twrite(cluster2output)
+
+        twrite("\n\n\n\n")
+
+
+
+        
 
         cluster2dest2files_desc = {c: o["dest2files_desc"] for c,o in cluster2output.items()}
         cluster2get_command = {c: o["commands"] for c,o in cluster2output.items()}
 
-        twrite(f"[INFO] Commands to run:\n" + "\n\t".join(cluster2get_command.values()))
+
+
+
 
         for c in UtilsBase.tqdm(cluster2get_command.keys()):
             dest2files_desc = cluster2dest2files_desc[c]
             commands = cluster2get_command[c] 
 
             _ = twrite(f"[INFO] From cluster={c}, files and destinations are:\n{dest2files_desc}")
-            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{command}")
+            _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{commands}")
             if not args.dry_run:
-                result = subprocess.run(f"bash -c '{command}'", shell=True, check=True)
+                result = subprocess.run(f"bash -c '{commands}'", shell=True, check=True)
 
 
 
