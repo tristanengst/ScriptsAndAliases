@@ -5,28 +5,16 @@ import os.path as osp
 import pty
 import subprocess
 
+import FileFinding
 import UtilsBase
 from UtilsBase import twrite
-
-
-
-
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-m", "--experiment", required=True, help="Experiment name")
-    P.add_argument("--search_dirs", nargs="+", default=[
-        osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
-        osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
-        osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
-        osp.expanduser("~/scratch/IMLE-SSL/models_stop"),
-        
-        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_imle",
-        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_mae",
-        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/finetunes",
-        f"/home/{os.environ.get('USER', 'user')}/scratch/IMLE-SSL/models_stop"
-        ],
+    P.add_argument("--search_dirs", nargs="+", default=FileFinding.exp_search_dirs,
         help="Directories to search for experiments in")
+    P.add_argument("--debug", action="store_true", help="If set, print debug info")
 
     # Arguements to pass to ls command
     P.add_argument("-l", action="store_true", help="Like -l for ls")
@@ -37,47 +25,19 @@ if __name__ == "__main__":
     P.add_argument("-s", action="store_true", help="Like -s for ls")
     args = P.parse_args()
 
-    experiments = set()
-    for s in args.search_dirs:
-        if not osp.exists(s):
-            continue
-        experiments |= {osp.join(s, f) for f in os.listdir(s) if args.experiment in f}
-    experiments = list(experiments)
+    experiment = FileFinding.str_to_exp_folder(args.experiment, resolve="half_then_user")
 
-    if len(experiments) == 0:
-        _ = twrite(f"No files found matching {args.experiment} in directories={args.search_dirs}")
-    elif len(experiments) == 1:
-        experiment = experiments[0]
-        print(experiment)
+    ls_args_str = ""
+    ls_args_str += " -l" if args.l else ""
+    ls_args_str += " -t" if args.t else ""
+    ls_args_str += " -r" if args.r else ""
+    ls_args_str += " -a" if args.a else ""
+    ls_args_str += " -d" if args.d else ""
+    ls_args_str += " -s" if args.s else ""
 
-        ls_args_str = ""
-        ls_args_str += " -l" if args.l else ""
-        ls_args_str += " -t" if args.t else ""
-        ls_args_str += " -r" if args.r else ""
-        ls_args_str += " -a" if args.a else ""
-        ls_args_str += " -d" if args.d else ""
-        ls_args_str += " -s" if args.s else ""
-
-        files = subprocess.getoutput(f"ls {ls_args_str} {experiment}")
-        _ = print(experiment)
-        _ = print(files)
-    else:
-        experiment_list = "\n".join([f"{idx+1}. {exp}" for idx,exp in enumerate(experiments)])
-        _ = twrite(f"Multiple experiments found matching {args.experiment}. Select one:\n{experiment_list}")
-
-        user_select = input()
-        while not user_select.isdigit() or int(user_select) < len(experiments):
-            user_select = input(f"Select experiment by number:")
-        experiment = experiments[int(user_select) - 1]
-
-        ls_args_str = ""
-        ls_args_str += " -l" if args.l else ""
-        ls_args_str += " -t" if args.t else ""
-        ls_args_str += " -r" if args.r else ""
-        ls_args_str += " -a" if args.a else ""
-        ls_args_str += " -d" if args.d else ""
-        ls_args_str += " -s" if args.s else ""
-
-        files = subprocess.getoutput(f"ls --color=always {ls_args_str} {experiment}", shell=True, capture_output=True)
-        _ = print(experiment)
-        _ = print(files)
+    ls_command = f"ls --color=always {ls_args_str} {experiment}"
+    if args.debug:
+        _ = twrite(f"Running command: {ls_command}")
+    ls_output = subprocess.run(ls_command, shell=True, capture_output=True).stdout.decode("utf-8")
+    _ = print(experiment)
+    _ = print(ls_output)
