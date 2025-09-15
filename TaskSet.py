@@ -130,8 +130,13 @@ def get_experiment_name(*, script, script_args):
         return None, None
     
 def unparsed_args_to_args(unparsed_args):
-    """Returns an argpare Namespace of [unparsed_args]. It requires that the Python
-    script in it takes only keyword arguments with one or more values.
+    """Returns a (before_script, script, args) triple from the list of string of
+    unparsed argument [unparsed_args], where:
+    - [before_script] is a string of command line arguments prior the script being run
+    - [script] is the Python script being run
+    - [args] is a Namespace containing arguments to the script, parsed heuristically
+    
+    Note: the argparse arguments must be all keyword arguments!
     """
     result = dict()
     begin_parsing = False
@@ -228,26 +233,29 @@ def get_new_directory_strs(*, exp_name, args, script_args):
     # from a directory capable of executing the script, ie. paths will be right.
     # Because these paths are being copied explicitly and with symlinks, we will
     # assume they should not be copied again, sym- or hardlinked.
-    if "data_path" in script_args and osp.exists(script_args.data_path):
-        symlinked_files.append(get_rel_root(script_args.data_path))
-        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_path)
-        if not cmd in commands:
-            commands.append(cmd)
-    if "data_tr" in script_args and osp.exists(script_args.data_tr):
-        symlinked_files.append(get_rel_root(script_args.data_tr))
-        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_tr)
-        if not cmd in commands:
-            commands.append(cmd)
-    if "data_val" in script_args and osp.exists(script_args.data_val):
-        symlinked_files.append(get_rel_root(script_args.data_val))
-        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_val)
-        if not cmd in commands:
-            commands.append(cmd)
-    if "colormae_file" in script_args and osp.exists(script_args.colormae_file):
-        symlinked_files.append(get_rel_root(script_args.colormae_file))
-        cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.colormae_file)
-        if not cmd in commands:
-            commands.append(cmd)
+    # if "data_tr" in script_args and osp.exists(script_args.data_tr):
+    #     symlinked_files.append(get_rel_root(script_args.data_tr))
+    #     cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_tr)
+    #     if not cmd in commands:
+    #         commands.append(cmd)
+    # if "data_val" in script_args and osp.exists(script_args.data_val):
+    #     symlinked_files.append(get_rel_root(script_args.data_val))
+    #     cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.data_val)
+    #     if not cmd in commands:
+    #         commands.append(cmd)
+    # if "colormae_file" in script_args and osp.exists(script_args.colormae_file):
+    #     symlinked_files.append(get_rel_root(script_args.colormae_file))
+    #     cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=script_args.colormae_file)
+    #     if not cmd in commands:
+    #         commands.append(cmd)
+
+    # Ensure that any file contained in the command line arguments is symlinked.
+    for k,v in vars(script_args).items():
+        if osp.exists(v) and not v.startsiwth("/") and not v.startswith("~"):
+            symlinked_files.append(get_rel_root(v))
+            cmd = get_symlink_to_rel_root(temp_dir=temp_dir, path=v)
+            if not cmd in commands:
+                commands.append(cmd)
 
     # Copy everything to the save directory. We will use heuristics to ignore some
     # files that we almost certainly don't need/want to copy. Note that this will copy
@@ -333,6 +341,8 @@ if __name__ == "__main__":
     args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
     taskset_str = f"taskset -c {args.c}"
 
+    # Parse remaining arguments to those before the script being run, the script, and
+    # a Namespace of arguments to the script
     before_script, script, script_args = unparsed_args_to_args(unparsed_args=unparsed_args)
 
     # Map the tpython_ddpX or other prefix to the script to what it should actually be
