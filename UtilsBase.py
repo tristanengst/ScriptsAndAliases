@@ -146,7 +146,7 @@ def atomic_append_lite(*, data, fname, **kwargs):
     elif fname.endswith(".json"):
         return atomic_save_lite(data=load_file_lite(f) | d, fname=f, indent=4, sort_keys=True)
     elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
-        with open(fname, "a") as f:
+        with open(fname, "a+") as f:
             f.write(data)
     else:
         raise NotImplementedError(f"Unknown file extension for {fname}")
