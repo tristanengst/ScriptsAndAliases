@@ -216,8 +216,9 @@ if __name__ == "__main__":
         # send the files to the destination cluster.
         if args.output_as_meta:
             dest2all_files = {d: UtilsBase.flatten([glob.glob(osp.join(d, f)) for f in fs]) for d,fs in dest2files.items()}
+            dest2all_files = {d: [osp.relpath(f) for f in fs] for d,fs in dest2files.items()}
             dest2files_desc = {d: UtilsBase.list_to_pretty_str(files, terminal_size=args.terminal_size) for d,files in dest2all_files.items()}
-            dest2files_desc = "\n".join([f"{dest} <- [\n\t{files_desc}\n]" for dest,files_desc in dest2files_desc.items()])
+            dest2files_desc = "\n".join([f"{osp.relpath(dest)} <- [\n\t{files_desc}]" for dest,files_desc in dest2files_desc.items()])
             _ = UtilsBase.write_meta(dest2files_desc=dest2files_desc)
             
             commands = [f"{rsync_str} {cluster}:{dest}/{f} {dest}" for cluster in args.clusters for dest,file_glob in dest2files.items() for f in file_glob]
@@ -247,6 +248,8 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
+        import MachineInfo
+
         def run_cmd(ssh_name, command):
             """Runs [command] on machine [ssh_name], either locally or via ssh."""
             cwd = os.getcwd()
@@ -260,11 +263,11 @@ if __name__ == "__main__":
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
         cluster2output = {c: UtilsBase.load_meta(o) for c,o in cluster2output.items()}
 
-        for c in UtilsBase.tqdm(cluster2get_command.keys()):
-            dest2files_desc = cluster2output[c]["dest2files_desc"]
-            commands = cluster2output[c]["commands"]
+        for cluster,output in UtilsBase.tqdm(cluster2output.items()):
+            dest2files_desc = output["dest2files_desc"]
+            commands = output["commands"]
 
-            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.machine_to_hostname()}:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.machine_to_hostname(os.uname()[1])}:\n{dest2files_desc}")
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\t{commands}")
             if not args.dry_run:
                 result = subprocess.run(f"bash -c '{commands}'", shell=True, check=True)
