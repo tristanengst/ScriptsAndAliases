@@ -155,7 +155,7 @@ if __name__ == "__main__":
         args.files = list(set(args.files))
         
         # These globs represent the files that will actually be sent with rsync
-        sources = FileFinding.[file_substr_to_glob(f, search_dirs=args.search_dirs) for f in args.files]
+        sources = [FileFinding.file_substr_to_glob(f, search_dirs=args.search_dirs) for f in args.files]
         sources = UtilsBase.flatten(sources)
         _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.verbose)
 

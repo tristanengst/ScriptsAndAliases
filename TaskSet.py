@@ -326,6 +326,8 @@ if __name__ == "__main__":
         help="Runs in an isolated directory if possible")
     P.add_argument("--remove_temp_dir", default=1, type=int, choices=[0, 1],
         help="Removes the temporary directory at the end if --new_dir is set")
+    P.add_argument("--no_cpu_restrict", default=0, type=int, choices=[0, 1],
+        help="If 1, does not restrict CPU usage with taskset")
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_slurm():
@@ -342,7 +344,7 @@ if __name__ == "__main__":
 
     # Get the CPU string for taskset
     args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
-    taskset_str = f"taskset -c {args.c}"
+    taskset_str = "" if args.no_cpu_restrict else f"taskset -c {args.c}" 
 
     # Parse remaining arguments to those before the script being run, the script, and
     # a Namespace of arguments to the script
