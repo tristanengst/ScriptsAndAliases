@@ -11,7 +11,7 @@ from Utils import get_slurm_status
 import UtilsBase
 from UtilsBase import twrite
 
-def file_substr_to_glob(f, *, search_dirs, first_match=False):
+def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
     existing globs would be treated nicely by bash.
 
@@ -27,7 +27,7 @@ def file_substr_to_glob(f, *, search_dirs, first_match=False):
         
         globs = []
         all_matched_files = set()
-        for d in args.search_dirs:
+        for d in search_dirs:
             if not osp.exists(d):
                 continue
 
@@ -36,11 +36,11 @@ def file_substr_to_glob(f, *, search_dirs, first_match=False):
             if matched_files:
                 globs.append(test_file)
                 all_matched_files |= set(matched_files)
-                if args.one_match_per_substr:
+                if irst_match:
                     break
         
         if len(globs) == 0:
-            raise ValueError(f"No files found matching substring {f} in search_dirs={args.search_dirs}")
+            raise ValueError(f"No files found matching substring {f} in search_dirs={search_dirs}")
         elif not "*" in f and len(all_matched_files) > 1:
             globs = "\n\t".join(sorted(globs))
             _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
