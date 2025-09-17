@@ -142,6 +142,7 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=Fa
         return s
     
     matches = str_to_all_exp_folders(s, search_dirs=search_dirs, verbose=verbose) if matches is None else matches
+    matches = set([file_to_nonambiguous_path(m) for m in matches])
 
     if len(matches) == 0:
         raise FileNotFoundError(f"str_to_exp_folder(): No experiment folders found matching {s} in {search_dirs}")
@@ -264,6 +265,8 @@ def str_to_all_files(s, search_dirs=file_search_dirs, slurm_or_result="slurm", v
 
     if Utils.is_slurm() and slurm_or_result == "slurm" and search_dirs == file_search_dirs:
         search_dirs = [s for s in search_dirs if osp.basename(s) == "slurm"]
+    else:
+        search_dirs = [s for s in search_dirs if not osp.basename(s) == "slurm"]
 
     search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
     return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isfile(m)]
