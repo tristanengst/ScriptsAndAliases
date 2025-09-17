@@ -11,6 +11,14 @@ from Utils import get_slurm_status
 import UtilsBase
 from UtilsBase import twrite
 
+exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
+    osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
+    osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
+
+file_search_dirs = [osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
+    osp.expanduser("~/Development/IMLE-SSL-2/finetune_results"),
+    osp.expanduser("~/Development/IMLE-SSL-2/slurm")]
+
 def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
     existing globs would be treated nicely by bash.
@@ -36,7 +44,7 @@ def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, fi
             if matched_files:
                 globs.append(test_file)
                 all_matched_files |= set(matched_files)
-                if irst_match:
+                if first_match:
                     break
         
         if len(globs) == 0:
@@ -73,14 +81,6 @@ def file_to_nonambiguous_path(f):
 def compress_user(path):
     """Inverse to osp.expanduser(). Tries to follow symlinks wherever possible."""
     return osp.relpath(osp.abspath(osp.expanduser(path)), osp.expanduser("~"))
-
-exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
-    osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
-    osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
-
-file_search_dirs = [osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
-    osp.expanduser("~/Development/IMLE-SSL-2/finetune_results"),
-    osp.expanduser("~/Development/IMLE-SSL-2/slurm")]
 
 def str_to_slurm_info(s, job2info=None, verbose=False):
     """Tries to find the slurm info for a given string [s]."""
