@@ -7,6 +7,7 @@ import os
 import os.path as osp
 import sys
 
+import Utils
 from Utils import get_slurm_status
 import UtilsBase
 from UtilsBase import twrite
@@ -201,23 +202,18 @@ def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
     s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
     s_glob = f"*{s}*"
 
-    matches = []
-    for d in search_dirs:
-        if not osp.exists(d):
-            continue
-        matches += glob.glob(osp.join(d, s_glob))
-    return [m for m in matches if osp.exists(m) and osp.isdir(m)]
+    search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
+    return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isdir(m)]
 
-
-def str_to_file(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbose=False, matches=None):
+def str_to_file(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbose=False, matches=None, resolve="pos"):
     s = s.strip()
-    if osp.exists(s) and osp.isdir(s):
+    if osp.exists(s) and osp.isfile(s):
         return s
     
     matches = matches if matches else str_to_all_files(s, search_dirs=search_dirs, verbose=verbose, slurm_or_result=slurm_or_result)
 
     if len(matches) == 0:
-        raise FileNotFoundError(f"str_to_file(): No experiment folders found matching {s} in {search_dirs}")
+        raise FileNotFoundError(f"str_to_file(): No files folders found matching {s} in {search_dirs}")
     elif len(matches) == 1:
         return matches[0]
     elif resolve == "pos":
@@ -266,20 +262,11 @@ def str_to_all_files(s, search_dirs=file_search_dirs, slurm_or_result="slurm", v
     s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
     s_glob = f"*{s}*"
 
-    matches = []
-    for d in search_dirs:
-        if not osp.exists(d):
-            continue
-        matches += glob.glob(osp.join(d, s_glob))
-    return [m for m in matches if osp.exists(m) and osp.isdir(m)]
+    if Utils.is_slurm() and slurm_or_result == "slurm" and search_dirs == file_search_dirs:
+        search_dirs = [s for s in search_dirs if osp.basename(s) == "slurm"]
 
-
-
-
-
-
-
-
+    search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
+    return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isfile(m)]
 
 def get_args(args=None):
     P = argparse.ArgumentParser()
