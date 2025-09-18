@@ -123,7 +123,7 @@ def exp_folder_to_uid(exp_folder, verbose=False):
     _ = twrite(f"[WARNING] Could not find UID for exp_folder={exp_folder}", verbose=verbose)
     return None
     
-def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=False, matches=None):
+def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=False, matches=None, if_not_found="error"):
     """Returns the experiment folder that matches the string [s]. If there are multiple possible matches, then one of several strategies can be used to resolve them.
 
     Args:
@@ -142,10 +142,12 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=Fa
         return s
     
     matches = str_to_all_exp_folders(s, search_dirs=search_dirs, verbose=verbose) if matches is None else matches
-    matches = set([file_to_nonambiguous_path(m) for m in matches])
+    matches = list(set([file_to_nonambiguous_path(m) for m in matches]))
 
-    if len(matches) == 0:
+    if len(matches) == 0 and if_not_found == "error":
         raise FileNotFoundError(f"str_to_exp_folder(): No experiment folders found matching {s} in {search_dirs}")
+    elif len(matches) == 0 and if_not_found == "none":
+        return None
     elif len(matches) == 1:
         return matches[0]
     elif resolve == "pos":

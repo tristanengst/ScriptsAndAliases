@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 
+import FileFinding
 from ShowCluster import Node
 import Utils
 import UtilsBase
@@ -836,6 +837,51 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
     return s
 
+def count_jobs_by_state(job_infos):
+    """Returns a Namespace giving the number of the current user's jobs in particular
+    states. For pending jobs, this is broken down by job health.
+    """
+    job_infos = [ji for ji in job_infos if "user" in ji and ji.user == os.environ["USER"]]
+    state2count = defaultdict(int)
+    for ji in job_infos:
+        if ji.state == "RUNNING" or ji.state == "COMPLETING":
+            state2count["running"] += 1
+        elif ji.state == "PENDING":
+            # Heuristically determine job health. A job whose experiment folder
+            # doesn't exist is healthy (probably hasn't run). If its experiment folder
+            # does exist, if it contains checkpoints and a wandb_attempt.txt, it's
+            # probably healthy (we can make this heuristic better). Otherwise, there
+            # is quite possibly an issue!
+            if "comment" in ji and "exp_name" in ji.comment:
+                exp = FileFinding.str_to_exp_folder(ji.comment["exp_name"], resolve="pos", if_not_found="none")
+                if exp is None:
+                    state2count["pending_healthy"] += 1
+                else:
+                    checkpoints = [f for f in os.listdir(exp) if f.endswith(".pt") and not f.startswith("wandb_data")]
+                    if checkpoints and osp.exists(osp.join(exp, "wandb_attempt.txt")):
+                        state2count["pending_healthy"] += 1
+                    else:
+                        state2count["pending_status_uncertain"] += 1
+            else:
+                state2count["pending_status_no_comment"] += 1
+        else:
+            state2count["other"] += 1
+    state2count["total"] = sum(state2count.values())
+    return argparse.Namespace(**state2count)
+
+def format_job_counts_by_state(state2count):
+    """Returns a string giving the job counts by state in [state2count]."""
+    key2color = defaultdict(lambda: "white",
+        running="green",
+        pending_healthy="yellow",
+        pending_status_uncertain="red",
+        pending_status_no_comment="orange",
+        other="red",
+        total="purple2",
+    )
+    return "Queue status:\t" + " | ".join([colorize(f"{k}={v}", color=key2color[k]) for k,v in vars(state2count).items()])
+
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser(add_help=False, prefix_chars="-+")
     P.add_argument("-u", "--users", action="store_true", default=False,
@@ -997,6 +1043,10 @@ if __name__ == "__main__":
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     meta_str = f"--- Overall Cluster Status ({time_str}) ---"
+    if Utils.is_slurm():
+        state2count = count_jobs_by_state(job_datas)
+        job_count_str = format_job_counts_by_state(state2count)
+        meta_str += "\n\t|\t" + job_count_str
     if Utils.is_cc():
         usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
         meta_str += "\n\t|\t" + usage_str
