@@ -27,13 +27,15 @@ def get_cluster_type():
         return "beluga"
     elif h.startswith("gra-") or h.startswith("gra") or h.startswith("gr"):
         return "graham"
-    elif h.startswith("cs-s") or h.startswith("cs-v"):
+    elif h == ("cs-star") or h.startswith("cs-v"):
         return "solar"
+    elif h == "cs-star1":
+        return "solar1"
     else:
         h_ = "-".join(h.split("-")[:2])
         return os.environ.get("CLUSTER_TYPE", "cs-apex")
 
-def is_solar(): return get_cluster_type() == "solar"
+def is_solar(): return get_cluster_type() in ["solar", "solar1"]
 def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir"]
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
@@ -153,6 +155,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     if len(key2sq_format_O) == 0 or list(key2sq_format_O.keys()) == ["jobid"]:
         result = {j: argparse.Namespace(**info) for j,info in job2info.items()}
     
+    sep = " , " if get_cluster_type() == "solar1" else sep # TODO: Why is this needed on Solar1 but not other clusters?
     sq_key_str = f"{sep},".join(key2sq_format_O.values())
     sq_cmd = f"squeue {user_str} {account_str} -h -O \"{sq_key_str}\""
     sq = subprocess.getoutput(sq_cmd).strip()
