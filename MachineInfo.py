@@ -42,6 +42,71 @@ machine2info = {
     "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
 }
 
+# Specifies configuration for possible nodes/types of nodes, grouped by cluster.
+# Commented out lines are for nodes not known to the scheduler.
+#
+# cpus_per_gpu  -- number of LOGICAL CPUs per GPU. Apparently SLURM interprets
+#                   --cpus-per-task in terms of logical CPUs. This means that the
+#                   Solar spreadsheet is wrong.
+# mem_per_gpu   -- amount of memory per GPU
+# gpu_type      -- type of GPU (what we call it)
+# gpu_name      -- type of GPU (what the scheduler calls it)
+# gpus_per_node -- number of GPUs per node
+# can_allocate  -- whether the node can be allocated
+# max_time      -- maximum time in hours that can be requested
+# constraint    -- constraint to use for the scheduler if possible
+cluster2node2config = dict(
+     solar={
+        "cs-venus-01": dict(cpus_per_gpu=10, mem_per_gpu=84, gpu_type="q6000", gpus_per_node=6, can_allocate=True, gpu_name="quadro_rtx_6000"),
+        "cs-venus-03": dict(cpus_per_gpu=12, mem_per_gpu=64, gpu_type="2080", gpus_per_node=4, can_allocate=True, gpu_name="2080_ti"),
+        "cs-venus-05": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_type="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000"),
+        "cs-venus-06": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_type="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000"),
+        "cs-venus-07": dict(cpus_per_gpu=8, mem_per_gpu=128, gpu_type="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40"),
+        "cs-venus-08": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_type="a100", gpus_per_node=4, can_allocate=True, gpu_name="a100"),
+        "cs-venus-09": dict(cpus_per_gpu=7, mem_per_gpu=128, gpu_type="a40", gpus_per_node=8, can_allocate=True, gpu_name="a40"),
+        "cs-venus-13": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_type="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40"),
+        "cs-venus-17": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_type="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s"),
+        "cs-venus-18": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_type="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s")},
+    solar1={
+        "cs-venus-02": dict(cpus_per_gpu=8, mem_per_gpu=64, gpu_type="2080", gpus_per_node=8, can_allocate=True, gpu_name="2080_ti"),
+        "cs-venus-12": dict(cpus_per_gpu=20, mem_per_gpu=128, gpu_type="a6000", gpus_per_node=2, can_allocate=True, gpu_name="rtx_a6000"),
+        "cs-venus-14": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_type="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40"),
+        "cs-venus-15": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_type="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s"),
+        "cs-venus-16": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_type="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s"),
+    },
+
+    cedar={"default": dict(cpus_per_gpu=8, mem_per_gpu=46, gpu_type="v100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'")),
+        "v100l": dict(cpus_per_gpu=8, mem_per_gpu=46, gpu_type="v100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'")),
+        "p100l": dict(cpus_per_gpu=6, mem_per_gpu=56, gpu_type="p100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'")),
+        "p100": dict(cpus_per_gpu=6, mem_per_gpu=30, gpu_type="p100", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'"))},
+
+    narval={"default": dict(cpus_per_gpu=12, mem_per_gpu=124, gpu_type="a100", gpus_per_node=4, can_allocate=True),
+        "a100": dict(cpus_per_gpu=12, mem_per_gpu=124, gpu_type="a100", gpus_per_node=4, can_allocate=True),
+        "a100_3g.20gb": dict(cpus_per_gpu=6, mem_per_gpu=60, gpu_type="a100_3g.20gb", gpus_per_node=8, can_allocate=True),
+        "a100_4g.20gb": dict(cpus_per_gpu=6, mem_per_gpu=60, gpu_type="a100_4g.20gb", gpus_per_node=8, can_allocate=True)},
+
+    trillium=dict(default=dict(cpus_per_gpu=24, mem_per_gpu=188, gpu_type="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100"),
+        h100=dict(cpus_per_gpu=24, mem_per_gpu=188, gpu_type="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100")),
+    fir=dict(default=dict(cpus_per_gpu=12, mem_per_gpu=280, gpu_type="h100", gpus_per_node=4, can_allocate=True),
+        h100=dict(cpus_per_gpu=12, mem_per_gpu=280, gpu_type="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100")),
+    rorqual=dict(default=dict(cpus_per_gpu=16, mem_per_gpu=124, gpu_type="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100"),
+        h100=dict(cpus_per_gpu=16, mem_per_gpu=124, gpu_type="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100")),
+    nibi=dict(default=dict(cpus_per_gpu=14, mem_per_gpu=250, gpu_type="h100", gpus_per_node=8, can_allocate=True, gpu_name="h100"),
+        h100=dict(cpus_per_gpu=14, mem_per_gpu=250, gpu_type="h100", gpus_per_node=8, can_allocate=True, gpu_name="h100")),
+    cs_apex={"default": dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_type="3090", gpus_per_node=2, can_allocate=True)})
+
+
+# Maps GPU type to the amount of VRAM it has
+gpu2vram = {"2080": 8, "3090": 24, "a100_3g.20gb": 20, "a100_4g.20gb": 20} | dict(
+    p100=12, p100l=16,
+    q4000=8, q6000=24,
+    v100=16, v100l=32,
+    a5000=24, a6000=48, a40=48, a100=80 if Utils.is_solar() else 40,
+    l40s=48, h100=80)
+
+# Maps cluster names to unique prefixes for their compute nodes
+cluster2node_prefix = dict(narval="ng", cedar="cdr", solar="cs-venus", cs_apex="cs-apex", nibi="g", rorqual="rg", trillium="trig", fir="fc", solar1="cs-venus")
+
 def get_ssh_config():
     """Returns the SSH config file as a dictionary. It should be the case that each
     key is an element of 'ssh_names' for some machine in [machine2info], and that it
