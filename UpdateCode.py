@@ -18,7 +18,7 @@ if __name__ == "__main__":
     P.add_argument("--substrs", nargs="+",)
     P.add_argument("--files", nargs="+", default=[])
     P.add_argument("--dry_run", action="store_true")
-    P.add_argument("--exp_search_dirs", nargs="+", default=Utils.exp_search_dirs)
+    P.add_argument("--exp_search_dirs", nargs="+", default=FileFinding.exp_search_dirs)
     P.add_argument("-v", "--verbose", action="store_true")
     args = P.parse_args()
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         tqdm.write(exp_name_str)
         tqdm.write("===================================================================")
 
-        proceed = Utils.query_yes_no(f"Proceed with updating these experiments (dry_run={args.dry_run})?\t[y/n]")
+        proceed = UtilsBase.query_yes_no(f"Proceed with updating these experiments (dry_run={args.dry_run})?\t[y/n]")
         if not proceed:
             _ = tqdm.write("Exiting.")
             sys.exit(0)
