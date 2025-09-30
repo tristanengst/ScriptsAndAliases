@@ -69,6 +69,9 @@ aliases = [
     "alias jcatsr=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
     "alias jcatrs=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
 
+    # Allocates a node
+    "alias sallocb=\"python ~/.ScriptsAndAliases/AllocateNode.py --nodelist \"",
+
     # Updates ScriptsAndAliases
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; source ~/.bashrc\"",
     
