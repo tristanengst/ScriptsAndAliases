@@ -5,6 +5,7 @@ import json
 import os
 import os.path as osp
 import subprocess    
+import UtilsBase
 
 def print_found_uids(*, args, uids):
     uids = [f"*{u}*" for u in uids] if args.globs else uids
@@ -102,9 +103,12 @@ if __name__ == "__main__":
     
     line2uid = {l: None for l in args.jobs}
 
-    # First, see if jobs have the UID recorded in their COMMENT
+    # First, see if jobs have the UID recorded in their COMMENT. Heuristic to pick the
+    # jobid out from the line: it is the first substring without letters.
+    valid_jobid_chars = "0123456789-_[]"
     for l in line2uid:
-        scontrol_output = subprocess.getoutput(f"scontrol show job {l.split()[0]}")
-        line2uid[l] = jobid_to_uid(jobid=l.split()[0], default=None, cur_user_only=True)
+        jobid = [ll for ll in l.split() if all([c in valid_jobid_chars for c in ll])][0]
+        scontrol_output = subprocess.getoutput(f"scontrol show job {jobid}")
+        line2uid[l] = jobid_to_uid(jobid=jobid, default=None, cur_user_only=True)
 
     print_found_uids(args=args, uids=[u for u in line2uid.values()])
