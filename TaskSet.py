@@ -328,9 +328,14 @@ if __name__ == "__main__":
         help="Removes the temporary directory at the end if --new_dir is set")
     P.add_argument("--no_cpu_restrict", default=0, type=int, choices=[0, 1],
         help="If 1, does not restrict CPU usage with taskset")
+
+    P.add_argument("--allow_on_slurm", default=0, type=int, choices=[0, 1],
+        help="Allows running on SLURM clusters. Usually this is not desired.")
+    P.add_argument("--log_file", type=str, default=None,
+        help="If specified, logs to this file in addition to stdout.")
     args, unparsed_args = P.parse_known_args()
 
-    if Utils.is_slurm():
+    if Utils.is_slurm() and not args.allow_on_slurm:
         print("tpython_ddpX not for use on ComputeCanada.")
         sys.exit(1)
 
@@ -374,7 +379,15 @@ if __name__ == "__main__":
 
     if "include_in_args" in exp_metas:
         script_args = argparse.Namespace(**vars(script_args) | exp_metas.include_in_args)
-        
+
+    if not args.log_file is None and log_file is None:
+        print(f"[INFO] Setting log_file={args.log_file} from --log_file")
+        log_file = args.log_file
+    elif not args.log_file is None and not log_file is None:
+        print(f"[WARNING] --log_file was set, so changing log_file={log_file} -> {args.log_file}")
+        log_file = args.log_file
+    else:
+        pass
 
     unparsed_args = args_to_unparsed_args(before_script=before_script, script=script, args=script_args)
     unparsed_args = " ".join(unparsed_args)  # Ensure it's a string
