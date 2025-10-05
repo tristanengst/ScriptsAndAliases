@@ -306,33 +306,35 @@ def get_new_directory_strs(*, exp_name, args, script_args):
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("-c", default="parse_gpus",
+    P.add_argument("-c", "--cpu_range" default="parse_gpus",
         help="CPU specification")
     P.add_argument("--gpus", nargs="*", type=int, default=None,
         help="GPU specification")
+    P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
+        help="Like --gpus but not added to the arguments of the script being run")
     P.add_argument("--shell", default="bash", choices=["bash", "zsh"],
         help="Shell type")
+    
     P.add_argument("--taskset_scripts_dir", default=osp.expanduser("~/.taskset_scripts"),
         help="Directory to store taskset scripts")
-    P.add_argument("--taskset_debug", choices=[0, 1], default=0, type=int,
-        help="Print the taskset script instead of running it")
-    P.add_argument("--time", type=str, default=None,
-        help="Has no effect, but can resolve bugs where we accidentally use this.")
-    P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
-        help="Like 'gpus' but they are removed from the command being run")
-    P.add_argument("--try_add_wandb", choices=[0, 1], default=1, type=int,
-        help="Tries to add --wandb online if not specified")
     P.add_argument("-n", "--new_dir", default=1, type=int, choices=[0, 1],
         help="Runs in an isolated directory if possible")
     P.add_argument("--remove_temp_dir", default=1, type=int, choices=[0, 1],
         help="Removes the temporary directory at the end if --new_dir is set")
-    P.add_argument("--no_cpu_restrict", default=0, type=int, choices=[0, 1],
-        help="If 1, does not restrict CPU usage with taskset")
 
     P.add_argument("--allow_on_slurm", default=0, type=int, choices=[0, 1],
         help="Allows running on SLURM clusters. Usually this is not desired.")
     P.add_argument("--log_file", type=str, default=None,
         help="If specified, logs to this file in addition to stdout.")
+    P.add_argument("--query_metas", default=1, type=int, choices=[0, 1],
+        help="Queries the script being run for metadata about the experiment")
+
+    P.add_argument("--try_add_wandb", choices=[0, 1], default=1, type=int,
+        help="Tries to add --wandb online if not specified")
+    P.add_argument("--time", type=str, default=None,
+        help="Has no effect, but can resolve bugs where we accidentally use this.")
+    P.add_argument("--taskset_debug", action="store_true",
+        help="Print the taskset script instead of running it")
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_slurm() and not args.allow_on_slurm:
@@ -347,9 +349,14 @@ if __name__ == "__main__":
     elif args.gpus is None and args.strip_gpus is None:
         raise ValueError("Must specify either --gpus or --strip_gpus")
 
-    # Get the CPU string for taskset
-    args.c = get_cpus_from_gpus(gpus=args.gpus) if args.c == "parse_gpus" else args.c
-    taskset_str = "" if args.no_cpu_restrict else f"taskset -c {args.c}" 
+    # Get the CPU string for taskset based on --cpu_range and --gpus
+    if args.cpu_range == "parse_gpus":
+        args.cpu_range = get_cpus_from_gpus(gpus=args.gpus)
+        taskset_str = f"taskset -c {args.cpu_range}"
+    elif args.cpu_range == "none":
+        taskset_str = ""
+    else:
+        taskset_str = f"taskset -c {args.cpu_range}"
 
     # Parse remaining arguments to those before the script being run, the script, and
     # a Namespace of arguments to the script
@@ -367,19 +374,27 @@ if __name__ == "__main__":
     # this includes the experiment name, which is the folder stuff will save to, and
     # any arguments that should be included in the script args that were
     # auto-generated when it ran initially and thus informed the experiment name
-    exp_metas = get_experiment_metadata(script=script, script_args=script_args)
-    if "exp_name" in exp_metas:
-        _ = os.makedirs(exp_metas.exp_name, exist_ok=True)
-        log_file = osp.join(exp_metas.exp_name, "log.txt")
-        start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_metas.exp_name, args=args, script_args=script_args)
+    if args.query_metas:
+        exp_metas = get_experiment_metadata(script=script, script_args=script_args)
+        if "exp_name" in exp_metas:
+            _ = os.makedirs(exp_metas.exp_name, exist_ok=True)
+            log_file = osp.join(exp_metas.exp_name, "log.txt")
+            start_cmd, end_cmd = get_new_directory_strs(exp_name=exp_metas.exp_name, args=args, script_args=script_args)
+        else:
+            new_directory_str = ""
+            log_file = None
+            start_cmd, end_cmd = "", ""
     else:
-        new_directory_str = ""
-        log_file = None
+        exp_metas = argparse.Namespace()
+        log_file = args.log_file
         start_cmd, end_cmd = "", ""
 
+    # If the script being run said to add stuff to its arguments, then do so now
     if "include_in_args" in exp_metas:
         script_args = argparse.Namespace(**vars(script_args) | exp_metas.include_in_args)
 
+    # If --log_file was specified, then it overrides any log_file we might have found
+    # based on querying metadata from the script being run
     if not args.log_file is None and log_file is None:
         print(f"[INFO] Setting log_file={args.log_file} from --log_file")
         log_file = args.log_file
@@ -409,6 +424,6 @@ if __name__ == "__main__":
         os.makedirs(osp.dirname(script_file), exist_ok=True)
         with open(script_file, "w+") as f:
             f.write(script)
-        os.system(f"taskset -c {args.c} {args.shell} {script_file}")
+        os.system(f"{taskset_str} {args.shell} {script_file}")
 
 
