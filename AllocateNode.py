@@ -1,7 +1,8 @@
 """Code that will allocate a node but in an intelligent way."""
 import argparse
-from MachineInfo import cluster2node2config
+from MachineInfo import cluster2node2config, cluster2misc_reqs
 import UtilsBase
+from UtilsBase import twrite
 import Utils
 
 def args_to_gres_str(args):
@@ -12,7 +13,11 @@ def args_to_gres_str(args):
         _ = twrite(f"[INFO] args_to_gres_str() ignoring --gpus={args.gpus} and --gpus_type={args.gpu_type} since --gres={args.gres} is specified")
         return f"--gres={args.gres}"
     else:
-        raise NotImplementedError()
+        node = args.nodelist
+        node2config = cluster2node2config[Utils.get_cluster_type()]
+        gpu_type = node2config[node]["gpu_type"]
+        num_gpus = len(args.gpus)
+        return f"--gres=gpu:{gpu_type}:{num_gpus}"
 
 def get_args():
     P = argparse.ArgumentParser()
@@ -30,6 +35,9 @@ def get_args():
         help="If provided, overrides --gpus and --gpu_type")
     P.add_argument("--time", default="2:00:00",
         help="Time string to allocate")
+    P.add_argument("--cc_ddp_defaults", action="store_true",
+        help="If set on CC, overrides --ntasks-per-node and --cpus-per-task with defaults for DDP oon the current cluster")
+    P.add_argument("--account", default="adapt", choices=["rrg-keli", "def-keli", "adapt"],)
     args, unparsed_args = P.parse_known_args()
 
     return args, unparsed_args
@@ -58,9 +66,33 @@ if __name__ == "__main__":
 
         s = f"srun -J \"interactive-bash\" --nodelist={args.nodelist} {cpu_str} {mem_str} {gres_str} {time_str} {unparsed_args_str} --pty bash"
         print(s)
+    elif Utils.is_cc():
+        args.ntasks_per_node = len(args.gpus) if args.cc_ddp_defaults else args.ntasks_per_node
+
+        cpus_per_node = node2config[node]["cpus_per_gpu"] * node2config[node]["gpus_per_node"]
+        mem_per_node = node2config[node]["mem_per_gpu"] * node2config[node]["gpus_per_node"]
+
+        args.cpus_per_task = node2config[node]["cpus_per_gpu"] if args.cc_ddp_defaults else args.cpus_per_task
+        
+        num_cpus = args.ntasks_per_node * args.cpus_per_task
+        cpu_frac = num_cpus / cpus_per_node
+        mem = args.mem if args.mem > 0 else max(int(cpu_frac * mem_per_node), 1)
+
+        gres_str = args_to_gres_str(args)
+        mem_str = f" --mem={mem}G "
+        cpu_str = f" --ntasks-per-node={args.ntasks_per_node} --cpus-per-task={args.cpus_per_task} "
+        time_str = f" --time={args.time}"
+        unparsed_args_str = " " + " ".join(unparsed_args) + " "
 
 
+        if args.account == "adapt":
+            account = cluster2misc_reqs[Utils.get_cluster_type()]["default_account"]
+        else:
+            account = args.account
+        account_str = f" --account={account} "
 
+        s = f"salloc {gres_str} --nodes=1 {cpu_str}  {mem_str} {account_str} --partition=interac"
+        print(s)
 
     else:
         raise NotImplementedError()

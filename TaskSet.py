@@ -306,7 +306,7 @@ def get_new_directory_strs(*, exp_name, args, script_args):
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("-c", "--cpu_range" default="parse_gpus",
+    P.add_argument("-c", "--cpu_range", default="parse_gpus",
         help="CPU specification")
     P.add_argument("--gpus", nargs="*", type=int, default=None,
         help="GPU specification")

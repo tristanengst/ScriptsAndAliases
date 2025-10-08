@@ -107,6 +107,26 @@ gpu2vram = {"2080": 8, "3090": 24, "a100_3g.20gb": 20, "a100_4g.20gb": 20} | dic
 # Maps cluster names to unique prefixes for their compute nodes
 cluster2node_prefix = dict(narval="ng", cedar="cdr", solar="cs-venus", cs_apex="cs-apex", nibi="g", rorqual="rg", trillium="trig", fir="fc", solar1="cs-venus")
 
+cluster2misc_reqs = dict(
+    nibi=dict(wandb_default_mode="online",
+        default_account="rrg-keli"),
+    rorqual=dict(wandb_default_mode="online",
+        default_account="def-keli"),
+    fir=dict(wandb_default_mode="online",
+        default_account="def-keli"),
+    trillium=dict(wandb_default_mode="online",
+        default_account="def-keli"),
+    narval=dict(wandb_default_mode="online",
+        default_account="def-keli"),
+    cedar=dict(wandb_default_mode="online",
+        default_account="def-keli"),
+    solar=dict(wandb_default_mode="online",
+        default_account="cs-gpu-research"),
+    solar1=dict(wandb_default_mode="online",
+        default_account="cs-gpu-research"),
+    cs_apex=dict(wandb_default_mode="online",
+        default_account=""))
+
 def get_ssh_config():
     """Returns the SSH config file as a dictionary. It should be the case that each
     key is an element of 'ssh_names' for some machine in [machine2info], and that it

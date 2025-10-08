@@ -482,7 +482,13 @@ def job_info_with_formatted_time_delta(jd, key="time_left"):
 
 def job_info_with_formatted_resources(jd, num_nodes=1):
     """Returns job info [jd] with the resources formatted."""
-    known_gpu = ["h100", "a100", "l40s", "a40", "a5000", "v100"]
+    known_gpus = ["h100", "a100", "l40s", "a40", "a5000", "v100",
+        "nvidia_h100_80gb_hbm3_3g.40gb", "nvidia_h100_80gb_hbm3_2g.20gb", "nvidia_h100_80gb_hbm3_1g.10gb"]
+
+    gpu2weight = defaultdict(lambda: 1, **{
+        "nvidia_h100_80gb_hbm3_3g.40gb": 0.5,
+        "nvidia_h100_80gb_hbm3_2g.20gb": 0.25,
+        "nvidia_h100_80gb_hbm3_1g.10gb": 0.125})
     
     gres_gpu = "N/A" if not jd.gres else jd.gres
     num_nodes = num_nodes if not jd.nodes else jd.nodes
@@ -493,8 +499,21 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
         
         # If the last element is a GPU, no GPU was requested
-        num_gpus = 0 if any([gpus[-1].startswith(g) for g in known_gpu]) else int(gpus[-1])
-        gpu_type = None if len(gpus) < 2 else gpus[-2]
+        if gpus[-1].isdigit() and len(gpus) == 1:
+            num_gpus = int(gpus[-1])
+            gpu_type = None
+        elif gpus[-1] in known_gpus and len(gpus) == 1:
+            num_gpus = 1
+            gpu_type = gpus[-1]
+        elif gpus[-1].isdigit() and len(gpus) > 1:
+            num_gpus = int(gpus[-1])
+            gpu_type = gpus[0]
+        else:
+            raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus}")
+            
+        # print(jd.uid, gpu_type, gres_gpu, gpus)
+
+        num_gpus = gpu2weight[gpu_type] * num_gpus if gpu_type else 1
         gpus =  f"{num_gpus * int(num_nodes)}"
 
     return UtilsBase.updated_namespace(jd, gpus=gpus)
