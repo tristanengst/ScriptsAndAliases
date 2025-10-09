@@ -43,7 +43,7 @@ def is_workstation(): return not is_solar() and not is_cc()
 def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
-        "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid"],
+        "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid", "partition"],
     key2sq_format=dict()
     ):
     """Returns a dictionary describing the entire state what's running. Strings are
@@ -117,7 +117,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         partition=f"%P",
         host=f"%N",
         exclude=f"%x",
-        comment=f"%k"
+        comment=f"%k",
     )
 
     key2sq_format_O = dict(

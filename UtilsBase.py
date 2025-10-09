@@ -237,6 +237,8 @@ def try_make_number(s):
             return float(s)
         except ValueError:
             return s
+
+def is_numeric(s): return not isinstance(try_make_number(s), str)
     
 def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
     """Returns list [l] as a pretty string. The intended usage is to get its elements

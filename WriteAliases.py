@@ -72,6 +72,9 @@ aliases = [
     # Allocates a node
     "alias sallocb=\"python ~/.ScriptsAndAliases/AllocateNode.py --nodelist \"",
 
+    # Makes job(s) interactive
+    "alias make_interac=\"python ~/.ScriptsAndAliases/MakeInteractive.py --jobs \"",
+
     # Updates ScriptsAndAliases
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; source ~/.bashrc\"",
     

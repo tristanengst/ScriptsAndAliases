@@ -835,11 +835,12 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     gpu_data = argparse.Namespace(running=0, allocated=0, running_user=0, allocated_user=0)
     for ji in job_infos:
         if (ji.jobid.startswith("__")
-            or not ji.gpus.isdigit()
+            or not UtilsBase.is_numeric(ji.gpus)
             or any([ji.reason.startswith(r) for r in ["Dependency", "JobHeld"]])):
+            print(ji.uid, ji.gpus, "AAA")
             continue
         
-        num_gpus = int(ji.gpus) if ji.gpus.isdigit() else 0
+        num_gpus = float(ji.gpus)
         if ji.state in ["RUNNING", "COMPLETING"]:
             gpu_data.running += num_gpus
             gpu_data.running_user += num_gpus if ji.user == os.environ["USER"] else 0
