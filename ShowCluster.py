@@ -63,7 +63,7 @@ class Node:
 
             avail_full_node_list = [n.node_name for n in node_list if n.available]
             avail_full_node_str = (f"(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
-            return f"{gpu_type}=[AvailFullNodes={avail_full_nodes}/{total_nodes}\t{avail_full_node_str}\tAvailGPUs={avail_gpus}/{possible_gpus}\tPossibleNodes={possible_nodes}/{total_nodes}\tPossibleGPUs={possible_gpus}/{total_gpus}]"
+            return f"{gpu_type}=[AvailFullNodes={avail_full_nodes}/{total_nodes} {avail_full_node_str} AvailGPUs={avail_gpus}/{possible_gpus} PossibleNodes={possible_nodes}/{total_nodes} PossibleGPUs={possible_gpus}/{total_gpus}]"
 
 
         node_list = Node.get_node_list()
