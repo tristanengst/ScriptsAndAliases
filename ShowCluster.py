@@ -48,19 +48,34 @@ class Node:
     
     @staticmethod
     def cluster_stats_to_str():
+
+        def cluster_stats_to_str_(gpu_type, node_list):
+            total_nodes = len(node_list)
+            total_gpus = sum([n.gpus for n in node_list if n.gpus is not None])
+
+            avail_full_nodes = len([n for n in node_list if n.available])
+            avail_gpus = sum([n.avail_gpus for n in node_list if n.available])
+
+            possible_nodes = len([n for n in node_list if n.can_allocate])
+            possible_gpus = sum([n.possible_gpus for n in node_list])
+
+            avail_full_node_list = [n.node_name for n in node_list if n.available]
+            avail_full_node_str = (f"(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
+            return f"{gpu_type}=[AvailFullNodes={avail_full_nodes}/{total_nodes}\t{avail_full_node_str}\tAvailGPUs={avail_gpus}/{possible_gpus}\tPossibleNodes={possible_nodes}/{total_nodes}\tPossibleGPUs={possible_gpus}/{total_gpus}]"
+
+
         node_list = Node.get_node_list()
-        total_nodes = len(node_list)
-        total_gpus = sum([n.gpus for n in node_list if n.gpus is not None])
+        gpu_types = set([n.gpu_type for n in node_list])
+        gpu_type2node_list = {g: [n for n in node_list if n.gpu_type == g] for g in gpu_types}
+        stats = [cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()]
+        stats_str = "\t".join(stats)
+        return stats_str
 
-        avail_full_nodes = len([n for n in node_list if n.available])
-        avail_gpus = sum([n.avail_gpus for n in node_list if n.available])
 
-        possible_nodes = len([n for n in node_list if n.can_allocate])
-        possible_gpus = sum([n.possible_gpus for n in node_list])
 
-        avail_full_node_list = [n.node_name for n in node_list if n.available]
-        avail_full_node_str = ("(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
-        return f"AvailFullNodes={avail_full_nodes}/{total_nodes}\t{avail_full_node_str}\tAvailGPUs={avail_gpus}/{possible_gpus}\tPossibleNodes={possible_nodes}/{total_nodes}\tPossibleGPUs={possible_gpus}/{total_gpus}"
+
+
+        
 
     @staticmethod
     def get_node_list():
@@ -116,14 +131,14 @@ class Node:
                 alloc_cpus = 0
                 alloc_memory = 0
 
-            # elif line.startswith("Gres="):
-            #     if not any([g in line for g in good_gpus]):
-            #         print(f"no GPU for node={node_name}, line={line}")
-            #         continue
-            #     gres = line.split("=")[1].split(",")
-            #     gres = gres[0].split(":")
-            #     gpu_type = gres[1]
-            #     gpu = int(gres[2][0])
+            elif line.startswith("Gres=") and Utils.get_cluster_type() == "trillium":
+                if not any([g in line for g in good_gpus]):
+                    print(f"no GPU for node={node_name}, line={line}")
+                    continue
+                gres = line.split("=")[1].split(",")
+                gres = gres[0].split(":")
+                gpu_type = gres[1]
+                gpu = int(gres[2][0])
 
             
             elif line.startswith("State="):
@@ -156,7 +171,6 @@ class Node:
                 cfg_tres = cfg_tres.split(",")
 
                 good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
-
                 for tres in cfg_tres:
                     if tres.startswith("gres/gpu") and Utils.get_cluster_type() == "trillium":
                         gpus = float(tres.split("=")[1])
@@ -165,6 +179,7 @@ class Node:
                     elif tres.startswith("gres/gpu") and UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0] in good_gpus:
                         gpus = float(tres.split("=")[1])
                         gpu_type = UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0]
+                        gpu_type = MachineInfo.gpu_name_to_type(gpu_type)
                     elif tres.startswith("cpu"):
                         cpus = float(tres.split("=")[1])
                     elif tres.startswith("mem"):
