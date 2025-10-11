@@ -16,9 +16,13 @@ exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
     osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
     osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
 
-file_search_dirs = [osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
+file_search_dirs = [
+    osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
     osp.expanduser("~/Development/IMLE-SSL-2/finetune_results"),
-    osp.expanduser("~/Development/IMLE-SSL-2/slurm")]
+    osp.expanduser("~/Development/IMLE-SSL-2/slurm"),
+    osp.expanduser("~/Development/IMLE-SSL-Dev/pretrain_results"),
+    osp.expanduser("~/Development/IMLE-SSL-Dev/finetune_results"),
+    osp.expanduser("~/Development/IMLE-SSL-Dev/slurm")]
 
 def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
