@@ -78,7 +78,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
 
     # On ComputeCanada, get jobs by account
     if account is None and is_cc():
-        accounts = ["rrg-keli_gpu", "rrg-keli_cpu", "def-keli_gpu", "def-keli_cpu"]
+        accounts = ["def-keli"] if get_cluster_type() == "trillium" else ["rrg-keli_gpu", "rrg-keli_cpu", "def-keli_gpu", "def-keli_cpu"]
         result = dict()
         for account in accounts:
             result |= get_slurm_status(cur_user=cur_user, account=account)
