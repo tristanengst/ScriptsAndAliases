@@ -108,7 +108,7 @@ gpu2vram = {"2080": 8, "3090": 24} | dict(
     q4000=8, q6000=24,
     v100=16, v100l=32,
     a5000=24, a6000=48, a40=48,
-    a100=80 if is_solar() else 40, a112=10, a123=20, a124=20,
+    a100=80 if Utils.is_solar() else 40, a112=10, a123=20, a124=20,
     l40s=48,
     h100=80, h111=10, h122=20, h143=40
 )
@@ -119,7 +119,7 @@ def gpu_name_to_type(gpu_name):
     """
     for c in cluster2node2config:
         for n in cluster2node2config[c]:
-            if couster2node2config[c][n]["gpu_name"] == gpu_name:
+            if "gpu_name" in cluster2node2config[c][n] and cluster2node2config[c][n]["gpu_name"] == gpu_name:
                 return cluster2node2config[c][n]["gpu_type"]
     return None
 

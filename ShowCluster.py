@@ -1,6 +1,8 @@
 import argparse
 import math
 import subprocess
+
+import MachineInfo
 import Utils
 import UtilsBase
 
@@ -68,7 +70,7 @@ class Node:
         gpu_types = set([n.gpu_type for n in node_list])
         gpu_type2node_list = {g: [n for n in node_list if n.gpu_type == g] for g in gpu_types}
         stats = [cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()]
-        stats_str = "\t".join(stats)
+        stats_str = "\t\t".join(stats)
         return stats_str
 
 
