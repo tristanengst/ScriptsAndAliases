@@ -1,6 +1,8 @@
 import argparse
 import math
 import subprocess
+import Utils
+import UtilsBase
 
 class Node:
     def __init__(self, node_name, state, gpu_type, fractional_gpus, gpus, cpus, memory, alloc_fractional_gpus, alloc_gpus, alloc_cpus, alloc_memory):
@@ -35,7 +37,7 @@ class Node:
         
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(avail_gpus={self.avail_gpus})"
+        return f"{self.__class__.__name__}({self.node_name}, avail_gpus={self.avail_gpus}/{self.possible_gpus}, state={self.state}, gpu_type={self.gpu_type})"
 
     @staticmethod
     def print_cluster_stats():
@@ -80,6 +82,9 @@ class Node:
         alloc_cpus = 0
         alloc_memory = 0
 
+
+        good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
+
         for line in lines:
             line = line.strip()
             if line.startswith("NodeName="):
@@ -111,13 +116,14 @@ class Node:
                 alloc_cpus = 0
                 alloc_memory = 0
 
-            elif line.startswith("Gres="):
-                if not any([g in line for g in ["h100", "a100", "v100", "l40s", "a40", "a5000"]]):
-                    continue
-                gres = line.split("=")[1].split(",")
-                gres = gres[0].split(":")
-                gpu_type = gres[1]
-                gpu = int(gres[2][0])
+            # elif line.startswith("Gres="):
+            #     if not any([g in line for g in good_gpus]):
+            #         print(f"no GPU for node={node_name}, line={line}")
+            #         continue
+            #     gres = line.split("=")[1].split(",")
+            #     gres = gres[0].split(":")
+            #     gpu_type = gres[1]
+            #     gpu = int(gres[2][0])
 
             
             elif line.startswith("State="):
@@ -149,14 +155,16 @@ class Node:
                 cfg_tres = line.replace("CfgTRES=", "")
                 cfg_tres = cfg_tres.split(",")
 
-                # Fake GPUs for people without real compute requirements
-                fractional_gpus = int("g." in line)
+                good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
 
                 for tres in cfg_tres:
-                    if tres.startswith("gres/gpu") and fractional_gpus:
-                        fractional_gpus = float(tres.split("=")[1])
-                    elif tres.startswith("gres/gpu"):
+                    if tres.startswith("gres/gpu") and Utils.get_cluster_type() == "trillium":
                         gpus = float(tres.split("=")[1])
+                    elif tres.startswith("gres/gpu") and len([t for t in cfg_tres if t.startswith("gres/gpu")]) == 1:
+                        gpus = float(tres.split("=")[1])
+                    elif tres.startswith("gres/gpu") and UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0] in good_gpus:
+                        gpus = float(tres.split("=")[1])
+                        gpu_type = UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0]
                     elif tres.startswith("cpu"):
                         cpus = float(tres.split("=")[1])
                     elif tres.startswith("mem"):
@@ -193,5 +201,9 @@ class Node:
 
 if __name__ == "__main__":
     Node.print_cluster_stats()
+
+    node_list = Node.get_node_list()
+    for n in node_list:
+        print(n)
         
             
