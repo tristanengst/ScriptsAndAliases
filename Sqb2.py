@@ -504,7 +504,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         # If the last element is a GPU, no GPU was requested
         if gpus[-1].isdigit() and len(gpus) == 1:
             num_gpus = int(gpus[-1])
-            gpu_type = None
+            gpu_type = "gpu" # Generic GPU type
         elif gpus[-1] in known_gpus and len(gpus) == 1:
             num_gpus = 1
             gpu_type = gpus[-1]
