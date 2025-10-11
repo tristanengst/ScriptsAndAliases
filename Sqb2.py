@@ -23,7 +23,10 @@ import UtilsBase
 from UtilsBase import twrite
 
 ##### Miscellaneous ##################################################################
-cc_accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
+if Utils.get_cluster_type() == "trillium":
+    cc_accounts = ["def-keli"]
+else:
+    cc_accounts = ["rrg-keli_cpu", "def-keli_cpu", "rrg-keli_gpu", "def-keli_gpu"]
 
 ######################################################################################
 ######################################################################################
@@ -1075,7 +1078,7 @@ if __name__ == "__main__":
         print(meta_str)
     
     if Utils.is_cc():
-        accounts = ["rrg-keli_gpu", "def-keli_gpu"]
+        accounts = ["def-keli"] if Utils.get_cluster_type() == "trillium" else ["rrg-keli_gpu", "def-keli_gpu"]
         account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
         account2lfs_str = {a: {k: f"{l:.2f}" if isinstance(l, float) else str(l) for k,l in lfs.items()} for a,lfs in account2lfs.items() if not lfs["group"] is None}
         level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
