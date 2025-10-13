@@ -35,11 +35,12 @@ def default_tar_name(fname):
 
 def tar_imle_ssl_dir(args):
     dirs_to_tar = ["models_mae", "models_imle", "models_stop", "models_dino", "probes", "finetunes"]
+    scratch_dir = osp.expanduser("/scratch/tme3/IMLE-SSL") if osp.exists("/scratch/tme3/IMLE-SSL") else osp.expanduser("~/scratch/IMLE-SSL")
 
     if Utils.get_cluster_type() == "nibi":
-        scratch_dir = osp.expanduser("/project/rrg-keli/tme3/IMLE-SSL-storage")
+        out_dir = osp.expanduser("/project/rrg-keli/tme3/IMLE-SSL-storage")
     else:
-        scratch_dir = osp.expanduser("/scratch/tme3/IMLE-SSL") if osp.exists("/scratch/tme3/IMLE-SSL") else osp.expanduser("~/scratch/IMLE-SSL")
+        out_dir = scratch_dir
     
     dirs_to_tar = [d for d in dirs_to_tar if osp.exists(osp.join(scratch_dir, d))]
     for d in tqdm(dirs_to_tar):
