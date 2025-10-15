@@ -434,9 +434,10 @@ def job_info_with_queue(jd):
     queue = f"{queue.total_seconds() / 3600:.2f}H"
     return UtilsBase.updated_namespace(jd, queue=queue)
 
-def job_info_with_formatted_date_time(jd, *, key):
+def job_info_with_formatted_date_time(jd, *, key, tz="America/Vancouver"):
     """Returns job info [jd] with the date/time key [key] formatted. This function should be run last!"""
     date_time = vars(jd)[key]
+    valid_date_time = False
 
     # If [start_time] starts with four numbers, these are the year and are removed.
     if len(date_time) > 4 and date_time[0:4].isnumeric():
@@ -452,10 +453,18 @@ def job_info_with_formatted_date_time(jd, *, key):
                 break
         date_time = "".join(date_time_chars)
         date_time = date_time[:-3].replace("T", "-") # Exclude seconds
+        valid_date_time = True
     elif date_time.startswith("N/A"):
         date_time = "N/A"
     else:
         assert 0, f"Unexpected start time format: {date_time}"
+
+    if valid_date_time and tz:
+        from zoneinfo import ZoneInfo
+        target_tz = ZoneInfo("America/Vancouver")
+        dt = datetime.strptime(date_time, "%m-%d-%H:%M")
+        dt = dt.astimezone(target_tz)  # Convert to local timezone
+        date_time = dt.strftime("%m-%d-%H:%M")
 
     return argparse.Namespace(**vars(jd) | {key: date_time})
 
@@ -711,9 +720,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     job2info = {j: info for j,info in job2info.items() if not info.name in args.hidden}
 
     if submit_time or heartbeat_analysis:
-        job2info = {j: job_info_with_formatted_date_time(v, key="submit_time") for j,v in job2info.items()}
+        job2info = {j: job_info_with_formatted_date_time(v, key="submit_time", tz=args.tz) for j,v in job2info.items()}
     if eligible_time:
-        job2info = {j: job_info_with_formatted_date_time(v, key="eligible_time") for j,v in job2info.items()}
+        job2info = {j: job_info_with_formatted_date_time(v, key="eligible_time", tz=args.tz) for j,v in job2info.items()}
     if queue or heartbeat_analysis:
         job2info = {j: job_info_with_queue(v) for j,v in job2info.items()}
     if checkpoint:
@@ -722,7 +731,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_info_with_heartbeat(v) for j,v in job2info.items()}
 
     job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
-    job2info = {j: job_info_with_formatted_date_time(info, key="start_time") for j,info in job2info.items()}
+    job2info = {j: job_info_with_formatted_date_time(info, key="start_time", tz=args.tz) for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_time_delta(info, key="time_left") for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
     job2info = {j: job_info_without_preempt_me_name(info) for j,info in job2info.items()}
@@ -965,6 +974,10 @@ if __name__ == "__main__":
     P.set_defaults(color=True)
     P.add_argument("--no_color", action="store_false", dest="color",
         help="Do not colorize the output")
+
+
+    P.add_argument("--tz", default="America/Vancouver",
+        help="Timezone to convert times to. Default is America/Vancouver.")
     args = P.parse_args()
 
 
