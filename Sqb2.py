@@ -562,7 +562,7 @@ def job_info_with_heartbeat(jd):
                 heartbeat = f.read().strip().split()
                 heartbeat = f"{heartbeat[0]}T{heartbeat[1]}" # Matches a SLURM date-time format even though it came from Python
             jd = UtilsBase.updated_namespace(jd, heartbeat=heartbeat)
-            return job_info_with_formatted_date_time(jd, key="heartbeat")
+            return job_info_with_formatted_date_time(jd, key="heartbeat", tz=None)
         else:
             return UtilsBase.updated_namespace(jd, heartbeat="no hearbeat")
     else:
