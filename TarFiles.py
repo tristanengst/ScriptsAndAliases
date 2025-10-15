@@ -2,6 +2,8 @@ import argparse
 import os
 import os.path as osp
 import time
+import Utils
+
 
 # TQDM isn't always installed but is really nice given that this can take ours to run
 try:
@@ -34,7 +36,13 @@ def default_tar_name(fname):
 def tar_imle_ssl_dir(args):
     dirs_to_tar = ["models_mae", "models_imle", "models_stop", "models_dino", "probes", "finetunes"]
     scratch_dir = osp.expanduser("/scratch/tme3/IMLE-SSL") if osp.exists("/scratch/tme3/IMLE-SSL") else osp.expanduser("~/scratch/IMLE-SSL")
+
+    if Utils.get_cluster_type() == "nibi":
+        out_dir = osp.expanduser("/project/rrg-keli/tme3/IMLE-SSL-storage")
+    else:
+        out_dir = scratch_dir
     
+    dirs_to_tar = [d for d in dirs_to_tar if osp.exists(osp.join(scratch_dir, d))]
     for d in tqdm(dirs_to_tar):
         d = osp.join(scratch_dir, d)
         out = default_tar_name(d)
@@ -50,9 +58,12 @@ def tar_folder(args):
         """Returns if file [f] should be included in the tar file."""
         if args.ignore_hidden and f.startswith("."):
             return False
-        if args.ignore_no_pt and osp.isdir(f) and not any([f_.endswith(".pt") for f_ in os.listdir(f)]):
+        elif args.ignore_no_pt and osp.isdir(f) and not any([f_.endswith(".pt") for f_ in os.listdir(f)]):
             return False
-        return True
+        elif any([ex in f for ex in args.exclude]):
+            return False
+        else:
+            return True
         
     if args.out is None:
         args.out = default_tar_name(args.dir)
