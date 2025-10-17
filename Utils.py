@@ -40,6 +40,16 @@ def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", 
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 
+cc_cluster2accounts = dict(
+    nibi=["rrg-keli_gpu", "def-keli_gpu"],
+    trillium=["def-keli"],
+    fir=["def-keli_gpu"],
+    rorqual=["def-keli_gpu"],
+    narval=["def-keli_gpu"],
+    cedar=["def-keli_gpu"],
+    beluga=["def-keli_gpu"],
+)
+
 def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
@@ -78,7 +88,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
 
     # On ComputeCanada, get jobs by account
     if account is None and is_cc():
-        accounts = ["def-keli"] if get_cluster_type() == "trillium" else ["rrg-keli_gpu", "rrg-keli_cpu", "def-keli_gpu", "def-keli_cpu"]
+        accounts = cc_cluster2accounts[get_cluster_type()]
         result = dict()
         for account in accounts:
             result |= get_slurm_status(cur_user=cur_user, account=account)

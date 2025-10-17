@@ -73,9 +73,10 @@ class Node:
         node_list = Node.get_node_list()
         gpu_types = set([n.gpu_type for n in node_list])
         gpu_type2node_list = {g: [n for n in node_list if n.gpu_type == g] for g in gpu_types}
-        gpu_type2stats_str = {g: cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()}
-        stats = sorted(gpu_type2stats_str.values(), key=lambda g: MachineInfo.gpu2vram[g] if g in MachineInfo.gpu2vram else 0)
-        stats_str = "\t".join(stats)
+        gpu_stats_strs = [(g, cluster_stats_to_str_(g, l)) for g,l in gpu_type2node_list.items()]
+        gpu_stats_strs = sorted(gpu_stats_strs, key=lambda x: MachineInfo.gpu2vram[x[0]] if x[0] in MachineInfo.gpu2vram else 0)
+        stats_strs = [s for _,s in gpu_stats_strs]
+        stats_str = "\t".join(stats_strs)
         return f"Resources (free/avail/found): {stats_str}"
 
     @staticmethod
@@ -98,17 +99,13 @@ class Node:
         alloc_cpus = 0
         alloc_memory = 0
 
-
-        good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb", "a6000", "rtx_a6000"]
-        ignored_gpus = ["q6000", "2080", "quadro_rtx_6000", "2080_ti"]
-
         for line in lines:
             line = line.strip()
             
             # We've found a new node, so append the prior one to the list if it's valid
             # and reset all the variables
             if line.startswith("NodeName="):
-                if not node_name is None and not gpu_type is None and not gpu_type in ignored_gpus:
+                if not node_name is None and not gpu_type is None and gpu_type in MachineInfo.good_gpus:
                     node_list.append({
                         "node_name": node_name,
                         "state": state,
@@ -122,6 +119,8 @@ class Node:
                         "alloc_cpus": alloc_cpus,
                         "alloc_memory": alloc_memory
                     })
+                elif not node_name is None and not gpu_type is None:
+                    print(f"Skipping node={node_name} with gpu_type={gpu_type} not in good_gpus={MachineInfo.good_gpus}")
                 
                 node_name = line.split("=")[1].split()[0]
                 state = None
@@ -136,16 +135,14 @@ class Node:
                 alloc_memory = 0
 
             elif line.startswith("Gres=") and (Utils.get_cluster_type() == "trillium" or Utils.is_solar()):
-                if not any([g in line for g in good_gpus]) and not any([g in line for g in ignored_gpus]):
+                if not any([MachineInfo.gpu_alias2name[g] in line for g in MachineInfo.good_gpus]):
                     print(f"no GPU for node={node_name}, line={line}")
-                    print([f"gpu={g} in line={g in line}" for g in good_gpus])
                     continue
                 gres = line.split("=")[1].split(",")
                 gres = gres[0].split(":")
                 gpu_type = gres[1]
-                gpu_type = MachineInfo.gpu_name_to_type(gpu_type)
+                gpu_type = MachineInfo.gpu_name2alias[gpu_type] if gpu_type in MachineInfo.gpu_name2alias else None
                 gpu = int(gres[2][0])
-
             
             elif line.startswith("State="):
                 state = line.split("=")[1].split()[0]
@@ -181,10 +178,14 @@ class Node:
                         gpus = float(tres.split("=")[1])
                     elif tres.startswith("gres/gpu") and len([t for t in cfg_tres if t.startswith("gres/gpu")]) == 1:
                         gpus = float(tres.split("=")[1])
-                    elif tres.startswith("gres/gpu") and UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0] in good_gpus:
-                        gpus = float(tres.split("=")[1])
+                    elif tres.startswith("gres/gpu"):
                         gpu_type = UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0]
-                        gpu_type = MachineInfo.gpu_name_to_type(gpu_type)
+                        if gpu_type in MachineInfo.gpu_name2alias and MachineInfo.gpu_name2alias[gpu_type] in MachineInfo.good_gpus:
+                            gpus = float(tres.split("=")[1])
+                            gpu_type = UtilsBase.strip_left(tres, "gres/gpu:").split("=")[0]
+                            gpu_type = MachineInfo.gpu_name2alias[gpu_type]
+                        else:
+                            pass
                     elif tres.startswith("cpu"):
                         cpus = float(tres.split("=")[1])
                     elif tres.startswith("mem"):
@@ -200,7 +201,7 @@ class Node:
                         else:
                             memory = float(memory)
         
-        if not node_name is None and not gpu_type is None and not gpu_type in ignored_gpus:
+        if not node_name is None and not gpu_type is None and gpu_type in MachineInfo.good_gpus:
             node_list.append({
                 "node_name": node_name,
                 "state": state,
@@ -214,6 +215,8 @@ class Node:
                 "alloc_cpus": alloc_cpus,
                 "alloc_memory": alloc_memory
             })
+        elif not node_name is None and not gpu_type is None:
+            print(f"Skipping node={node_name} with gpu_type={gpu_type} not in good_gpus={MachineInfo.good_gpus}")
 
         node_list = [Node(**n) for n in node_list if n["gpus"] is not None]
         return node_list

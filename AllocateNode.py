@@ -10,14 +10,14 @@ def args_to_gres_str(args):
     if args.gres is None and len(args.gpus) == 0:
         return ""
     elif not args.gres is None:
-        _ = twrite(f"[INFO] args_to_gres_str() ignoring --gpus={args.gpus} and --gpus_type={args.gpu_type} since --gres={args.gres} is specified")
+        _ = twrite(f"[INFO] args_to_gres_str() ignoring --gpus={args.gpus} and --gpus_type={args.gpu_alias} since --gres={args.gres} is specified")
         return f"--gres={args.gres}"
     else:
         node = args.nodelist
         node2config = cluster2node2config[Utils.get_cluster_type()]
-        gpu_type = node2config[node]["gpu_type"]
+        gpu_alias = node2config[node]["gpu_alias"]
         num_gpus = len(args.gpus)
-        return f"--gres=gpu:{gpu_type}:{num_gpus}"
+        return f"--gres=gpu:{gpu_alias}:{num_gpus}"
 
 def get_args():
     P = argparse.ArgumentParser()
@@ -32,7 +32,7 @@ def get_args():
     P.add_argument("--nodelist", default="default", choices=cluster2node2config[Utils.get_cluster_type()].keys(),
         help="Node to allocate. Can be interpreted in the general case sometimes")
     P.add_argument("--gres", default=None,
-        help="If provided, overrides --gpus and --gpu_type")
+        help="If provided, overrides --gpus and --gpu_alias")
     P.add_argument("--time", default="2:00:00",
         help="Time string to allocate")
     P.add_argument("--cc_ddp_defaults", action="store_true",
