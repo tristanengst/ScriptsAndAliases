@@ -53,31 +53,29 @@ class Node:
 
         def cluster_stats_to_str_(gpu_type, node_list):
             total_nodes = len(node_list)
-            total_gpus = sum([n.gpus for n in node_list if n.gpus is not None])
+            total_gpus = int(sum([n.gpus for n in node_list if n.gpus is not None]))
 
             avail_full_nodes = len([n for n in node_list if n.available])
-            avail_gpus = sum([n.avail_gpus for n in node_list if n.available])
+            avail_gpus = int(sum([n.avail_gpus for n in node_list if n.available]))
 
             possible_nodes = len([n for n in node_list if n.can_allocate])
-            possible_gpus = sum([n.possible_gpus for n in node_list])
+            possible_gpus = int(sum([n.possible_gpus for n in node_list]))
 
-            avail_full_node_list = [n.node_name for n in node_list if n.available]
-            avail_full_node_str = (f"(" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
-            return f"{gpu_type}=[AvailFullNodes={avail_full_nodes}/{total_nodes} {avail_full_node_str} AvailGPUs={avail_gpus}/{possible_gpus} PossibleNodes={possible_nodes}/{total_nodes} PossibleGPUs={possible_gpus}/{total_gpus}]"
-
+            if total_nodes > 1:
+                avail_full_node_list = [n.node_name for n in node_list if n.available]
+                avail_full_node_list = [UtilsBase.strip_left(n, "cs-") for n in avail_full_node_list] if Utils.is_solar() else avail_full_node_list
+                avail_full_node_str = (f" (" + ", ".join(avail_full_node_list) + ")") if avail_full_node_list else ""
+            else:
+                avail_full_node_str = ""
+            
+            return f"{gpu_type}=[gpus={avail_gpus}/{possible_gpus}/{total_gpus} | nodes={avail_full_nodes}/{possible_nodes}/{total_nodes}{avail_full_node_str}]"
 
         node_list = Node.get_node_list()
         gpu_types = set([n.gpu_type for n in node_list])
         gpu_type2node_list = {g: [n for n in node_list if n.gpu_type == g] for g in gpu_types}
         stats = [cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()]
-        stats_str = "\t\t".join(stats)
-        return stats_str
-
-
-
-
-
-        
+        stats_str = "\t".join(stats)
+        return f"Resources (free/avail/found): {stats_str}"
 
     @staticmethod
     def get_node_list():
@@ -101,12 +99,15 @@ class Node:
 
 
         good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
+        ignored_gpus = ["q6000", "2080", "quadro_rtx_6000", "2080_ti"]
 
         for line in lines:
             line = line.strip()
+            
+            # We've found a new node, so append the prior one to the list if it's valid
+            # and reset all the variables
             if line.startswith("NodeName="):
-
-                if not node_name is None and not gpu_type is None:
+                if not node_name is None and not gpu_type is None and not gpu_type in ignored_gpus:
                     node_list.append({
                         "node_name": node_name,
                         "state": state,
@@ -120,7 +121,7 @@ class Node:
                         "alloc_cpus": alloc_cpus,
                         "alloc_memory": alloc_memory
                     })
-
+                
                 node_name = line.split("=")[1].split()[0]
                 state = None
                 gpu_type = None
@@ -133,13 +134,14 @@ class Node:
                 alloc_cpus = 0
                 alloc_memory = 0
 
-            elif line.startswith("Gres=") and Utils.get_cluster_type() == "trillium":
-                if not any([g in line for g in good_gpus]):
+            elif line.startswith("Gres=") and (Utils.get_cluster_type() == "trillium" or Utils.is_solar()):
+                if not any([g in line for g in good_gpus]) and not any([g in line for g in ignored_gpus]):
                     print(f"no GPU for node={node_name}, line={line}")
                     continue
                 gres = line.split("=")[1].split(",")
                 gres = gres[0].split(":")
                 gpu_type = gres[1]
+                gpu_type = MachineInfo.gpu_name_to_type(gpu_type)
                 gpu = int(gres[2][0])
 
             
@@ -173,6 +175,7 @@ class Node:
                 cfg_tres = cfg_tres.split(",")
 
                 good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
+                
                 for tres in cfg_tres:
                     if tres.startswith("gres/gpu") and Utils.get_cluster_type() == "trillium":
                         gpus = float(tres.split("=")[1])
@@ -196,21 +199,21 @@ class Node:
                             memory = float(memory[:-1]) * 1024
                         else:
                             memory = float(memory)
-            
-        if not node_name is None and not gpu_type is None:
-                node_list.append({
-                    "node_name": node_name,
-                    "state": state,
-                    "gpu_type": gpu_type,
-                    "fractional_gpus": fractional_gpus,
-                    "gpus": gpus,
-                    "cpus": cpus,
-                    "memory": memory,
-                    "alloc_fractional_gpus": alloc_fractional_gpus,
-                    "alloc_gpus": alloc_gpus,
-                    "alloc_cpus": alloc_cpus,
-                    "alloc_memory": alloc_memory
-                })
+        
+        if not node_name is None and not gpu_type is None and not gpu_type in ignored_gpus:
+            node_list.append({
+                "node_name": node_name,
+                "state": state,
+                "gpu_type": gpu_type,
+                "fractional_gpus": fractional_gpus,
+                "gpus": gpus,
+                "cpus": cpus,
+                "memory": memory,
+                "alloc_fractional_gpus": alloc_fractional_gpus,
+                "alloc_gpus": alloc_gpus,
+                "alloc_cpus": alloc_cpus,
+                "alloc_memory": alloc_memory
+            })
 
         node_list = [Node(**n) for n in node_list if n["gpus"] is not None]
         return node_list
