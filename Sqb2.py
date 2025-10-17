@@ -546,11 +546,11 @@ def job_info_with_heartbeat(jd):
         elif "exp_name_trunc" in jd.comment and "uid" in jd.comment:
             exp_name = f"{jd.comment['exp_name_trunc']}*{jd.comment['uid']}*"
         else:
-            return UtilsBase.updated_namespace(jd, heartbeat="no name found")
+            return UtilsBase.updated_namespace(jd, heartbeat="no name")
 
         found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
         if len(found_exp_folders) == 0:
-            return UtilsBase.updated_namespace(jd, heartbeat="no folders found")
+            return UtilsBase.updated_namespace(jd, heartbeat="not found")
         elif len(found_exp_folders) > 1:
             twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return UtilsBase.updated_namespace(jd, heartbeat="multiple exp names")
@@ -592,7 +592,7 @@ def job_info_with_latest_str(*, args, jd):
 
         found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
         if len(found_exp_folders) == 0:
-            return UtilsBase.updated_namespace(jd, chkpt="no folders found")
+            return UtilsBase.updated_namespace(jd, chkpt="not found")
         elif len(found_exp_folders) > 1:
             twrite(f"Multiple experiment folders found for exp_name={exp_name} with search_dirs={args.exp_search_dirs}: {found_exp_folders}")
             return UtilsBase.updated_namespace(jd, chkpt="multiple exp names")
@@ -846,7 +846,6 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
         if (ji.jobid.startswith("__")
             or not UtilsBase.is_numeric(ji.gpus)
             or any([ji.reason.startswith(r) for r in ["Dependency", "JobHeld"]])):
-            print(ji.uid, ji.gpus, "AAA")
             continue
         
         num_gpus = float(ji.gpus)
