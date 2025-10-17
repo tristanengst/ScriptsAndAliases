@@ -73,7 +73,8 @@ class Node:
         node_list = Node.get_node_list()
         gpu_types = set([n.gpu_type for n in node_list])
         gpu_type2node_list = {g: [n for n in node_list if n.gpu_type == g] for g in gpu_types}
-        stats = [cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()]
+        gpu_type2stats_str = {g: cluster_stats_to_str_(g, l) for g,l in gpu_type2node_list.items()}
+        stats = sorted(gpu_type2stats_str.values(), key=lambda g: MachineInfo.gpu2vram[g] if g in MachineInfo.gpu2vram else 0)
         stats_str = "\t".join(stats)
         return f"Resources (free/avail/found): {stats_str}"
 
