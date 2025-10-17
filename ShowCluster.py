@@ -98,7 +98,7 @@ class Node:
         alloc_memory = 0
 
 
-        good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
+        good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb", "a6000", "rtx_a6000"]
         ignored_gpus = ["q6000", "2080", "quadro_rtx_6000", "2080_ti"]
 
         for line in lines:
@@ -137,6 +137,7 @@ class Node:
             elif line.startswith("Gres=") and (Utils.get_cluster_type() == "trillium" or Utils.is_solar()):
                 if not any([g in line for g in good_gpus]) and not any([g in line for g in ignored_gpus]):
                     print(f"no GPU for node={node_name}, line={line}")
+                    print([f"gpu={g} in line={g in line}" for g in good_gpus])
                     continue
                 gres = line.split("=")[1].split(",")
                 gres = gres[0].split(":")
@@ -173,8 +174,6 @@ class Node:
             elif line.startswith("CfgTRES="):
                 cfg_tres = line.replace("CfgTRES=", "")
                 cfg_tres = cfg_tres.split(",")
-
-                good_gpus = ["h100", "a100", "v100", "l40s", "a40", "a5000","nvidia_h100_80gb_hbm3_3g.40gb"]
                 
                 for tres in cfg_tres:
                     if tres.startswith("gres/gpu") and Utils.get_cluster_type() == "trillium":
