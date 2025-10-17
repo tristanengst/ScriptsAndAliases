@@ -119,8 +119,7 @@ class Node:
                         "alloc_cpus": alloc_cpus,
                         "alloc_memory": alloc_memory
                     })
-                elif not node_name is None and not gpu_type is None:
-                    print(f"Skipping node={node_name} with gpu_type={gpu_type} not in good_gpus={MachineInfo.good_gpus}")
+    
                 
                 node_name = line.split("=")[1].split()[0]
                 state = None
@@ -135,7 +134,8 @@ class Node:
                 alloc_memory = 0
 
             elif line.startswith("Gres=") and (Utils.get_cluster_type() == "trillium" or Utils.is_solar()):
-                if not any([MachineInfo.gpu_alias2name[g] in line for g in MachineInfo.good_gpus]):
+                if (not any([MachineInfo.gpu_alias2name[g] in line for g in MachineInfo.good_gpus])
+                    and not any([MachineInfo.gpu_alias2name[g] in line for g in MachineInfo.bad_gpus])):
                     print(f"no GPU for node={node_name}, line={line}")
                     continue
                 gres = line.split("=")[1].split(",")
@@ -215,8 +215,6 @@ class Node:
                 "alloc_cpus": alloc_cpus,
                 "alloc_memory": alloc_memory
             })
-        elif not node_name is None and not gpu_type is None:
-            print(f"Skipping node={node_name} with gpu_type={gpu_type} not in good_gpus={MachineInfo.good_gpus}")
 
         node_list = [Node(**n) for n in node_list if n["gpus"] is not None]
         return node_list
