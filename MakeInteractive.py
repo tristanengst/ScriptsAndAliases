@@ -65,7 +65,7 @@ if __name__ == "__main__":
             and not info.state in ["RUNNING", "COMPLETING"]}
 
     for jobid,extant_partitions in jobid_to_update2extant_partitions.items():
-        partitions = list(set(extant_partitions.split(",")) | {"interac"})
+        partitions = list(set(extant_partitions.split(",")) | {"interac,gpubase_interac"})
         partitions_str = ",".join(partitions)
 
         print(f"[INFO] Updating job {jobid} Partition={extant_partitions} -> {partitions_str}")

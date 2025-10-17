@@ -38,6 +38,8 @@ aliases = [
     "alias scb=\"python ~/.ScriptsAndAliases/Scb.py --job \"",
     "alias scu=\"python ~/.ScriptsAndAliases/Scu.py \"",
     "alias extract_job_ids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
+    "alias extract_jobids=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
+    "alias exj=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
 
     # LS a model without typing an annoying path
     "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py -m \"",
@@ -58,6 +60,7 @@ aliases = [
 
     "alias scancelb=\"python ~/.ScriptsAndAliases/Scancelb.py \"",
     "alias extract_uids=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
+    "alias exu=\"python ~/.ScriptsAndAliases/ExtractUIDs.py --jobs \"",
     "alias exclude_nodes=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py -n\"",
     "alias include_nodes=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py +n\"",
     "alias modify_node_exclusion=\"python ~/.ScriptsAndAliases/ModifyNodeExclusion.py \"",
