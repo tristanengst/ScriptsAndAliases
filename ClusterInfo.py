@@ -11,18 +11,23 @@ import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize
 
-def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5, good_gpus_only=False):
+def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5, good_gpus_only=False, max_time_to_show=None):
     """Returns a nice string representation of the resource info dictionaries."""
     strs = list()
-    for time,resource2info in time2resource2info.items():
-        resources = sorted(resource2info.keys(), key=lambda r: resource2info[r].max_time)
-        resources = sorted(resources, key=lambda r: resource2info[r].vram)
+
+    times = sorted(time2resource2info.keys(), key=lambda t: UtilsBase.time_to_hours(t))
+
+    for time in times:
+        resource2info = time2resource2info[time]
+        resources = sorted(resource2info.keys(), key=lambda r: resource2info[r].vram)
 
         for resource in resources:
-            if good_gpus_only and not any([r in MachineInfo.good_gpus for r in resource.split("/")]):
-                continue
-            
             info = resource2info[resource]
+            if good_gpus_only and not any([r in MachineInfo.good_gpus for r in UtilsBase.strip_right(resource, "-node").split("/")]):
+                continue
+
+            if not max_time_to_show is None and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600):
+                continue
 
             avail_color_scale = ["red"] + (["orange"] * 10) + ["yellow", "green"]
             avail_color = avail_color_scale[min(int((info.avail / info.total) * len(avail_color_scale)), len(avail_color_scale)-1)]
@@ -44,6 +49,14 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
                 s += "..." if len(info.free_nodes) > max_nodes_to_show else ""
 
             strs.append(s)
+
+    strs_ll = []
+    for idx,s in enumerate(strs):
+        if idx > 0 and idx % 4 == 0:
+            strs_ll.append("\n\t\t")
+        strs_ll.append(s)
+    strs = strs_ll
+
     s = "\t\t".join(strs)
     s = f"Free/Avail/Total:\t{s}"
     return s
@@ -144,6 +157,13 @@ def node_list_to_resources_info(*, nodes, args):
                 time2resource2info[node.max_time_str][resource_name].free += avail
                 time2resource2info[node.max_time_str][resource_name].avail += 0 if node.state == "down" else total
                 time2resource2info[node.max_time_str][resource_name].free_nodes += [node.name] if avail > 0 else []
+
+                # if resource_name.endswith("-node"):
+                #     print(f"[DEBUG] Node {node.name} with resource {resource_name}: total={total}, avail={avail}, free_nodes={time2resource2info[node.max_time_str][resource_name].free_nodes}")
+
+    # for t in time2resource2info.keys():
+    #     for r in time2resource2info[t].keys():
+    #         twrite(f"[DEBUG] Time {t}, resource={r} info={time2resource2info[t][r]}")
     
     return time2resource2info
 
@@ -284,7 +304,8 @@ class Node:
         result_nodes = list()
         for name,nodes in name2nodes.items():
             partition2max_time = {node.partition: node.max_time for node in nodes}
-            max_time_node = sorted(nodes, key=lambda n: n.max_time)[-1]
+            sorted_nodes = sorted(nodes, key=lambda n: n.partition)
+            max_time_node = sorted(sorted_nodes, key=lambda n: n.max_time)[-1]
             node_kwargs = copy.deepcopy(max_time_node.init_kwargs) | dict(partition2max_time=partition2max_time)
             result_nodes.append(Node(**node_kwargs))
         return result_nodes
@@ -437,7 +458,9 @@ def get_resource_info_summary():
     time2resource2info = aggregate_resource_infos(time2resource2info, args) if args.aggregate else time2resource2info
     s = resource_infos_to_str(time2resource2info,
         show_nodes=2 if Utils.get_cluster_type() in ["nibi", "solar", "solar1"] else 1,
-        max_nodes_to_show=args.max_nodes_to_show)
+        max_nodes_to_show=args.max_nodes_to_show,
+        good_gpus_only="good" in args.gpus,
+        max_time_to_show=args.max_time)
     return s
 
 def get_args(args=None):
@@ -453,10 +476,12 @@ def get_args(args=None):
         help="List of GPU counts to consider. 'all' means all available GPUs on a node can be allocated together.")
     P.add_argument("-n", "--nodes", action="store_true",
         help="If set, show node-level information.")
-    P.add_argument("--max_nodes_to_show", type=int, default=20 if Utils.is_solar() else 5,
+    P.add_argument("--max_nodes_to_show", type=int, default=20 if Utils.is_solar() else (5 if Utils.get_cluster_type() == "nibi" else 2),
         help="Maximum number of nodes to show per resource in the summary.")
     P.add_argument("--aggregate", choices=[0,1], type=int, default=int(Utils.is_solar()),
         help="If set, aggregate resources in a useful way for summarization.")
+    P.add_argument("--max_time", type=int, default=24,
+        help="If set, only consider nodes with max time less than or equal to this value when summarizing resources.")
     args = P.parse_args(args)
 
     args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
@@ -484,6 +509,9 @@ if __name__ == "__main__":
     #     for resource,info in resource2info.items():
     #         print(f"\tResource: {resource}:\t\ttotal={info.total}, avail={info.avail}, free={info.free}, vram={info.vram}GB")
     s = resource_infos_to_str(time2resource2info,
-        show_nodes=2, max_nodes_to_show=args.max_nodes_to_show)
+        show_nodes=2,
+        max_nodes_to_show=args.max_nodes_to_show,
+        good_gpus_only="good" in args.gpus,
+        max_time_to_show=args.max_time)
     print(f"\n[INFO] Summary:\n{s}")
     
