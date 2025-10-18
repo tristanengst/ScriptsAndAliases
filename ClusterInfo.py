@@ -214,6 +214,10 @@ class Node:
 
     def set_state(self):
         """Returns True if the node is available for scheduling."""
+        if self.name == "fc10515":
+            assert 0
+            print(f"[DEBUG] Special case for fc10515 state={self.state_}")
+
         down_strs = ["down", "drain", "fail", "unknown", "maint"]
         if any([ds in self.state_.lower() for ds in down_strs]):
             self.state = "down"
