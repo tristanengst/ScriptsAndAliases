@@ -228,6 +228,23 @@ def digits_after(s, substr):
             continue
     return None  # No numeric substring found
 
+def try_make_jsonable(x):
+    """Returns [x] converted to a JSONable thing as needed."""
+    if isinstance(x, dict):
+        return {try_make_jsonable(k): try_make_jsonable(v) for k,v in x.items()}
+    elif isinstance(x, argparse.Namespace):
+        return try_make_jsonable(vars(x))
+    elif isinstance(x, list):
+        return [try_make_jsonable(xi) for xi in x]
+    elif isinstance(x, tuple):
+        return tuple([try_make_jsonable(xi) for xi in x])
+    elif isinstance(x, set):
+        return list([try_make_jsonable(xi) for xi in x])
+    elif isinstance(x, (int, float, str, bool)) or x is None:
+        return x
+    else:
+        return str(x)
+
 def try_make_number(s):
     """Tries to convert [s] to an int or float, and returns [s] otherwise."""
     try:
@@ -264,8 +281,116 @@ def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
     sublists = [sep.join([s.ljust(chars_per_col) for s in sublist]) for sublist in sublists]
     return "\n".join(sublists)
 
+######################################################################################
+######################################################################################
+######################################################################################
 
 
+###### Colorization utilities ########################################################
+# See: https://jakob-bagterp.github.io/colorist-for-python/ansi-escape-codes/extended-256-colors/#extended-palette
+color2value_base = dict(
+    blue=21,
+    green=46,
+    yellow=226,
+    red=196,
+    purple=201,
+    lightblue=51,
+    white=231,
+)
+
+def get_color_scale(*, start, end, mid=None, num_colors=11, light_bias=0):
+    """Returns a list of [num_colors] going between [start] and [end].
+
+    Args:
+    start       -- start color name
+    end         -- end color name 
+    mid         -- mid color name. Not required for [num_colors] <= 6
+    num_colors  -- number of colors to return
+    light_bias  -- shifts the colors to be more grayscale (looks better on black background)
+    """
+    if num_colors < 2 or num_colors > 11:
+        raise ValueError(f"num_colors={num_colors} must be between 2 and 11")
+
+    start = start if isinstance(start, int) else color2value_base[start]
+    end = end if isinstance(end, int) else color2value_base[end]
+    end_color = reverse_dict(color2value_base)[end]
+    start_color = reverse_dict(color2value_base)[start]
+
+    # twrite(start=start, end=end, mid=mid, num_colors=num_colors, end_color=end_color, start_color=start_color)
+    
+    if num_colors >= 6 and mid is None:
+        mid = (end - start) // 2 + start
+    elif not mid is None:
+        mid = mid if isinstance(mid, int) else color2value_base[mid]
+    else:
+        pass
+        
+    if num_colors >= 6:
+        scale_delta1 = (mid - start) / 5
+        light_bias1_mul = (5+ abs(scale_delta1)) // 6 
+        scale_delta2 = (end - mid) / 5
+        light_bias2_mul = (5 + abs(scale_delta2)) // 6 
+        scale1 = [start + i * scale_delta1 + light_bias * light_bias1_mul for i in range(6)] # Total of six values, puts more resolution near start
+        scale2 = [mid + i * scale_delta2 + light_bias * light_bias2_mul for i in range(1,6)] # Total of five values, puts less resolution near end
+        scale = scale1 + scale2
+
+
+        # twrite(light_bias=light_bias, light_bias1_mul=light_bias1_mul, light_bias2_mul=light_bias2_mul, start_color=start_color, end_color=end_color, scale_delta1=scale_delta1, scale_delta2=scale_delta2, )
+    else:
+        scale_delta = (end - start) / 5
+        light_bias_mul = (5 + abs(scale_delta)) // 6
+        scale = [start + i * scale_delta + light_bias_mul * light_bias for i in range(7)]
+
+    
+    scale = [int(s) for s in scale]
+    # twrite(scale=scale, len_scale=len(scale))
+
+    scale_inner = scale[1:-1]
+    num_to_select = len(scale_inner) // (num_colors - 2)
+    scale_inner = scale_inner[::num_to_select]
+    scale_inner = scale_inner[:min(num_colors - 2, len(scale_inner))]
+
+    result = [scale[0]] + scale_inner + [scale[-1]]
+    return result
+
+color2value = {c: f"\033[38;5;{v}m" for c,v in (color2value_base | dict(
+    reset=0,
+    green1=46,
+    green2=40,
+    green3=34,
+    green4=118,
+    green5=154,
+    yellow1=190,
+    yellow2=226,
+    yellow3=220,
+    blue1=39,
+    blue2=27,
+    purple1=129,
+    purple2=165,  
+    orange=214,
+    red1=208,
+    red2=202,
+    red3=196,
+)).items()}
+
+def colorize(s, color="no_change"):
+    """Returns [s] colorized with ANSI escape codes."""
+    color = color2value[color] if color in color2value else color
+    color = f"\033[38;5;{color}m" if isinstance(color, int | float) else color
+    return s if color == "no_change" else f"{color}{s}\033[0m".strip()
+
+def decolorize(s):
+    """Returns [s] with ANSI escape codes removed, eg. so its length is correct."""
+    s = copy.deepcopy(s)
+    decolorized_s = ""
+    while len(s):
+        if s.startswith("\x1b["):
+            next_valid_idx = s.index("m") + 1
+        else:
+            next_valid_idx = 1
+            decolorized_s += s[0]
+        s = s[next_valid_idx:]
+    return decolorized_s
 
 
 
@@ -449,13 +574,13 @@ def time_to_hours(t): return time_to_seconds(t) / 3600
 def time_to_minutes(t): return time_to_seconds(t) / 60
 def time_to_str(t):
     """Returns time string [time_str] in our default way, ie. without days."""
-    s = time_to_seconds(t)
+    s = int(t) if isinstance(t, float | int) else time_to_seconds(t)
     h, m, s = s // 3600, (s % 3600) // 60, s % 60
     return f"{int(h)}:{int(m):02}:{int(s):02}"
 
 def time_to_pretty_str(t):
     """Returns XXHYYM for XX hours and YY minutes. Days are collapsed to hours."""
-    s = time_to_seconds(t)
+    s = int(t) if isinstance(t, float | int) else time_to_seconds(t)
     h = s // 3600
     m = (s % 3600) // 60
     h = str(h).zfill(max(2, len(str(h))+1))

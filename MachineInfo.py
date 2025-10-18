@@ -101,29 +101,60 @@ cluster2node2config = dict(
         h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb")),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True)))
 
+gpu2info = {
+    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True),
+    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True)} | dict(
+    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True),
+    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True),
+    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True),
+    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True),
+    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True),
+    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True),
+    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000", ddp=True),
+    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True),
+    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True),
+    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True),
+    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False),
+    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False),
+    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False),
+    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True),
+    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True),
+    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False),
+    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False),
+    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False))
 
-# Maps GPU type to the amount of VRAM it has.
-gpu2vram = {"2080": 8, "3090": 24} | dict(
-    p100=16, p100l=16,
-    q4000=8, q6000=24,
-    v100=16, v100l=32,
-    a5000=24, a6000=48, a40=48,
-    a100=80 if Utils.is_solar() else 40, a112=10, a123=20, a124=20,
-    l40s=48,
-    h100=80, h111=10, h122=20, h143=40
-)
+gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
+good_gpus = [k for k,v in gpu2info.items() if v["good"]]
+bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]
+gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
+gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()}
 
-good_gpus = ["3090", "v100", "v100l", "a5000", "a6000", "a40", "a100", "a123", "a124", "l40s", "h100", "h122", "h143"]
-bad_gpus = ["2080", "p100", "p100l", "q4000", "q6000", "a112", "h111"]
-gpu_alias2name = {"2080": "2080", "3090": "3090"} | dict(
-    h100="h100", h111="nvidia_h100_80gb_hbm3_1g.10gb", h122="nvidia_h100_80gb_hbm3_2g.20gb", h143="nvidia_h100_80gb_hbm3_3g.40gb",
-    l40s="l40s",
-    a100="a100", a112="a100_2g.10gb", a123="a100_3g.20gb", a124="a100_4g.20gb",
-    a6000="rtx_a6000", a5000="rtx_a5000", a40="a40",
-    v100="v100l", v100l="v100l",
-    p100="p100", p100l="p100l",
-    q6000="quadro_rtx_6000", q4000="quadro_rtx_4000")
-gpu_name2alias= {v: k for k,v in gpu_alias2name.items()}
+
+
+
+
+# # Maps GPU type to the amount of VRAM it has.
+# gpu2vram = {"2080": 8, "3090": 24} | dict(
+#     p100=16, p100l=16,
+#     q4000=8, q6000=24,
+#     v100=16, v100l=32,
+#     a5000=24, a6000=48, a40=48,
+#     a100=80 if Utils.is_solar() else 40, a112=10, a123=20, a124=20,
+#     l40s=48,
+#     h100=80, h111=10, h122=20, h143=40
+# )
+
+# good_gpus = ["3090", "v100", "v100l", "a5000", "a6000", "a40", "a100", "a123", "a124", "l40s", "h100", "h122", "h143"]
+# bad_gpus = ["2080", "p100", "p100l", "q4000", "q6000", "a112", "h111"]
+# gpu_alias2name = {"2080": "2080", "3090": "3090"} | dict(
+#     h100="h100", h111="nvidia_h100_80gb_hbm3_1g.10gb", h122="nvidia_h100_80gb_hbm3_2g.20gb", h143="nvidia_h100_80gb_hbm3_3g.40gb",
+#     l40s="l40s",
+#     a100="a100", a112="a100_2g.10gb", a123="a100_3g.20gb", a124="a100_4g.20gb",
+#     a6000="rtx_a6000", a5000="rtx_a5000", a40="a40",
+#     v100="v100l", v100l="v100l",
+#     p100="p100", p100l="p100l",
+#     q6000="quadro_rtx_6000", q4000="quadro_rtx_4000")
+# gpu_name2alias= {v: k for k,v in gpu_alias2name.items()}
 
 # Maps cluster names to unique prefixes for their compute nodes
 cluster2node_prefix = dict(narval="ng", cedar="cdr", solar="cs-venus", cs_apex="cs-apex", nibi="g", rorqual="rg", trillium="trig", fir="fc", solar1="cs-venus")

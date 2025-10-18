@@ -16,11 +16,12 @@ import subprocess
 import sys
 import time
 
+import ClusterInfo
 import FileFinding
-from ShowCluster import Node
+# from ShowCluster import Node
 import Utils
 import UtilsBase
-from UtilsBase import twrite
+from UtilsBase import twrite, colorize, decolorize, get_color_scale
 
 ##### Miscellaneous ##################################################################
 
@@ -28,113 +29,6 @@ from UtilsBase import twrite
 ######################################################################################
 ######################################################################################
 ######################################################################################
-
-##### Colorization utilities #########################################################
-# See: https://jakob-bagterp.github.io/colorist-for-python/ansi-escape-codes/extended-256-colors/#extended-palette
-color2value_base = dict(
-    blue=21,
-    green=46,
-    yellow=226,
-    red=196,
-    purple=201,
-    lightblue=51,
-    white=231,
-)
-
-def get_color_scale(*, start, end, mid=None, num_colors=11, light_bias=0):
-    """Returns a list of [num_colors] going between [start] and [end].
-
-    Args:
-    start       -- start color name
-    end         -- end color name 
-    mid         -- mid color name. Not required for [num_colors] <= 6
-    num_colors  -- number of colors to return
-    light_bias  -- shifts the colors to be more grayscale (looks better on black background)
-    """
-    if num_colors < 2 or num_colors > 11:
-        raise ValueError(f"num_colors={num_colors} must be between 2 and 11")
-
-    start = start if isinstance(start, int) else color2value_base[start]
-    end = end if isinstance(end, int) else color2value_base[end]
-    end_color = UtilsBase.reverse_dict(color2value_base)[end]
-    start_color = UtilsBase.reverse_dict(color2value_base)[start]
-
-    # twrite(start=start, end=end, mid=mid, num_colors=num_colors, end_color=end_color, start_color=start_color)
-    
-    if num_colors >= 6 and mid is None:
-        mid = (end - start) // 2 + start
-    elif not mid is None:
-        mid = mid if isinstance(mid, int) else color2value_base[mid]
-    else:
-        pass
-        
-    if num_colors >= 6:
-        scale_delta1 = (mid - start) / 5
-        light_bias1_mul = (5+ abs(scale_delta1)) // 6 
-        scale_delta2 = (end - mid) / 5
-        light_bias2_mul = (5 + abs(scale_delta2)) // 6 
-        scale1 = [start + i * scale_delta1 + light_bias * light_bias1_mul for i in range(6)] # Total of six values, puts more resolution near start
-        scale2 = [mid + i * scale_delta2 + light_bias * light_bias2_mul for i in range(1,6)] # Total of five values, puts less resolution near end
-        scale = scale1 + scale2
-
-
-        # twrite(light_bias=light_bias, light_bias1_mul=light_bias1_mul, light_bias2_mul=light_bias2_mul, start_color=start_color, end_color=end_color, scale_delta1=scale_delta1, scale_delta2=scale_delta2, )
-    else:
-        scale_delta = (end - start) / 5
-        light_bias_mul = (5 + abs(scale_delta)) // 6
-        scale = [start + i * scale_delta + light_bias_mul * light_bias for i in range(7)]
-
-    
-    scale = [int(s) for s in scale]
-    # twrite(scale=scale, len_scale=len(scale))
-
-    scale_inner = scale[1:-1]
-    num_to_select = len(scale_inner) // (num_colors - 2)
-    scale_inner = scale_inner[::num_to_select]
-    scale_inner = scale_inner[:min(num_colors - 2, len(scale_inner))]
-
-    result = [scale[0]] + scale_inner + [scale[-1]]
-    return result
-
-color2value = {c: f"\033[38;5;{v}m" for c,v in (color2value_base | dict(
-    reset=0,
-    green1=46,
-    green2=40,
-    green3=34,
-    green4=118,
-    green5=154,
-    yellow1=190,
-    yellow2=226,
-    yellow3=220,
-    blue1=39,
-    blue2=27,
-    purple1=129,
-    purple2=165,  
-    orange=214,
-    red1=208,
-    red2=202,
-    red3=196,
-)).items()}
-
-def colorize(s, color="no_change"):
-    """Returns [s] colorized with ANSI escape codes."""
-    color = color2value[color] if color in color2value else color
-    color = f"\033[38;5;{color}m" if isinstance(color, int | float) else color
-    return s if color == "no_change" else f"{color}{s}\033[0m".strip()
-
-def decolorize(s):
-    """Returns [s] with ANSI escape codes removed, eg. so its length is correct."""
-    s = copy.deepcopy(s)
-    decolorized_s = ""
-    while len(s):
-        if s.startswith("\x1b["):
-            next_valid_idx = s.index("m") + 1
-        else:
-            next_valid_idx = 1
-            decolorized_s += s[0]
-        s = s[next_valid_idx:]
-    return decolorized_s
-
 def colorize_submit_times(job_infos):
     """Returns each job info in [job_infos] with the time left colorized."""
     cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
@@ -820,8 +714,8 @@ def build_record(*, job_datas, account2lfs):
     return dict(date=datetime.now().strftime("%Y-%m-%d-%H:%M:%S"),
         time=time.time(), # Maybe useful for easy sorting? Idk.
         account2lfs=account2lfs,
-        job_data=job_datas,
-        user=os.environ.user,  # Maybe useful if multiple people run this and end up with different LevelFS user fields?
+        job_data=UtilsBase.try_make_jsonable(job_datas),
+        user=os.environ["USER"],  # Maybe useful if multiple people run this and end up with different LevelFS user fields?
         )
 
 def get_cluster_usage_str(job_infos=None, cur_user=False):
@@ -861,7 +755,7 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     gpu_data.total = gpu_data.running + gpu_data.allocated
     gpu_data.total_user = gpu_data.running_user + gpu_data.allocated_user
     
-    s = f"GPUS:    {os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
+    s = f"GPUS:\t\t\t{os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
     s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
     return s
 
@@ -1057,8 +951,7 @@ if __name__ == "__main__":
         for job_data in job_datas:
             job_name_ = "" if job_data.name.startswith("\n\t\t") else job_data.name.strip()
             col2max_chars["name"] = max(col2max_chars["name"], len(job_name_))
-    
-    
+        
     if args.color:
         job_datas = colorize_queues(job_datas) if "queue" in col2max_chars else job_datas
         job_datas = colorize_time_lefts(job_datas) if "time_left" in col2max_chars else job_datas
@@ -1078,10 +971,10 @@ if __name__ == "__main__":
     if Utils.is_slurm():
         state2count = count_jobs_by_state(job_datas)
         job_count_str = format_job_counts_by_state(state2count)
-        meta_str += "\n\t|\t" + job_count_str
+        meta_str += "\n\t| " + job_count_str
     if Utils.is_cc():
         usage_str = get_cluster_usage_str(job_infos=job_datas, cur_user=not args.users)
-        meta_str += "\n\t|\t" + usage_str
+        meta_str += "\n\t| " + usage_str
     
     if args.verbose:
         print(meta_str)
@@ -1091,14 +984,14 @@ if __name__ == "__main__":
         account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
         account2lfs_str = {a: {k: f"{l:.2f}" if isinstance(l, float) else str(l) for k,l in lfs.items()} for a,lfs in account2lfs.items() if not lfs["group"] is None}
         level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
-        level_fs_str = "\t|\tLevelFS: " + "\t".join(level_fs_strs)
+        level_fs_str = "\t| LevelFS:\t\t" + "\t".join(level_fs_strs)
         level_fs_str = level_fs_str.replace("_gpu", "")
-        meta_str2 = level_fs_str
+        meta_str2 = level_fs_str + "\n"
     elif Utils.is_solar():
         account2lfs = None
-        meta_str2 = ""
+        meta_str2 = ""    
     
-    meta_str2 +=  "\t|\t" + Node.cluster_stats_to_str()
+    meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
     if args.verbose:
         print(meta_str2)
 
