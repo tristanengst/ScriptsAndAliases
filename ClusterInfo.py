@@ -11,7 +11,7 @@ import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize
 
-def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5):
+def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5, good_gpus_only=False):
     """Returns a nice string representation of the resource info dictionaries."""
     strs = list()
     for time,resource2info in time2resource2info.items():
@@ -19,6 +19,9 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5)
         resources = sorted(resources, key=lambda r: resource2info[r].vram)
 
         for resource in resources:
+            if good_gpus_only and not any([r in MachineInfo.good_gpus for r in resource.split("/")]):
+                continue
+            
             info = resource2info[resource]
 
             avail_color_scale = ["red"] + (["orange"] * 10) + ["yellow", "green"]
@@ -28,7 +31,9 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5)
             free_color = "red" if info.free == 0 else ("green" if (info.free / info.avail) <= 0.1 else "lightblue")
             free_str = colorize(f"({info.free}/", free_color)
 
-            s = f"{time}_{resource}={free_str}{avail_total_str}"
+            time_str = "" if Utils.is_solar() else f"{time}_"
+
+            s = f"{resource}={free_str}{avail_total_str}"
 
             if ((resource.endswith("-node") and show_nodes >= 1 and info.free_nodes)
                 or (not resource.endswith("-node") and show_nodes >= 2 and info.free_nodes)):
@@ -43,6 +48,53 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5)
     s = f"Free/Avail/Total:\t{s}"
     return s
 
+def aggregate_resource_infos(time2resource2info, args):
+    """Returns a different resource info dictionary where resources are aggregated
+    in a useful way.
+    """
+    agg_time2resource2info = defaultdict(lambda: defaultdict(lambda: argparse.Namespace(
+        total=0, avail=0, free=0, vram=None, resources_per_node=None, max_time=None, free_nodes=[])))
+
+    all_gpus = UtilsBase.flatten([info.gpu for time,resource2info in time2resource2info.items() for info in resource2info.values()])
+    all_gpus = set(all_gpus)
+    good_gpus = [g for g in all_gpus if MachineInfo.gpu2info[g]["good"]]
+    good_gpus = sorted(good_gpus, key=lambda g: MachineInfo.gpu2vram[g])
+    good_gpu_str = "/".join(good_gpus) if len(good_gpus) > 0 else "good-gpu"
+
+    bad_gpus = [g for g in all_gpus if not MachineInfo.gpu2info[g]["good"]]
+    bad_gpus = sorted(bad_gpus, key=lambda g: MachineInfo.gpu2vram[g])
+    bad_gpu_str = "/".join(bad_gpus) if len(bad_gpus) > 0 else "bad-gpu"
+
+    resourc2agg_resource = dict()
+    for time,resource2info in time2resource2info.items():
+        for resource,info in resource2info.items():
+            resourc2agg_resource[resource] = f"{info.num_gpus}x" + (good_gpu_str if info.gpu in good_gpus else bad_gpu_str)
+    
+    for time,resource2info in time2resource2info.items():
+        agg_resource2infos = defaultdict(list)
+        for r,info in resource2info.items():
+            agg_resource2infos[resourc2agg_resource[r]].append(info)
+
+        for agg_resource,infos in agg_resource2infos.items():
+        
+            max_time = min([info.max_time for info in infos])
+            vram = min([info.vram for info in infos if info.vram is not None])
+            resources_per_node = min([info.resources_per_node for info in infos if info.resources_per_node is not None])
+            free_nodes = list(set(UtilsBase.flatten([info.free_nodes for info in infos])))
+            total = sum([info.total for info in infos])
+            avail = sum([info.avail for info in infos])
+            free = sum([info.free for info in infos])
+
+            agg_time2resource2info[time][agg_resource].max_time = max_time
+            agg_time2resource2info[time][agg_resource].vram = vram
+            agg_time2resource2info[time][agg_resource].resources_per_node = resources_per_node
+            agg_time2resource2info[time][agg_resource].free_nodes = free_nodes
+            agg_time2resource2info[time][agg_resource].total = total
+            agg_time2resource2info[time][agg_resource].avail = avail
+            agg_time2resource2info[time][agg_resource].free = free
+    return agg_time2resource2info
+
+
 def node_list_to_resources_info(*, nodes, args):
     """Returns how many instances of each resource can be allocated within the given
     node list, separated by maximum time. If a certain resource could be counted
@@ -54,8 +106,8 @@ def node_list_to_resources_info(*, nodes, args):
     args        -- Namespace giving [gpu_counts] ....
     """
     time2resource2info = defaultdict(lambda: defaultdict(lambda: argparse.Namespace(
-        total=0, avail=0, free=0,
-        vram=None, gpu=None, gpus_per_node=None, max_time=None,
+        total=0, avail=0, free=0, num_gpus=None, gpu=None,
+        vram=None, resources_per_node=None, max_time=None,
         free_nodes=[])))
 
     node2info = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
@@ -67,7 +119,7 @@ def node_list_to_resources_info(*, nodes, args):
 
                 node2info_key = node.name if Utils.is_solar() else gpu
 
-                if (not gpu in args.gpus
+                if ((not gpu in args.gpus and not "/" in gpu)
                     or not gpu2info[gpu].ddp and (gpu_count == "all" or gpu_count > 1)):
                     continue
                 else:
@@ -85,8 +137,9 @@ def node_list_to_resources_info(*, nodes, args):
 
                 time2resource2info[node.max_time_str][resource_name].max_time = node.max_time
                 time2resource2info[node.max_time_str][resource_name].gpu = gpu
+                time2resource2info[node.max_time_str][resource_name].num_gpus = gpu_count
                 time2resource2info[node.max_time_str][resource_name].vram = MachineInfo.gpu2vram[gpu] * gpu_count
-                time2resource2info[node.max_time_str][resource_name].gpus_per_node = gpu_count
+                time2resource2info[node.max_time_str][resource_name].resources_per_node = gpu_count // total
                 time2resource2info[node.max_time_str][resource_name].total += total
                 time2resource2info[node.max_time_str][resource_name].free += avail
                 time2resource2info[node.max_time_str][resource_name].avail += 0 if node.state == "down" else total
@@ -148,8 +201,8 @@ class Node:
         """Returns the fraction of the node that can be used."""
         cpus_used,self.avail_cpus,_,self.total_cpus = [int(x) for x in self.cpu_state_.split("/")]
 
-        self.avail_memory = (int(self.free_mem_) / 1024) if self.free_mem_.isnumeric() else 0
-        self.total_memory = (int(self.memory_) / 1024) if self.memory_.isnumeric() else 1
+        self.avail_memory = (int(self.free_mem_) / 1000) if self.free_mem_.isnumeric() else 0
+        self.total_memory = (int(self.memory_) / 1000) if self.memory_.isnumeric() else 1
 
         def parse_gres(gres_str):
             """Parses a gres string into a list of resources and counts. Resources are
@@ -183,11 +236,11 @@ class Node:
         
         for gpu in sorted_gpus:
             resource_info = node2info[self.name] if Utils.is_solar() else node2info[gpu]
+            
             avail_gpus = self.gpu2count_total[gpu] - self.gpu2count_used[gpu]
 
             cpu_limited_gpus = int(avail_cpus_ // resource_info["cpus_per_gpu"])
             mem_limited_gpus = int(avail_memory_ // resource_info["mem_per_gpu"])
-
             self.gpu2avail[gpu] = min(avail_gpus, cpu_limited_gpus, mem_limited_gpus)
             avail_cpus_ -= self.gpu2avail[gpu] * resource_info["cpus_per_gpu"]
             avail_memory_ -= self.gpu2avail[gpu] * resource_info["mem_per_gpu"]
@@ -198,11 +251,6 @@ class Node:
             self.avail_cpus = 0
             self.avail_memory = 0
             self.gpu2avail = {k: 0 for k in self.gpu2count_total.keys()}
-
-
-
-
-
 
         
     def __str__(self):    
@@ -241,6 +289,42 @@ class Node:
             result_nodes.append(Node(**node_kwargs))
         return result_nodes
 
+    # @staticmethod
+    # def sanitize_node_list_across_gpus(node_list):
+    #     """In a list of nodes there could be many GPU types represented. We would like
+    #     to compress them, eg. have one GPU type for if the GPU is good or not.
+
+    #     Assumes we have run sanitize_node_list_across_partitions() first.
+    #     """
+    #     all_gpus = UtilsBase.flatten([list(node.gpu2count_total.keys()) for node in node_list])
+    #     all_gpus = set(all_gpus)
+    #     good_gpus = [g for g in all_gpus if MachineInfo.gpu2info[g]["good"]]
+    #     good_gpus = sorted(good_gpus, key=lambda g: MachineInfo.gpu2vram[g])
+    #     good_gpu_str = "/".join(good_gpus) if len(good_gpus) > 0 else "good-gpu"
+
+    #     bad_gpus = [g for g in all_gpus if not MachineInfo.gpu2info[g]["good"]]
+    #     bad_gpus = sorted(bad_gpus, key=lambda g: MachineInfo.gpu2vram[g])
+    #     bad_gpu_str = "/".join(bad_gpus) if len(bad_gpus) > 0 else "bad-gpu"
+
+    #     resource2nodes = defaultdict(list)
+    #     for node in node_list:
+    #         for gpu in node.gpu2count_total.keys():
+    #             resource_key = good_gpu_str if gpu in good_gpus else bad_gpu_str
+    #             resource2nodes[resource_key].append(node)
+
+    #     result_nodes = []
+    #     for resource_key,nodes in resource2nodes.items():
+
+    #         min_time = min([node.max_time for node in nodes])
+    #         for node in nodes:
+    #             new_node = copy.deepcopy(node)
+    #             new_node.gpu2count_total = {resource_key: sum(node.gpu2count_total.values())}
+    #             new_node.gpu2avail = {resource_key: sum(node.gpu2avail.values())}
+    #             new_node.max_time = min_time
+    #             new_node.max_time_str = UtilsBase.time_to_pretty_str(new_node.max_time * 3600)
+    #             result_nodes.append(new_node)
+    #     return result_nodes
+            
 def cluster_to_partition_str(args):
     """Returns the partitions of interest on the cluster."""
     if args.partitions:
@@ -298,14 +382,17 @@ def get_nodes_from_sinfo_data(args):
     key2si_format_O = dict(
         partition="PartitionName:32",
         max_time="Time:32",
+        # state="StateComplete:128",
         name="NodeList:1024", # Name of the node
-        state="StateComplete:32",
         cpu_state="CPUsState:32",
         gres="Gres:512",
         gres_used="GresUsed:512",
         free_mem="FreeMem:32",
         memory="Memory:32",
+        allocated_mem="AllocMem:32",
     )
+
+    key2si_format_O |= dict(state="StateComplete:32") if not Utils.is_solar() else dict()
 
     si_format_strs = ",".join(key2si_format_O.values())
     nodes_str = cluster_to_node_list_str()
@@ -333,6 +420,10 @@ def get_nodes_from_sinfo_data(args):
 
     line_dicts = [dict(zip(key2si_format_O.keys(), line)) for line in si_lines]
     line_dicts = [ld | dict(correct_parse=all([k in ld for k in key2si_format_O.keys()])) for ld in line_dicts]
+    line_dicts = [ld | dict(state="up") if Utils.is_solar() and "state" not in ld else ld for ld in line_dicts]
+
+    # In practice, this might be more correct!
+    line_dicts = [ld | dict(free_mem=str(int(ld["memory"]) - int(ld["allocated_mem"]))) for ld in line_dicts]
 
     nodes = [Node(**ld) for ld in line_dicts]
     nodes = Node.sanitize_node_list_across_partitions(nodes)
@@ -343,7 +434,10 @@ def get_resource_info_summary():
     args = get_args([])
     nodes = get_nodes_from_sinfo_data(args)
     time2resource2info = node_list_to_resources_info(nodes=nodes, args=args)
-    s = resource_infos_to_str(time2resource2info, show_nodes=2 if Utils.get_cluster_type() in ["nibi", "solar", "solar1"] else 1)
+    time2resource2info = aggregate_resource_infos(time2resource2info, args) if args.aggregate else time2resource2info
+    s = resource_infos_to_str(time2resource2info,
+        show_nodes=2 if Utils.get_cluster_type() in ["nibi", "solar", "solar1"] else 1,
+        max_nodes_to_show=args.max_nodes_to_show)
     return s
 
 def get_args(args=None):
@@ -359,13 +453,14 @@ def get_args(args=None):
         help="List of GPU counts to consider. 'all' means all available GPUs on a node can be allocated together.")
     P.add_argument("-n", "--nodes", action="store_true",
         help="If set, show node-level information.")
-    P.add_argument("--max_nodes_to_show", type=int, default=5,
+    P.add_argument("--max_nodes_to_show", type=int, default=20 if Utils.is_solar() else 5,
         help="Maximum number of nodes to show per resource in the summary.")
+    P.add_argument("--aggregate", choices=[0,1], type=int, default=int(Utils.is_solar()),
+        help="If set, aggregate resources in a useful way for summarization.")
     args = P.parse_args(args)
 
     args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
     if "good" in args.gpus:
-        args.gpus = [g for g in args.gpus if not g == "good"]
         args.gpus += [g for g in MachineInfo.gpu2info.keys() if MachineInfo.gpu2info[g]["good"]]
     args.gpu_counts = [int(gc) if str(gc).isnumeric() else gc for gc in args.gpu_counts]
 
@@ -376,17 +471,19 @@ if __name__ == "__main__":
     nodes = get_nodes_from_sinfo_data(args)
 
     if args.nodes:
-        twrite("\n[INFO] Node information:")
-        node_str = "\n".join([str(node) for node in nodes])
-        twrite(node_str)
+        twrite("\n[INFO] Node information:\n" + "\n".join([str(node) for node in nodes]))
 
     time2resource2info = node_list_to_resources_info(nodes=nodes, args=args)
+
+    time2resource2info = aggregate_resource_infos(time2resource2info, args) if args.aggregate else time2resource2info
+
 
     # print("\n[INFO] Resource availability by max time:")
     # for time,resource2info in time2resource2info.items():
     #     print(f"Max time: {time}")
     #     for resource,info in resource2info.items():
     #         print(f"\tResource: {resource}:\t\ttotal={info.total}, avail={info.avail}, free={info.free}, vram={info.vram}GB")
-    s = resource_infos_to_str(time2resource2info, show_nodes=2)
+    s = resource_infos_to_str(time2resource2info,
+        show_nodes=2, max_nodes_to_show=args.max_nodes_to_show)
     print(f"\n[INFO] Summary:\n{s}")
     
