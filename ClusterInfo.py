@@ -17,6 +17,8 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
 
     times = sorted(time2resource2info.keys(), key=lambda t: UtilsBase.time_to_hours(t))
 
+    time2printed_resources = defaultdict(list)
+
     for time in times:
         resource2info = time2resource2info[time]
         resources = sorted(resource2info.keys(), key=lambda r: resource2info[r].vram)
@@ -27,8 +29,9 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
                 # print(f"[DEBUG] Skipping resource {resource} because it's not good GPUs only")
                 continue
 
-            if not max_time_to_show is None and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600) and Utils.get_cluster_type() in ["fir", "rorqual", "narval"]:
-                # print(f"[DEBUG] Skipping resource {resource} because its max time {info.max_time} exceeds max_time_to_show {max_time_to_show}")
+            if (not max_time_to_show is None
+                and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600)
+                and any([resource in time2printed_resources[t] for t in times])):
                 continue
 
             avail_color_scale = ["red"] + (["orange"] * 10) + ["yellow", "green"]
@@ -51,6 +54,7 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
                 s += "..." if len(info.free_nodes) > max_nodes_to_show else ""
 
             strs.append(s)
+            time2printed_resources[time].append(resource)
 
     strs_ll = []
     for idx,s in enumerate(strs):
