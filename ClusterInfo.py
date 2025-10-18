@@ -358,7 +358,7 @@ def cluster_to_partition_str(args):
         return ",".join(args.partitions)
 
     if Utils.get_cluster_type() == "trillium":
-        result ["compute_full_node"]
+        result = ["compute_full_node"]
     elif Utils.is_solar():
         result = ["cs-gpu-research"]
     elif Utils.is_cc():
