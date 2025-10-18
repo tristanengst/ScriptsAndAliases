@@ -119,6 +119,7 @@ aliases = [
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
+    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
     
     "# END USEFUL ML ALIASES"]
 
