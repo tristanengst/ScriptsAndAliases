@@ -31,7 +31,7 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
 
             if (not max_time_to_show is None
                 and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600)
-                and any([resource in time2printed_resources[t] for t in times])):
+                and (any([resource in time2printed_resources[t] for t in times]) if Utils.get_cluster_type() == "fir" else False)):
                 continue
 
             avail_color_scale = ["red"] + (["orange"] * 10) + ["yellow", "green"]
@@ -54,17 +54,16 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
                 s += "..." if len(info.free_nodes) > max_nodes_to_show else ""
 
             strs.append(s)
-            time2printed_resources[time].append(resource)
+            time2printed_resources[time].append(s)
 
-    strs_ll = []
-    for idx,s in enumerate(strs):
-        if idx > 0 and idx % 4 == 0:
-            strs_ll.append("\n\t\t")
-        strs_ll.append(s)
-    strs = strs_ll
 
-    s = "\t\t".join(strs)
-    s = f"Free/Avail/Total:\t{s}"
+    to_print = ""
+    max_str_len = max([len(s) for s in strs]) if len(strs) > 0 else 0
+    for idx,(time,resource_strs) in enumerate(time2printed_resources.items()):
+        to_print += "\n\t\t\t" if idx > 0 else ""
+        to_print += "".join([r.ljust(max_str_len) + "\t\t" for r in resource_strs])
+    
+    s = f"Free/Avail/Total:\t{to_print}"
     return s
 
 def aggregate_resource_infos(time2resource2info, args):
@@ -140,6 +139,7 @@ def node_list_to_resources_info(*, nodes, args):
 
                 if ((not gpu in args.gpus and not "/" in gpu)
                     or not gpu2info[gpu].ddp and (gpu_count == "all" or gpu_count > 1)):
+                    # print(f"[DEBUG] Skipping GPU {gpu} on node {node.name} for gpu_count={gpu_count} node={node}")
                     continue
                 else:
                     total = node.gpu2count_total[gpu]
@@ -511,11 +511,11 @@ if __name__ == "__main__":
     # print(time2resource2info)
 
 
-    # print("\n[INFO] Resource availability by max time:")
-    # for time,resource2info in time2resource2info.items():
-    #     print(f"Max time: {time}")
-    #     for resource,info in resource2info.items():
-    #         print(f"\tResource: {resource}:\t\ttotal={info.total}, avail={info.avail}, free={info.free}, vram={info.vram}GB")
+    print("\n[INFO] Resource availability by max time:")
+    for time,resource2info in time2resource2info.items():
+        print(f"Max time: {time}")
+        for resource,info in resource2info.items():
+            print(f"\tResource: {resource}:\t\ttotal={info.total}, avail={info.avail}, free={info.free}, vram={info.vram}GB")
     s = resource_infos_to_str(time2resource2info,
         show_nodes=2,
         max_nodes_to_show=args.max_nodes_to_show,
