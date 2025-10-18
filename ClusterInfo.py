@@ -45,8 +45,10 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
 
             s = f"{time_str}{resource}={free_str}{avail_total_str}"
 
-            if ((resource.endswith("-node") and show_nodes >= 1 and info.free_nodes)
+            if ((resource.endswith("-node") and show_nodes >= 1 and len(info.free_nodes))
                 or (not resource.endswith("-node") and show_nodes >= 2 and info.free_nodes)):
+
+                print(info)
 
                 free_nodes = info.free_nodes[:max_nodes_to_show]
                 free_nodes = [UtilsBase.strip_left(n, "cs-") for n in free_nodes] if Utils.is_solar() else free_nodes
@@ -138,37 +140,37 @@ def node_list_to_resources_info(*, nodes, args):
 
                 if ((not gpu in args.gpus and not "/" in gpu)
                     or not gpu2info[gpu].ddp and (gpu_count == "all" or gpu_count > 1)):
-                    # print(f"[DEBUG] Skipping GPU {gpu} on node {node.name} for gpu_count={gpu_count} node={node}")
                     continue
                 else:
                     total = node.gpu2count_total[gpu]
                     avail = node.gpu2avail[gpu]
 
+                gpus_per_node = MachineInfo.cluster2node2config[Utils.get_cluster_type()][node2info_key]["gpus_per_node"]
+
                 if gpu_count == "all" or gpu_count == -1:
-                    gpu_count = MachineInfo.cluster2node2config[Utils.get_cluster_type()][node2info_key]["gpus_per_node"]
+                    full_node = True
+                    gpu_count = gpus_per_node
                     resource_name = f"{gpu}-node"
                 else:
+                    full_node = False
                     resource_name = f"{gpu_count}x{gpu}" if gpu_count > 1 else gpu
                 
                 total = total // gpu_count
                 avail = avail // gpu_count
 
+                # When looking at full nodes, we can very easily see if they are
+                # actually idle or just weirdly allocated.
+                avail = 0 if full_node and not node.state == "idle" else avail
+
                 time2resource2info[node.max_time_str][resource_name].max_time = node.max_time
                 time2resource2info[node.max_time_str][resource_name].gpu = gpu
                 time2resource2info[node.max_time_str][resource_name].num_gpus = gpu_count
                 time2resource2info[node.max_time_str][resource_name].vram = MachineInfo.gpu2vram[gpu] * gpu_count
-                time2resource2info[node.max_time_str][resource_name].resources_per_node = gpu_count // total
+                time2resource2info[node.max_time_str][resource_name].resources_per_node = gpus_per_node // gpu_count
                 time2resource2info[node.max_time_str][resource_name].total += total
                 time2resource2info[node.max_time_str][resource_name].free += avail
                 time2resource2info[node.max_time_str][resource_name].avail += 0 if node.state == "down" else total
-                time2resource2info[node.max_time_str][resource_name].free_nodes += [node.name] if avail > 0 else []
-
-                # if resource_name.endswith("-node"):
-                #     print(f"[DEBUG] Node {node.name} with resource {resource_name}: total={total}, avail={avail}, free_nodes={time2resource2info[node.max_time_str][resource_name].free_nodes}")
-
-    # for t in time2resource2info.keys():
-    #     for r in time2resource2info[t].keys():
-    #         twrite(f"[DEBUG] Time {t}, resource={r} info={time2resource2info[t][r]}")
+                time2resource2info[node.max_time_str][resource_name].free_nodes += [node.name] if (avail > 0 and not node.state == "down") else []
     
     return time2resource2info
 
@@ -214,10 +216,6 @@ class Node:
 
     def set_state(self):
         """Returns True if the node is available for scheduling."""
-        if self.name == "fc10515":
-            assert 0
-            print(f"[DEBUG] Special case for fc10515 state={self.state_}")
-
         down_strs = ["down", "drain", "fail", "unknown", "maint"]
         if any([ds in self.state_.lower() for ds in down_strs]):
             self.state = "down"
