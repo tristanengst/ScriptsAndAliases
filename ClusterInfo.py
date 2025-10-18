@@ -24,9 +24,11 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
         for resource in resources:
             info = resource2info[resource]
             if good_gpus_only and not any([r in MachineInfo.good_gpus for r in UtilsBase.strip_right(resource, "-node").split("/")]):
+                # print(f"[DEBUG] Skipping resource {resource} because it's not good GPUs only")
                 continue
 
-            if not max_time_to_show is None and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600):
+            if not max_time_to_show is None and info.max_time > UtilsBase.time_to_hours(max_time_to_show * 3600) and Utils.get_cluster_type() in ["fir", "rorqual", "narval"]:
+                # print(f"[DEBUG] Skipping resource {resource} because its max time {info.max_time} exceeds max_time_to_show {max_time_to_show}")
                 continue
 
             avail_color_scale = ["red"] + (["orange"] * 10) + ["yellow", "green"]
@@ -501,6 +503,8 @@ if __name__ == "__main__":
     time2resource2info = node_list_to_resources_info(nodes=nodes, args=args)
 
     time2resource2info = aggregate_resource_infos(time2resource2info, args) if args.aggregate else time2resource2info
+
+    # print(time2resource2info)
 
 
     # print("\n[INFO] Resource availability by max time:")
