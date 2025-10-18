@@ -11,7 +11,7 @@ import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize
 
-def resource_infos_to_str(time2resource2info, show_nodes=0):
+def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5):
     """Returns a nice string representation of the resource info dictionaries."""
     strs = list()
     for time,resource2info in time2resource2info.items():
@@ -33,8 +33,10 @@ def resource_infos_to_str(time2resource2info, show_nodes=0):
             if ((resource.endswith("-node") and show_nodes >= 1 and info.free_nodes)
                 or (not resource.endswith("-node") and show_nodes >= 2 and info.free_nodes)):
 
-                free_nodes = [UtilsBase.strip_left(n, "cs-") for n in info.free_nodes] if Utils.is_solar() else info.free_nodes
+                free_nodes = info.free_nodes[:max_nodes_to_show]
+                free_nodes = [UtilsBase.strip_left(n, "cs-") for n in free_nodes] if Utils.is_solar() else free_nodes
                 s += f" ({','.join(free_nodes)})"
+                s += "..." if len(info.free_nodes) > max_nodes_to_show else ""
 
             strs.append(s)
     s = "\t\t".join(strs)
@@ -107,7 +109,8 @@ class Node:
     memory      -- the total memory on the node
     partition2max_time -- (optional) dictionary mapping partitions the node can be allocated on to their max times
     """    
-    def __init__(self, *, name, partition, max_time, state, cpu_state, gres, gres_used, free_mem, memory, partition2max_time=None, **kwargs):
+    def __init__(self, *, name, partition, max_time, state, cpu_state, gres, gres_used, free_mem, memory,
+        partition2max_time=None, correct_parse=True, **kwargs):
         self.init_kwargs = dict(name=name, partition=partition, max_time=max_time, state=state, cpu_state=cpu_state,
             gres=gres, gres_used=gres_used, free_mem=free_mem, memory=memory, partition2max_time=partition2max_time)
         
@@ -238,13 +241,6 @@ class Node:
             result_nodes.append(Node(**node_kwargs))
         return result_nodes
 
-
-
-
-
-
-        
-
 def cluster_to_partition_str(args):
     """Returns the partitions of interest on the cluster."""
     if args.partitions:
@@ -278,7 +274,7 @@ def cluster_to_node_list_str():
     elif Utils.get_cluster_type() == "nibi":
         result = "g[01-36]"
     elif Utils.get_cluster_type() == "fir":
-        result = "fc[10601-10607,10609-10620,10701-10720,10901-10920,11001-11020],fc[10101-10120,10201-10208,10210-10220,10402-10420,10501-10506,10508-10514,10516,10518-10520],fc[10209,10401,10507,10515,10517],fc10608"
+        result = "fc[10601-10607,10609-10620,10701-10720,10901-10920,11001-11020],fc[10101-10120,10201-10208,10210-10220,10402-10420,10501-10506,10508-10514,10516,10518-10520],fc[10209,10401,10507,10515,10517]"
     elif Utils.get_cluster_type() == "rorqual":
         result = "rg[31501-31503,31601-31609],rg[12501-12503,12601-12603,12701-12703,12801-12803,12901-12903,13001-13003,13101-13103,13201-13203,13301-13303,13401-13403,13501-13503,13601-13603],rg[21701-21708,21801-21807,31701-31703,31801-31803,31901-31903,32001-32003,32101-32103,32201-32203,32301-32303,32401-32403,32501-32503,32601-32603]"
     elif Utils.get_cluster_type() == "narval":
@@ -290,11 +286,12 @@ def cluster_to_node_list_str():
     # whitespace and integers. Then split on whitespace to get all the individual node
     # numbers. This isn't all the nodes in the cluster, but we do have a guaruntee
     # that it includes the smallest- and largest-indexed GPU nodes.
-    result_numbers = [c if c.isdigit() else " " for c in result]
-    result_numbers = "".join(result_numbers).split()
-    result_numbers = [int(rn) for rn in result_numbers]
-    min_node, max_node = min(result_numbers), max(result_numbers)
-    return MachineInfo.cluster2node_prefix[Utils.get_cluster_type()] + f"[{min_node}-{max_node}]"
+    # result_numbers = [c if c.isdigit() else " " for c in result]
+    # result_numbers = "".join(result_numbers).split()
+    # result_numbers = [int(rn) for rn in result_numbers]
+    # min_node, max_node = min(result_numbers), max(result_numbers)
+    # return MachineInfo.cluster2node_prefix[Utils.get_cluster_type()] + f"[{min_node}-{max_node}]"
+    return result
 
 def get_nodes_from_sinfo_data(args):
     """Returns a list of Node objects representing the nodes on the cluster."""
@@ -313,7 +310,7 @@ def get_nodes_from_sinfo_data(args):
     si_format_strs = ",".join(key2si_format_O.values())
     nodes_str = cluster_to_node_list_str()
     partitions_str = cluster_to_partition_str(args)
-    si_cmd = f"sinfo -h -N --partition={partitions_str} --nodes={nodes_str}  -O {si_format_strs}"
+    si_cmd = f"sinfo -N --partition={partitions_str} --nodes={nodes_str}  -O '{si_format_strs}'"
 
     _ = twrite(f"[INFO] Running command: {si_cmd}", quiet=not args.verbose)
     si = subprocess.getoutput(si_cmd)
@@ -335,6 +332,8 @@ def get_nodes_from_sinfo_data(args):
         _ = twrite(f"[INFO] Sanitized sinfo output:\n{si_sanitized}")
 
     line_dicts = [dict(zip(key2si_format_O.keys(), line)) for line in si_lines]
+    line_dicts = [ld | dict(correct_parse=all([k in ld for k in key2si_format_O.keys()])) for ld in line_dicts]
+
     nodes = [Node(**ld) for ld in line_dicts]
     nodes = Node.sanitize_node_list_across_partitions(nodes)
     return nodes
@@ -360,6 +359,8 @@ def get_args(args=None):
         help="List of GPU counts to consider. 'all' means all available GPUs on a node can be allocated together.")
     P.add_argument("-n", "--nodes", action="store_true",
         help="If set, show node-level information.")
+    P.add_argument("--max_nodes_to_show", type=int, default=5,
+        help="Maximum number of nodes to show per resource in the summary.")
     args = P.parse_args(args)
 
     args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
