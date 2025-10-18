@@ -56,12 +56,12 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
             strs.append(s)
             time2printed_resources[time].append(s)
 
-
     to_print = ""
-    max_str_len = max([len(s) + len("\t\t") for s in strs]) if len(strs) > 0 else 0
+    max_str_len = max([len(UtilsBase.decolorize(s)) + len("\t\t") for s in strs]) if len(strs) > 0 else 0
+    print(max_str_len)
     for idx,(time,resource_strs) in enumerate(time2printed_resources.items()):
         to_print += "\n\t\t\t\t" if idx > 0 else ""
-        to_print += "".join([r.ljust(max_str_len) for r in resource_strs])
+        to_print += "".join([r + (" " * (max_str_len - len(UtilsBase.decolorize(r)))) for r in resource_strs])
     
     s = f"Free/Avail/Total:\t{to_print}"
     return s
