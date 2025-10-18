@@ -33,7 +33,7 @@ def resource_infos_to_str(time2resource2info, show_nodes=0, max_nodes_to_show=5,
 
             time_str = "" if Utils.is_solar() else f"{time}_"
 
-            s = f"{resource}={free_str}{avail_total_str}"
+            s = f"{time_str}{resource}={free_str}{avail_total_str}"
 
             if ((resource.endswith("-node") and show_nodes >= 1 and info.free_nodes)
                 or (not resource.endswith("-node") and show_nodes >= 2 and info.free_nodes)):
