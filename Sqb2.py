@@ -123,7 +123,7 @@ def colorize_reasons(job_infos):
             or ji.reason.startswith("None")):
             reason = colorize(ji.reason, color="orange")
             return UtilsBase.updated_namespace(ji, reason_color=reason)
-        elif ji.state == "PENDING" and ji.reason.startswith("Dependency"):
+        elif ji.state == "PENDING" and (ji.reason.startswith("Dependency") or ji.reason.startswith("After")):
             reason = colorize(ji.reason, color="red1")
             return UtilsBase.updated_namespace(ji, reason_color=reason)
         elif ji.state == "PENDING" and ji.reason.startswith("JobHeld"):
@@ -414,8 +414,6 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus}")
             
-        # print(jd.uid, gpu_type, gres_gpu, gpus)
-
         num_gpus = gpu2weight[gpu_type] * num_gpus if gpu_type else 1
         gpus =  f"{num_gpus * int(num_nodes)}"
 
@@ -424,7 +422,15 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
 def job_info_with_formatted_reason(jd):
     """Returns job info [jd] with the reason formatted."""
     reason = " ".join(jd.reason) if isinstance(jd.reason, list) else jd.reason
-    reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
+    if reason.startswith("Dependency") and not jd.dependency in ["N/A", "None", ""]:
+        dependency_type,depends_on_jobid = jd.dependency.split(":")
+        depends_on_jobid,_ = (depends_on_jobid.split("(")[0] if "(" in depends_on_jobid else depends_on_jobid).strip(), None
+        
+        # CamelCase the dependency type
+        dependency_type = dependency_type.replace("after", "After").replace("ok", "Ok").replace("any", "Any").replace("not", "Not")
+        reason = f"{dependency_type}:{depends_on_jobid}"
+    else:
+        reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return UtilsBase.updated_namespace(jd, reason=reason)
 
 def job_info_without_preempt_me_name(jd):

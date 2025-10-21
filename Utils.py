@@ -53,7 +53,8 @@ cc_cluster2accounts = dict(
 def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
-        "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid", "partition"],
+        "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid",
+        "partition", "dependency"],
     key2sq_format=dict()
     ):
     """Returns a dictionary describing the entire state what's running. Strings are
@@ -128,6 +129,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         host=f"%N",
         exclude=f"%x",
         comment=f"%k",
+        dependency=f"%E",
     )
 
     key2sq_format_O = dict(
