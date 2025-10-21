@@ -29,6 +29,7 @@ aliases = [
     "alias sqbf=\"squeue -u $USER -O 'JobArrayID:.10,Name:.175,State:.8,TimeLeft:.10'\"",
     "alias historyb=\"history | cut -c 8-\"",
     "alias sshareb=\"sshare -l -A rrg-keli_gpu; sshare -l -A def-keli_gpu\"",
+    "alias scn=\"scontrol show nodes\"",
 
     ##################################################################################
     # Useful on SLURM, requires a Python script
@@ -80,6 +81,9 @@ aliases = [
 
     # Updates ScriptsAndAliases
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; source ~/.bashrc\"",
+
+    # Updates SLURM scripts' sbatch arguments
+    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
     
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet
@@ -119,7 +123,7 @@ aliases = [
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
-    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
+    
     
     "# END USEFUL ML ALIASES"]
 
