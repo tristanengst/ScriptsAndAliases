@@ -21,7 +21,7 @@ class Node:
         self.partitions = partitions
         self.states = states
 
-        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING"]]):
+        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
             self.state = "down"
         elif all([s == "IDLE" for s in self.states]):
             self.state = "free"
@@ -70,6 +70,12 @@ class Node:
 
             avail_cpus = avail_cpus - (free_gpus * req_cpus_per_gpu)
             avail_memory = avail_memory - (free_gpus * req_mem_per_gpu)
+
+        # Epilogue to this: heuristically we can be a bit more accurate. The reason is
+        # that AllocTRES is for billing purposes, which isn't necessarily what the
+        # node is actually doing.
+        if "PLANNED" in self.states and not self.state == "down":
+            self.gres_avail = {k: 0 for k in self.gres_avail.keys()}
     
     def __str__(self):
         kv = dict(
@@ -218,72 +224,67 @@ class Partition:
         """Returns if every job that could run on partition [p2] can run on [p1]."""
         return p1.time_limit >= p2.time_limit and all([n in p1.nodes for n in p2.nodes])
 
-def get_args(args=None):
-    """Parses command-line arguments for this module."""
-    P = argparse.ArgumentParser()
-    P.add_argument("-v", "--verbose", action="store_true")
-    P.add_argument("-vv", action="store_true")
-    P.add_argument("-i", "--interac", action="store_true",)
-    P.add_argument("-p", "--partitions", "--partition", nargs="+", default=None,
-        help="If set, only consider these partitions.")
-    P.add_argument("--gpus", nargs="+", default=["good"])
-    P.add_argument("--gpu_counts", nargs="+", default=[1,2,4] if Utils.is_solar() else [1, "all"],
-        help="List of GPU counts to consider. 'all' means all available GPUs on a node can be allocated together.")
-    P.add_argument("-n", "--nodes", action="store_true",
-        help="If set, show node-level information.")
-    P.add_argument("--max_nodes_to_show", type=int, default=20 if Utils.is_solar() else (5 if Utils.get_cluster_type() == "nibi" else 2),
-        help="Maximum number of nodes to show per resource in the summary.")
-    P.add_argument("--aggregate", choices=[0,1], type=int, default=int(Utils.is_solar()),
-        help="If set, aggregate resources in a useful way for summarization.")
-    P.add_argument("--max_time", type=int, default=24,
-        help="If set, only consider nodes with max time less than or equal to this value when summarizing resources.")
-    args = P.parse_args(args)
-
-    args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
-    if "good" in args.gpus:
-        args.gpus += [g for g in MachineInfo.gpu2info.keys() if MachineInfo.gpu2info[g]["good"]]
-    args.gpu_counts = [int(gc) if str(gc).isnumeric() else gc for gc in args.gpu_counts]
-
-    return args
-
 def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2config):
     node2config = node2config if node2config else MachineInfo.cluster2node2config[Utils.get_cluster_type()]
     time2resource2free = defaultdict(lambda: defaultdict(float))            # Unused resources
-    time2resource2full_node_free = defaultdict(lambda: defaultdict(list))  # Unused resources
+    time2resource2full_node_free = defaultdict(lambda: defaultdict(set))  # Unused resources
+    
     time2resource2avail = defaultdict(lambda: defaultdict(float))           # Used resources
-    time2resource2full_node_avail = defaultdict(lambda: defaultdict(list)) # Used resources
+    time2resource2full_node_avail = defaultdict(lambda: defaultdict(set)) # Used resources
+    
     time2resource2total = defaultdict(lambda: defaultdict(float))           # Total resources (includes offline nodes)
-    time2resource2total_nodes = defaultdict(lambda: defaultdict(list))       # Total nodes (includes offline nodes)
+    time2resource2total_nodes = defaultdict(lambda: defaultdict(set))       # Total nodes (includes offline nodes)
+    
+    # Nodes seen so far in counting time/resource info. Otherwise we can accidentally double-count nodes in multiple partitions.
+    time2resource2seen_nodes = defaultdict(lambda: defaultdict(set))        
     for p in partitions:
         for n in p.nodes:
             for gpu in n.gres_total.keys():
+
+                if n.name in time2resource2seen_nodes[p.time_limit][gpu]:
+                    continue
+
                 resource_identifier = n.name if Utils.is_solar() else gpu
-
-                # Any resource is added to this
-                time2resource2total[p.time_limit][gpu] += n.gres_total[gpu]
-                time2resource2total_nodes[p.time_limit][gpu].append(n.name)
-
-                if not n.state == "down":
-                    time2resource2free[p.time_limit][gpu] += n.gres_avail[gpu]
+                if n.state == "down":
+                    time2resource2total[p.time_limit][gpu] += n.gres_total[gpu]
+                    time2resource2total_nodes[p.time_limit][gpu].add(n.name)
+                elif n.state == "avail":
+                    time2resource2total[p.time_limit][gpu] += n.gres_total[gpu]
+                    time2resource2total_nodes[p.time_limit][gpu].add(n.name)
                     time2resource2avail[p.time_limit][gpu] += n.gres_total[gpu]
-                if n.state == "free" and node2config[resource_identifier]["gpu_frac"] >= 1.0:
-                    time2resource2full_node_free[p.time_limit][gpu].append(n.name)
-                elif n.state == "avail" and node2config[resource_identifier]["gpu_frac"] >= 1.0:
-                    time2resource2full_node_avail[p.time_limit][gpu].append(n.name)
+                    time2resource2full_node_avail[p.time_limit][gpu].add(n.name)
+                    time2resource2free[p.time_limit][gpu] += n.gres_avail[gpu]
+                elif n.state == "free":
+                    time2resource2total[p.time_limit][gpu] += n.gres_total[gpu]
+                    time2resource2total_nodes[p.time_limit][gpu].add(n.name)
+                    time2resource2avail[p.time_limit][gpu] += n.gres_total[gpu]
+                    time2resource2full_node_free[p.time_limit][gpu].add(n.name)
+                    time2resource2free[p.time_limit][gpu] += n.gres_avail[gpu]
+                    time2resource2full_node_free[p.time_limit][gpu].add(n.name)
                 else:
                     pass
+
+                time2resource2seen_nodes[p.time_limit][gpu].add(n.name)               
 
     if verbose:
         print("\n[INFO] Resource availability by partition time:")
         for time in sorted(time2resource2total.keys()):
             print(f"Max time: {UtilsBase.time_to_pretty_str(time*3600)}")
-            for resource in time2resource2total[time].keys():
+            for resource in sorted(time2resource2total[time].keys(), key=lambda g: MachineInfo.gpu2vram[g]):
                 total = time2resource2total[time][resource]
                 avail = time2resource2avail[time][resource]
                 free = time2resource2free[time][resource]
                 full_node_avail = len(time2resource2full_node_avail[time][resource])
                 full_node_free = len(time2resource2full_node_free[time][resource])
                 print(f"\tResource: {resource}:\t\ttotal={total}, avail={avail}, free={free}, full_node_avail={full_node_avail}, full_node_free={full_node_free}")
+
+                if resource == "h100":
+                    nodes_with_any_free = [n for n in nodes if n.gres_avail.get("h100", 0) > 0 and not n.state == "down"]
+                    max_free = sum([n.gres_avail.get("h100", 0) for n in nodes_with_any_free])
+                    print(f"\t\tNodes with any free H100s: {[n.name for n in nodes_with_any_free]} len={len(nodes_with_any_free)} max_free={max_free}")
+
+            
+        
 
     return argparse.Namespace(time2resource2free=time2resource2free,
         time2resource2full_node_free=time2resource2full_node_free,
@@ -379,6 +380,36 @@ def get_str():
     resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=False, node2config=node2config)
     s = format_cluster_state(resource_states)
     return s
+
+
+def get_args(args=None):
+    """Parses command-line arguments for this module."""
+    P = argparse.ArgumentParser()
+    P.add_argument("-v", "--verbose", action="store_true")
+    P.add_argument("-vv", action="store_true")
+    P.add_argument("-i", "--interac", action="store_true",)
+    P.add_argument("-p", "--partitions", "--partition", nargs="+", default=None,
+        help="If set, only consider these partitions.")
+    P.add_argument("--gpus", nargs="+", default=["good"])
+    P.add_argument("--gpu_counts", nargs="+", default=[1,2,4] if Utils.is_solar() else [1, "all"],
+        help="List of GPU counts to consider. 'all' means all available GPUs on a node can be allocated together.")
+    P.add_argument("-n", "--nodes", action="store_true",
+        help="If set, show node-level information.")
+    P.add_argument("--max_nodes_to_show", type=int, default=20 if Utils.is_solar() else (5 if Utils.get_cluster_type() == "nibi" else 2),
+        help="Maximum number of nodes to show per resource in the summary.")
+    P.add_argument("--aggregate", choices=[0,1], type=int, default=int(Utils.is_solar()),
+        help="If set, aggregate resources in a useful way for summarization.")
+    P.add_argument("--max_time", type=int, default=24,
+        help="If set, only consider nodes with max time less than or equal to this value when summarizing resources.")
+    P.add_argument("--show_resources", action="store_true",)
+    args = P.parse_args(args)
+
+    args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
+    if "good" in args.gpus:
+        args.gpus += [g for g in MachineInfo.gpu2info.keys() if MachineInfo.gpu2info[g]["good"]]
+    args.gpu_counts = [int(gc) if str(gc).isnumeric() else gc for gc in args.gpu_counts]
+
+    return args
 
 if __name__ == "__main__":
     args = get_args()
