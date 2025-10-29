@@ -16,9 +16,10 @@ import subprocess
 import sys
 import time
 
-import ClusterInfo
+# import ClusterInfo
+import ClusterInfo2
 import FileFinding
-# from ShowCluster import Node
+from ShowCluster import Node
 import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize, decolorize, get_color_scale
@@ -893,7 +894,7 @@ if __name__ == "__main__":
     elif Utils.is_cc():
         
         job_datas = []
-        for account in Utils.cc_cluster2accounts[Utils.get_cluster_type()]:
+        for account in Utils.cluster2info[Utils.get_cluster_type()].accounts:
             job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
                 next_chunks=args.next_chunks,
                 nodes=args.nodes,
@@ -986,7 +987,7 @@ if __name__ == "__main__":
         print(meta_str)
     
     if Utils.is_cc():
-        accounts = Utils.cc_cluster2accounts[Utils.get_cluster_type()]
+        accounts = Utils.cluster2info[Utils.get_cluster_type()].accounts
         account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
         account2lfs_str = {a: {k: f"{l:.2f}" if isinstance(l, float) else str(l) for k,l in lfs.items()} for a,lfs in account2lfs.items() if not lfs["group"] is None}
         level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
@@ -997,7 +998,8 @@ if __name__ == "__main__":
         account2lfs = None
         meta_str2 = ""    
     
-    meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
+    meta_str2 += "\t| " + ClusterInfo2.get_str()
+    # meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
     if args.verbose:
         print(meta_str2)
 

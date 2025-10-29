@@ -468,6 +468,42 @@ def get_resource_info_summary():
         max_time_to_show=args.max_time)
     return s
 
+def get_nodes_from_scontrol_data(args):
+    """Returns a list of Node objects representing the nodes on the cluster,
+    using scontrol instead of sinfo.
+    """
+    cmd = "scontrol show nodes"
+    data = subprocess.getoutput(cmd)
+    node_infos = data.split("NodeName=")[1:]
+
+    nodes = list()
+
+    for n in node_infos:
+        node_name = n.split()[0]
+        entries = UtilsBase.flatten([e.split() for e in n.splitlines()])
+        node_info = dict(name=node_name)
+
+        for e in entries:
+            if e.startswith("Partitions="):
+                node_info["partitions"] = e.split("=")[1].split(",")
+            elif e.startswith("State="):
+                node_info["state"] = e.split("=")[1].split()[0]
+            elif e.startswith("RealMemory="):
+                node_info["memory"] = e.split("=")[1]
+            elif e.startswith("AllocMem="):
+                node_info["alloc_mem"] = e.split("=")[1]
+            elif e.startswith("CPUAlloc="):
+                node_info["cpu_alloc"] = e.split("=")[1]
+            elif e.startswith("CPUTot="):
+                node_info["cpu_tot"] = e.split("=")[1]
+            elif e.startswith("Gres="):
+                node_info["gres"] = e.split("=")[1]
+            elif e.startswith("AllocTRES"):
+                node_info["gres_used"] = e.split("=")[1]
+
+
+
+
 def get_args(args=None):
     """Parses command-line arguments for this module."""
     P = argparse.ArgumentParser()

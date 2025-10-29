@@ -40,15 +40,18 @@ def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", 
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 
-cc_cluster2accounts = dict(
-    nibi=["rrg-keli_gpu", "def-keli_gpu"],
-    trillium=["def-keli"],
-    fir=["def-keli_gpu"],
-    rorqual=["def-keli_gpu"],
-    narval=["def-keli_gpu"],
-    cedar=["def-keli_gpu"],
-    beluga=["def-keli_gpu"],
+cluster2info = dict(
+    nibi=dict(accounts=["rrg-keli_gpu", "def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    trillium=dict(accounts=["def-keli"], conf_file=None, partitions_startswith=["compute", "compute_full_node"]),
+    fir=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    rorqual=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    narval=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    cedar=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    beluga=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    solar=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
+    solar1=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
 )
+cluster2info = {k: argparse.Namespace(**v) for k,v in cluster2info.items()}
 
 def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
@@ -89,7 +92,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
 
     # On ComputeCanada, get jobs by account
     if account is None and is_cc():
-        accounts = cc_cluster2accounts[get_cluster_type()]
+        accounts = cluster2info[get_cluster_type()].accounts
         result = dict()
         for account in accounts:
             result |= get_slurm_status(cur_user=cur_user, account=account)
