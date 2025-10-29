@@ -80,6 +80,7 @@ class Node:
             mem_state=self.mem_state,
             cpus_state=self.cpus_state,
             gres_state=self.gres_state
+
         )
 
         def format_dict(d): return "{" + ", ".join([f"{k}={v}" for k,v in d.items()]) + "}"
@@ -130,7 +131,7 @@ def get_nodes_from_scontrol_data(args):
     for n in node_infos:
         node_name = n.split()[0]
         entries = UtilsBase.flatten([e.split() for e in n.splitlines()])
-        node_info = dict(name=node_name)
+        node_info = dict(name=node_name, partitions=[])
 
         for e in entries:
             if e.startswith("Partitions="):
@@ -150,7 +151,11 @@ def get_nodes_from_scontrol_data(args):
             elif e.startswith("AllocTRES"):
                 node_info["gres_alloc"] = tres_to_gres_used(e)
 
-        node = Node(**node_info)
+        try:
+            node = Node(**node_info)
+        except Exception as e:
+            print(entries)
+            raise e
         nodes.append(node)
     
     nodes = [n for n in nodes if len(n.gres_total) > 0]
@@ -254,22 +259,19 @@ def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2confi
             for gpu in n.gres_total.keys():
                 resource_identifier = n.name if Utils.is_solar() else gpu
 
-                time2resource2total[p.time_limit][gpu] += n.gres_avail[gpu]
+                # Any resource is added to this
+                time2resource2total[p.time_limit][gpu] += n.gres_total[gpu]
                 time2resource2total_nodes[p.time_limit][gpu].append(n.name)
 
-                if n.state == "free":
+                if not n.state == "down":
                     time2resource2free[p.time_limit][gpu] += n.gres_avail[gpu]
-                    if node2config[resource_identifier]["gpu_frac"] >= 1.0:
-                        time2resource2full_node_free[p.time_limit][gpu].append(n.name)
-                    
-                    # Free resources are also available
-                    time2resource2avail[p.time_limit][gpu] += n.gres_avail[gpu]
-                    time2resource2full_node_avail[p.time_limit][gpu].append(n.name)
-                elif n.state == "avail":
-                    time2resource2avail[p.time_limit][gpu] += n.gres_avail[gpu]
+                    time2resource2avail[p.time_limit][gpu] += n.gres_total[gpu]
+                if n.state == "free" and node2config[resource_identifier]["gpu_frac"] >= 1.0:
+                    time2resource2full_node_free[p.time_limit][gpu].append(n.name)
+                elif n.state == "avail" and node2config[resource_identifier]["gpu_frac"] >= 1.0:
                     time2resource2full_node_avail[p.time_limit][gpu].append(n.name)
                 else:
-                    pass # Everything is added to the total already
+                    pass
 
     if verbose:
         print("\n[INFO] Resource availability by partition time:")
@@ -392,7 +394,7 @@ if __name__ == "__main__":
         print(f"Partition(name={p.name}, time_limit={p.time_limit}h)")
     
     
-    resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=True)
+    resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=True, node2config=node2config)
     s = format_cluster_state(resource_states)
     print(f"\n[INFO] Cluster resource state:\n{s}")
     

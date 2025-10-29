@@ -73,6 +73,9 @@ aliases = [
     "alias jcatsr=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
     "alias jcatrs=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
 
+    # Prints a job's command given a substring from its name
+    "alias scmd=\"python ~/.ScriptsAndAliases/ShowCommand.py --substrs \"",
+
     # Allocates a node
     "alias sallocb=\"python ~/.ScriptsAndAliases/AllocateNode.py --nodelist \"",
 
