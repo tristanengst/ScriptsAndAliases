@@ -21,7 +21,7 @@ class Node:
         self.partitions = partitions
         self.states = states
 
-        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
+        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED", "PLANNED"]]):
             self.state = "down"
         elif all([s == "IDLE" for s in self.states]):
             self.state = "free"
@@ -70,12 +70,6 @@ class Node:
 
             avail_cpus = avail_cpus - (free_gpus * req_cpus_per_gpu)
             avail_memory = avail_memory - (free_gpus * req_mem_per_gpu)
-
-        # Epilogue to this: heuristically we can be a bit more accurate. The reason is
-        # that AllocTRES is for billing purposes, which isn't necessarily what the
-        # node is actually doing.
-        if "PLANNED" in self.states and not self.state == "down":
-            self.gres_avail = {k: 0 for k in self.gres_avail.keys()}
     
     def __str__(self):
         kv = dict(
