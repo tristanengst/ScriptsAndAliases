@@ -331,7 +331,7 @@ def format_cluster_state(resource_states):
             entry_str = free + avail_total
 
             if node2config[resource]["gpu_frac"] >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
-                full_node_free = resource_states.time2resource2full_node_free[time][resource]
+                full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
                 full_node_free = full_node_free[:min(len(full_node_free), 3)]
                 full_node_str = " nodes=(" + ",".join(full_node_free) + ")"
                 full_node_str = UtilsBase.colorize(full_node_str, color="lightblue")
