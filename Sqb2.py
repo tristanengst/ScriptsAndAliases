@@ -665,7 +665,6 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
             partition = info.partition.replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
             job2info[jobid].user = f"{info.user}/{partition}"
 
-    partition = True
     col_names = [
         "host" if Utils.is_solar() or nodes else None,
         "exclude" if excluded else None,

@@ -83,7 +83,7 @@ aliases = [
     "alias make_interac=\"python ~/.ScriptsAndAliases/MakeInteractive.py --jobs \"",
 
     # Updates ScriptsAndAliases
-    "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; source ~/.bashrc\"",
+    "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; cd ~ ; source ~/.bashrc\"",
 
     # Updates SLURM scripts' sbatch arguments
     "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
