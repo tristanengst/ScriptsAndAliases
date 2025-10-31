@@ -105,27 +105,27 @@ cluster2node2config = dict(
 )
 
 gpu2info = {
-    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True),
-    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True)} | dict(
-    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True),
-    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True),
-    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True),
-    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True),
-    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True),
-    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True),
-    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000", ddp=True),
-    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True),
-    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True),
-    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True),
-    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False),
-    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False),
-    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False),
-    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False),
-    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True),
-    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True),
-    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False),
-    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False),
-    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False))
+    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0),
+    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0)} | dict(
+    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0),
+    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0),
+    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0),
+    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0),
+    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0),
+    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0),
+    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000", ddp=True, gpu_frac=1.0),
+    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0),
+    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0),
+    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0),
+    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125),
+    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False, gpu_frac=0.25),
+    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5),
+    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5),
+    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0),
+    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0),
+    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
+    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),
+    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5))
 
 gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v["good"]]

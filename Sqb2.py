@@ -19,6 +19,7 @@ import time
 # import ClusterInfo
 import ClusterInfo2
 import FileFinding
+import MachineInfo
 from ShowCluster import Node
 import Utils
 import UtilsBase
@@ -414,8 +415,9 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             gpu_type = gpus[0]
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus}")
-            
-        num_gpus = gpu2weight[gpu_type] * num_gpus if gpu_type else 1
+        
+        gpu_alias = MachineInfo.gpu_name2alias[gpu_type] if gpu_type in MachineInfo.gpu_name2alias else gpu_type
+        num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus if gpu_type else 1
         gpus =  f"{num_gpus * int(num_nodes)}"
 
     return UtilsBase.updated_namespace(jd, gpus=gpus)
