@@ -366,7 +366,7 @@ def format_cluster_state(resource_states):
 
 def get_str():
     """Returns a string representation of the cluster info."""
-    args = get_args(args=None)
+    args = get_args(args=[])
     node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
     nodes = get_nodes_from_scontrol_data(args)
     partitions = Partition.get_partitions_from_sinfo(nodes=nodes)

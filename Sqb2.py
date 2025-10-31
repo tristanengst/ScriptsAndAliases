@@ -377,7 +377,7 @@ def job_info_with_formatted_time_delta(jd, key="time_left"):
             mm, ss = delta.split(":")
             hh, mm, ss = 0, int(mm), int(ss)
         else:
-            twrite(f"[INFO] jobid={jd['jobid']} got unexpected time_left={delta}")
+            twrite(f"[INFO] jobid={jd.jobid} got unexpected time_left={delta}")
             return argparse.Namespace(**vars(jd) | {key: delta})
     
     result = f"{mm:02}:{ss:02}" if hh == 0 else f"{hh}:{mm:02}:{ss:02}"
