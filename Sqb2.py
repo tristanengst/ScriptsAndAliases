@@ -593,13 +593,29 @@ def job_info_with_latest_str(*, args, jd):
     
         
 
-
+def job_info_with_parition(ji):
+    """Returns job info [jd] with the partition names shortened. However, we don't
+    want to shorten partitions in a way that yields duplicates.
+    """
+    extant_partitions = ji.partition.split(",")
+    short_partitions = list()
+    for p in extant_partitions:
+        short_p = UtilsBase.strip_left(p, "gpubase_")
+        short_p = UtilsBase.strip_left(short_p, "gpu")
+        if not short_p in extant_partitions:
+            short_partitions.append(short_p)
+        else:
+            short_partitions.append(p)
+    short_partitions = sorted(short_partitions)
+    short_partitions = " ".join(short_partitions)
+    return UtilsBase.updated_namespace(ji, partition=short_partitions)
 
 
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
+    partition=False,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
@@ -612,8 +628,12 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
     eligible_time -- if True, include the eligible time for all jobs
-    queue  -- if True, include the queue time for all jobs
-    checkpoint -- if True, try to find the latest checkpoint for each job
+    queue       -- if True, include the queue time for all jobs
+    checkpoint  -- if True, try to find the latest checkpoint for each job
+    excluded    -- if True, include the excluded nodes for all jobs
+    heartbeat   -- if True, include the heartbeat time for all jobs
+    heartbeat_analysis -- if True, include heartbeat analysis info for all jobs
+    partition   -- if True, include the partition name for all jobs
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
@@ -629,6 +649,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_info_with_latest_str(args=args, jd=v) for j,v in job2info.items()}
     if heartbeat or heartbeat_analysis:
         job2info = {j: job_info_with_heartbeat(v) for j,v in job2info.items()}
+    if partition:
+        job2info = {j: job_info_with_parition(v) for j,v in job2info.items()}
 
     job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_date_time(info, key="start_time", tz=args.tz) for j,info in job2info.items()}
@@ -643,9 +665,11 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
             partition = info.partition.replace("-short", "").replace("-long", "").replace("-lab", "").replace("cs-gpu-research", "cs-gpu-")
             job2info[jobid].user = f"{info.user}/{partition}"
 
+    partition = True
     col_names = [
         "host" if Utils.is_solar() or nodes else None,
         "exclude" if excluded else None,
+        "partition" if partition else None,
         "jobid", "uid",
         "user" if not cur_user else None,
         "state",
@@ -825,6 +849,8 @@ if __name__ == "__main__":
         help="Show show the submit time for all jobs")
     P.add_argument("-e", "--eligible_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
+    P.add_argument("-p", "--partition", action="store_true", default=False,
+        help="Show the partition for all jobs")
 
     P.set_defaults(queue=True)
     P.add_argument("-q", "--queue", action="store_true",
@@ -891,6 +917,7 @@ if __name__ == "__main__":
             heartbeat=args.heartbeat,
             heartbeat_analysis=args.heartbeat_analysis,
             checkpoint=args.checkpoint,
+            partition=args.partition,
             verbose=args.verbose)
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas        
     elif Utils.is_cc():
@@ -907,6 +934,7 @@ if __name__ == "__main__":
                 heartbeat=args.heartbeat,
                 heartbeat_analysis=args.heartbeat_analysis,
                 checkpoint=args.checkpoint,
+                partition=args.partition,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = argparse.Namespace(**{c: f"__account {account}" if c == "jobid" else c for c in colnames})
