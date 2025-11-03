@@ -6,6 +6,7 @@ The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` director
 ```
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
 python ~/.ScriptsAndAliases/WriteAliases.py
+source ~/.bashrc
 ```
 To update:
 ```
