@@ -19,7 +19,9 @@ import UtilsBase
 from UtilsBase import twrite, tqdm
 
 known_clusters = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A99", "emily",
-    "S1", "S2", "S3", "solar", "trillium", "cedar", "narval", "rorqual", "fir", "nibi"]
+    "S1", "S2", "S3",
+    "solar", "solar1",
+    "trillium", "cedar", "narval", "rorqual", "fir", "nibi", "vulcan"]
 
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
