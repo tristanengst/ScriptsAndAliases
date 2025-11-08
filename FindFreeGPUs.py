@@ -24,10 +24,17 @@ def find_free_gpus(h):
         """Returns a Namespace containing the GPU index and process name given by line
         of nvidia-smi output [l].
         """
+        if "No running processes found" in l:
+            return None
+        
         l = l.split()
         proc_id = proc_id=l[4]
 
-        return argparse.Namespace(gpu=int(l[1]), proc_name=l[6], )
+        if l[1].isdigit() and proc_id.isdigit():
+            return argparse.Namespace(gpu=int(l[1]), proc_name=l[6], )
+        else:
+            print(f"[WARNING] Unexpected nvidia-smi line format on host {h}: {l}")
+            return None
 
     host_info = MachineInfo.get_updated_machine_info(h)
 
@@ -38,6 +45,7 @@ def find_free_gpus(h):
         lines = lines[idx_of_last_eq_line+1:-1]
 
         gpu_proc_name = [gpu_line_to_data(l) for l in lines]
+        gpu_proc_name = [gpn for gpn in gpu_proc_name if gpn is not None]
         gpu_proc_name = [(gpn.gpu, gpn.proc_name) for gpn in gpu_proc_name]
         gpu2proc_names = {idx: [pn for gpu,pn in gpu_proc_name if gpu == idx] for idx in range(host_info.total_gpus)}
 
