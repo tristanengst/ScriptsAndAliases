@@ -387,13 +387,18 @@ def job_info_with_formatted_time_delta(jd, key="time_left"):
 
 def job_info_with_formatted_resources(jd, num_nodes=1):
     """Returns job info [jd] with the resources formatted."""
-    known_gpus = ["h100", "a100", "l40s", "a40", "a5000", "v100",
-        "nvidia_h100_80gb_hbm3_3g.40gb", "nvidia_h100_80gb_hbm3_2g.20gb", "nvidia_h100_80gb_hbm3_1g.10gb"]
-
-    gpu2weight = defaultdict(lambda: 1, **{
-        "nvidia_h100_80gb_hbm3_3g.40gb": 0.5,
-        "nvidia_h100_80gb_hbm3_2g.20gb": 0.25,
-        "nvidia_h100_80gb_hbm3_1g.10gb": 0.125})
+    def jd_with_unspecified_gpu_to_gpu_alias(jd):
+        """Returns the GPU alias for the GPU used by job data [jd]."""
+        node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+        if Utils.is_solar():
+            gpu_name = node2config[jd.node]["gpu_name"]
+            return MachineInfo.gpu_name2alias[gpu_name]
+        elif Utils.is_cc():
+            node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+            avail_gpu_alias2vram = {ga: MachineInfo.gpu2vram[ga] for ga in node2config if not ga == "default"}
+            return min(avail_gpu_alias2vram, key=lambda x: avail_gpu_alias2vram[x])
+        else:
+            raise NotImplementedError(f"Unexpected cluster type for gres_gpu={gres_gpu} parsed as gpus={gpus}")
     
     gres_gpu = "N/A" if not jd.gres else jd.gres
     num_nodes = num_nodes if not jd.nodes else jd.nodes
@@ -403,21 +408,19 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
     else:
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
         
-        # If the last element is a GPU, no GPU was requested
         if gpus[-1].isdigit() and len(gpus) == 1:
             num_gpus = int(gpus[-1])
-            gpu_type = "gpu" # Generic GPU type
-        elif gpus[-1] in known_gpus and len(gpus) == 1:
+            gpu_alias = jd_with_unspecified_gpu_to_gpu_alias(jd)
+        elif gpus[-1] in MachineInfo.gpu_alias2name.values() and len(gpus) == 1:
             num_gpus = 1
-            gpu_type = gpus[-1]
-        elif gpus[-1].isdigit() and len(gpus) > 1:
+            gpu_alias = MachineInfo.gpu_name2alias[gpus[-1]]
+        elif gpus[-1].isdigit() and len(gpus) == 2 and gpus[0] in MachineInfo.gpu_alias2name.values():
             num_gpus = int(gpus[-1])
-            gpu_type = gpus[0]
+            gpu_alias = MachineInfo.gpu_name2alias[gpus[0]]
         else:
-            raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus}")
-        
-        gpu_alias = MachineInfo.gpu_name2alias[gpu_type] if gpu_type in MachineInfo.gpu_name2alias else gpu_type
-        num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus if gpu_type else 1
+            raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}")
+                
+        num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus
         gpus =  f"{num_gpus * int(num_nodes)}"
 
     return UtilsBase.updated_namespace(jd, gpus=gpus)
