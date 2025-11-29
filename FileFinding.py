@@ -24,6 +24,11 @@ file_search_dirs = [
     osp.expanduser("~/Development/IMLE-SSL-Dev/finetune_results"),
     osp.expanduser("~/Development/IMLE-SSL-Dev/slurm")]
 
+if Utils.get_cluster_type() == "cedar":
+    file_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm"),
+        osp.expanduser("~/Development/IMLE-SSL-Cedar/pretrain_results"),
+        osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results")]
+
 def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
     existing globs would be treated nicely by bash.

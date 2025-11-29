@@ -21,7 +21,7 @@ class Node:
         self.partitions = partitions
         self.states = states
 
-        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED", "PLANNED"]]):
+        if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
             self.state = "down"
         elif all([s == "IDLE" for s in self.states]):
             self.state = "free"
