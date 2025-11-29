@@ -5,6 +5,8 @@ import subprocess
 import sys
 import time
 
+import Utils
+
 def job_is_miggpu(jobinfo_or_jobid):
     """Returns if the job is a MIG GPU job."""
     multi_instance_gpus = ["nvidia_h100_80gb_hbm3_1g.10gb",
@@ -65,7 +67,16 @@ if __name__ == "__main__":
             and not info.state in ["RUNNING", "COMPLETING"]}
 
     for jobid,extant_partitions in jobid_to_update2extant_partitions.items():
-        partitions = list(set(extant_partitions.split(",")) | {"interac,gpubase_interac"})
+
+        # Hack for Vulcan
+        if Utils.get_cluster_type() == "vulcan":
+            extant_partitions = [p for p in extant_partitions.split(",") if not p.startswith("gpubase_bygpu") or p =="interac"]
+            extant_partitions = ",".join(extant_partitions)
+            new_partitions = ["gpubase_interac"]
+        else:
+            new_partitions = ["gpubase_interac", "interac"]
+
+        partitions = list(set(extant_partitions.split(",")) | set(new_partitions))
         partitions_str = ",".join(partitions)
 
         print(f"[INFO] Updating job {jobid} Partition={extant_partitions} -> {partitions_str}")
