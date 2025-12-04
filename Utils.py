@@ -60,7 +60,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
         "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid",
-        "partition", "dependency"],
+        "partition", "dependency", "tres_per_task"],
     key2sq_format=dict()
     ):
     """Returns a dictionary describing the entire state what's running. Strings are
@@ -143,7 +143,8 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         submit_time="SubmitTime:64",
         eligible_time="EligibleTime:64",
         stderr="StdErr:1024",
-        stdout="StdOut:1024"
+        stdout="StdOut:1024",
+        tres_per_task="tres-per-task:64", # Can work as a fallback for gres
     )
 
     key2sq_format_o = {k: v for k,v in key2sq_format_o.items() if k in keys} | {k: v for k,v in key2sq_format.items() if not ":" in v}

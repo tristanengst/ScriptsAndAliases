@@ -399,9 +399,15 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             return min(avail_gpu_alias2vram, key=lambda x: avail_gpu_alias2vram[x])
         else:
             raise NotImplementedError(f"Unexpected cluster type for gres_gpu={gres_gpu} parsed as gpus={gpus}")
-    
-    gres_gpu = "N/A" if not jd.gres else jd.gres
+
     num_nodes = num_nodes if not jd.nodes else jd.nodes
+    if (jd.gres == "N/A" or not jd.gres) and not jd.tres_per_task:
+        gres_gpu = "N/A"
+    elif (jd.gres == "N/A" or not jd.gres) and jd.tres_per_task:
+        gres_gpu = [t for t in jd.tres_per_task.split(",") if t.startswith("gres/gpu:")][0]
+    else:
+        gres_gpu = jd.gres
+
     
     if gres_gpu == "N/A":
         gpus = "N/A"
