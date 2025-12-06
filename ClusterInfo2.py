@@ -21,9 +21,11 @@ class Node:
         self.partitions = partitions
         self.states = states
 
+        idle_states = ["IDLE", "DYNAMIC_NORM"]
+
         if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
             self.state = "down"
-        elif all([s == "IDLE" for s in self.states]):
+        elif "IDLE" in self.states and all([s in idle_states for s in self.states]):        
             self.state = "free"
         else:
             self.state = "avail"
@@ -89,6 +91,8 @@ class Node:
 
         return f"{self.__class__.__name__}({kv_str})"
 
+    def __repr__(self): return self.__str__()
+
 def tres_to_gres_used(tres, node_name="default"):
     """Returns a dictionary of used GRES objects from an AllocTRES or CfgTRES string.
     Note that this only populates GPU-related information, as it's easier to parse CPU
@@ -147,9 +151,9 @@ def get_nodes_from_scontrol_data(args):
             elif e.startswith("CPUTot="):
                 node_info["cpus_total"] = int(e.split("=")[1])
             elif e.startswith("CfgTRES="):
-                node_info["gres_total"] = tres_to_gres_used(e)
+                node_info["gres_total"] = tres_to_gres_used(e, node_name=node_name)
             elif e.startswith("AllocTRES"):
-                node_info["gres_alloc"] = tres_to_gres_used(e)
+                node_info["gres_alloc"] = tres_to_gres_used(e, node_name=node_name)
 
         try:
             node = Node(**node_info)
@@ -287,7 +291,7 @@ def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2confi
         time2resource2total=time2resource2total,
         time2resource2total_nodes=time2resource2total_nodes)
 
-def format_cluster_state(resource_states):
+def format_cluster_state(resource_states, nodes=None):
     """Returns a string describing what resources are available on the cluster.
 
     The vertical axis lists different times, while the horizontal axis lists different
@@ -302,7 +306,12 @@ def format_cluster_state(resource_states):
     ...
     """
     node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
-    all_times = sorted(resource_states.time2resource2total.keys())
+
+    if Utils.is_solar():
+        all_times = [max(resource_states.time2resource2total.keys())]
+    else:
+        all_times = sorted(resource_states.time2resource2total.keys())
+
     all_resources = sorted(set(UtilsBase.flatten([list(resource_states.time2resource2total[time].keys()) for time in all_times])),
         key=lambda g: MachineInfo.gpu2vram[g])
     all_resources = [r for r in all_resources if MachineInfo.gpu2info[r]["good"]]
@@ -317,6 +326,8 @@ def format_cluster_state(resource_states):
         pretty_time = UtilsBase.strip_left(pretty_time, "0")  # Remove minutes if zero
         time2resource2str[time]["time"] = pretty_time
 
+        
+
         for resource in all_resources:
             total = int(resource_states.time2resource2total[time][resource])
             avail = int(resource_states.time2resource2avail[time][resource])
@@ -325,19 +336,29 @@ def format_cluster_state(resource_states):
             free_color = "lightblue" if free > 0.1 * avail else ("green" if free > 0 else "red")
             avail_total_color = "orange" if avail > 0.1 * total else "red"
 
-
             free = UtilsBase.colorize(f"({free}/", color=free_color)
             avail_total = UtilsBase.colorize(f"{avail}/{total})", color=avail_total_color)
             entry_str = free + avail_total
 
-            if node2config[resource]["gpu_frac"] >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
+            if Utils.is_cc() and node2config[resource]["gpu_frac"] >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
                 full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
                 full_node_free = full_node_free[:min(len(full_node_free), 3)]
                 full_node_str = " nodes=(" + ",".join(full_node_free) + ")"
                 full_node_str = UtilsBase.colorize(full_node_str, color="lightblue")
+            elif Utils.is_solar() and resource_states.time2resource2full_node_free[time][resource]:
+                full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
+                full_node_free = full_node_free[:min(len(full_node_free), 3)]
+                full_node_free = [UtilsBase.strip_left(n, "cs-") for n in full_node_free]
+                full_node_str = " nodes=(" + ",".join(full_node_free) + ")"
+                full_node_str = UtilsBase.colorize(full_node_str, color="lightblue")
             else:
                 full_node_str = ""
-            time2resource2str[time][resource] = f"{pretty_time}-{resource.upper()}={entry_str}{full_node_str}"
+
+            if Utils.is_solar():
+                time2resource2str[time][resource] = f"{resource.upper()}={entry_str}{full_node_str}"
+            else:
+                time2resource2str[time][resource] = f"{pretty_time}-{resource.upper()}={entry_str}{full_node_str}"
+
 
     # Ensure that each entry string is padded to the same *visual* length. Since they
     # are colored, we can't just use len().
@@ -372,7 +393,7 @@ def get_str():
     partitions = Partition.get_partitions_from_sinfo(nodes=nodes)
     partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in Utils.cluster2info[Utils.get_cluster_type()].partitions_startswith])]
     resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=False, node2config=node2config)
-    s = format_cluster_state(resource_states)
+    s = format_cluster_state(resource_states, nodes=nodes)
     return s
 
 

@@ -29,9 +29,9 @@ def get_cluster_type():
         return "beluga"
     elif h.startswith("gra-") or h.startswith("gra") or h.startswith("gr"):
         return "graham"
-    elif h == ("cs-star") or h.startswith("cs-v"):
+    elif h == "cs-star" or h.startswith("cs-v"):
         return "solar"
-    elif h == "cs-star1":
+    elif h in ["cs-star2", "cs-star1"]:
         return "solar1"
     else:
         h_ = "-".join(h.split("-")[:2])
