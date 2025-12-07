@@ -401,14 +401,27 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             raise NotImplementedError(f"Unexpected cluster type for gres_gpu={gres_gpu} parsed as gpus={gpus}")
 
     num_nodes = num_nodes if not jd.nodes else jd.nodes
-    if (jd.gres == "N/A" or not jd.gres) and not jd.tres_per_task:
-        gres_gpu = "N/A"
-    elif (jd.gres == "N/A" or not jd.gres) and jd.tres_per_task:
-        gres_gpu = [t for t in jd.tres_per_task.split(",") if t.startswith("gres/gpu:")][0]
+    if (jd.gres == "N/A" or not jd.gres):
+        if (jd.tres_per_node == "N/A" or not jd.tres_per_node):
+            if (jd.tres_per_job == "N/A" or not jd.tres_per_job):
+                if (jd.tres_per_task == "N/A" or not jd.tres_per_task):
+                    gres_gpu = "N/A"
+                else:
+                    gres_gpus = [t for t in jd.tres_per_task.split(",") if t.startswith("gres/gpu:")]
+                    gres_gpu = gres_gpus[0] if len(gres_gpus) > 0 else "N/A"
+                    multiplier = jd.num_tasks if jd.num_tasks else 1
+            else:
+                gres_gpus = [t for t in jd.tres_per_job.split(",") if t.startswith("gres/gpu:")]
+                gres_gpu = gres_gpus[0] if len(gres_gpus) > 0 else "N/A"
+                multiplier = 1
+        else:
+            gres_gpus = [t for t in jd.tres_per_node.split(",") if t.startswith("gres/gpu:")]
+            gres_gpu = gres_gpus[0] if len(gres_gpus) > 0 else "N/A"
+            multiplier = num_nodes
     else:
+        multiplier = num_nodes
         gres_gpu = jd.gres
 
-    
     if gres_gpu == "N/A":
         gpus = "N/A"
     else:
@@ -427,7 +440,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}")
                 
         num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus
-        gpus =  f"{num_gpus * int(num_nodes)}"
+        gpus =  f"{num_gpus * int(multiplier)}"
 
     return UtilsBase.updated_namespace(jd, gpus=gpus)
 
