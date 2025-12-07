@@ -390,9 +390,11 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
     def jd_with_unspecified_gpu_to_gpu_alias(jd):
         """Returns the GPU alias for the GPU used by job data [jd]."""
         node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
-        if Utils.is_solar():
-            gpu_name = node2config[jd.node]["gpu_name"]
+        if Utils.is_solar() and jd.host in node2config:
+            gpu_name = node2config[jd.host]["gpu_name"]
             return MachineInfo.gpu_name2alias[gpu_name]
+        elif Utils.is_solar() and not jd.host in node2config:
+            return "default_gpu"
         elif Utils.is_cc():
             node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
             avail_gpu_alias2vram = {ga: MachineInfo.gpu2vram[ga] for ga in node2config if not ga == "default"}
@@ -438,7 +440,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             gpu_alias = MachineInfo.gpu_name2alias[gpus[0]]
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}")
-                
+        
         num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus
         gpus =  f"{num_gpus * int(multiplier)}"
 
