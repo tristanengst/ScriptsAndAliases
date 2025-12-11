@@ -15,6 +15,8 @@ def get_cluster_type():
         return "nibi"
     elif h.startswith("vulcan") or h.startswith("rack"):
         return "vulcan"
+    elif h.startswith("klogin") or h.startswith("kn"):
+        return "killarney"
     elif "trig" in h or "trillium" in h:
         return "trillium"
     elif h.startswith("fc") or h.startswith("login"):
@@ -38,7 +40,7 @@ def get_cluster_type():
         return os.environ.get("CLUSTER_TYPE", "cs-apex")
 
 def is_solar(): return get_cluster_type() in ["solar", "solar1"]
-def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir", "vulcan"]
+def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir", "vulcan", "killarney"]
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 
@@ -51,6 +53,7 @@ cluster2info = dict(
     cedar=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
     beluga=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
     vulcan=dict(accounts=["aip-keli"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    killarney=dict(accounts=["aip-keli"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
     solar=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
     solar1=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
 )
