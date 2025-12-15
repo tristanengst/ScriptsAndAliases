@@ -181,8 +181,8 @@ def get_ssh_config():
     machine2ssh_config = defaultdict(lambda: dict())
     for line in lines:
         line = line.strip().split()
-        if len(line) == 2 and not line[0].startswith("#"):
-            k, v = line
+        if len(line) >= 2 and not line[0].startswith("#"):
+            k, v = line[:2]
             if k == "Host" and not v == "*":
                 cur_host = v
             elif cur_host is None:
