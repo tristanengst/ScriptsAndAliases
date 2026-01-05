@@ -107,12 +107,10 @@ def tres_to_gres_used(tres, node_name="default"):
             resource = UtilsBase.strip_left(resource, "gres/gpu:")
             resource = UtilsBase.strip_left(resource, "gres/gpu")
 
-            if (resource.startswith("=")
-                and node_name
-                and (Utils.is_solar() or Utils.get_cluster_type() == "trillium")):
+            if resource.startswith("=") and node_name and Utils.is_solar():
                 count = int(resource[1:])
                 gpu_name = MachineInfo.cluster2node2config[Utils.get_cluster_type()][node_name]["gpu_name"]
-            elif not resource.startswith("=") and not (Utils.is_solar() or Utils.get_cluster_type() == "trillium"):
+            elif not resource.startswith("=") and not Utils.is_solar():
                 gpu_name, count = resource.split("=")
                 count = int(count)
             else:
