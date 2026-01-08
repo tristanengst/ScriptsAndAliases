@@ -56,6 +56,9 @@ machine2info = {
 cluster2node2config = dict(
     solar={},
     solar1={
+        "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
+        "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
+        "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
         "cs-venus-01": dict(cpus_per_gpu=10, mem_per_gpu=84, gpu_alias="q6000", gpus_per_node=6, can_allocate=True, gpu_name="quadro_rtx_6000", gpu_frac=1.0),
         "cs-venus-02": dict(cpus_per_gpu=8, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=8, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
         "cs-venus-03": dict(cpus_per_gpu=12, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=4, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
@@ -110,6 +113,7 @@ cluster2node2config = dict(
 
 gpu2info = {
     "default_gpu": dict(vram=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1),
+    "titan": dict(vram=8, good=False, gpu_name="titan_xp", ddp=True, gpu_frac=1.0),
     "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0),
     "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0)} | dict(
     p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0),
