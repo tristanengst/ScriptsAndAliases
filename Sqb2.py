@@ -65,6 +65,7 @@ def colorize_time_lefts(job_infos, cur_user=True):
 
     def colorize_time_left(ji):
         if (ji.time_left in ["N/A", None]
+            or ji.time_left.startswith("INV")
             or not "user" in ji
             or (cur_user and not ji.user == os.environ["USER"])
             or not decolorize(ji.state) in ["RUNNING", "COMPLETING"]):
