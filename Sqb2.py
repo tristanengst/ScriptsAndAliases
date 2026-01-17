@@ -430,6 +430,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
     else:
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
         gpus = UtilsBase.flatten([g.split(",") for g in gpus])
+        gpus = UtilsBase.flatten([g.split("=") for g in gpus])
 
         # At this point, the GPU string will generally be one of the following forms:
         # 1. Just a number giving the number of GPUs
@@ -808,17 +809,24 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
         job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
         job_infos = list(job2info.values())
     
-    gpu_data = argparse.Namespace(running=0, allocated=0, running_user=0, allocated_user=0)
+    gpu_data = argparse.Namespace(running=0, allocated=0, depends=0, running_user=0, allocated_user=0, depends_user=0)
     for ji in job_infos:
         if (ji.jobid.startswith("__")
             or not UtilsBase.is_numeric(ji.gpus)
             or any([ji.reason.startswith(r) for r in ["Dependency", "JobHeld"]])):
             continue
+
+        if ji.jobid == "3427149":
+            print(ji)
         
         num_gpus = float(ji.gpus)
         if ji.state in ["RUNNING", "COMPLETING"]:
             gpu_data.running += num_gpus
             gpu_data.running_user += num_gpus if ji.user == os.environ["USER"] else 0
+        elif ji.state in ["PENDING"] and ji.dependency.startswith("after"):
+            gpu_data.depends += num_gpus
+            gpu_data.depends_user += num_gpus if ji.user == os.environ["USER"] else 0
+        # Note: presently I don't account for singleton dependencies. We can if this becomes a use case.
         elif ji.state in ["PENDING"]:
             gpu_data.allocated += num_gpus
             gpu_data.allocated_user += num_gpus if ji.user == os.environ["USER"] else 0
@@ -829,7 +837,7 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     gpu_data.total_user = gpu_data.running_user + gpu_data.allocated_user
     
     s = f"GPUS:\t\t\t{os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
-    s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total})" 
+    s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total} (depends={gpu_data.depends}))" 
     return s
 
 def count_jobs_by_state(job_infos):
