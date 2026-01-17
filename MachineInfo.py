@@ -40,7 +40,15 @@ machine2info = {
     "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
     "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A9"]),
     "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
-}
+} | dict( # Made up info for the ComputeCanada clusters so we can run commands on them. This should probably be refactored!
+    narval=dict(num_cpus=40, num_gpus=4, hyperthread=False, ssh_names=["narval"]),
+    cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["cedar"]),
+    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["killarney"]),
+    vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["vulcan"]),
+    trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
+    fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
+    rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["rorqual"]),
+    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),)
 
 # Specifies configuration for possible nodes/types of nodes, grouped by cluster.
 # Commented out lines are for nodes not known to the scheduler.
@@ -227,28 +235,33 @@ def machine_to_hostname(m):
 
 def hostname_to_machine(hostname):
     """Returns the SSH name in [ssh_name2info] of [hostname]."""
-    hostname_numeric = [c for c in hostname if c.isdigit()]
-    prefix = "S" if "r" in hostname else "A" # Heuristic, possibly brittle
-    return f"{prefix}{int(''.join(hostname_numeric))}"
+    if hostname in cluster2node2config:
+        return hostname
+    else:
+        hostname_numeric = [c for c in hostname if c.isdigit()]
+        prefix = "S" if "r" in hostname else "A" # Heuristic, possibly brittle
+        return f"{prefix}{int(''.join(hostname_numeric))}"
 
 def hostname_is_current_machine(hostname):
     """Returns True if [hostname] is the current machine."""
     return os.uname().nodename == hostname
 
-def run_command_on_machine(m, command):
+def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
     """Runs [command] on machine [m] and returns the output."""
     cwd = os.getcwd()
     os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-    hostname = machine_to_hostname(m)
+    hostname = machine_to_hostname(machine)
     if os.uname().nodename == hostname:
         result = subprocess.getoutput(command)
         os.chdir(cwd)
         return result
-    ssh_name = machine_to_ssh_name(m)
+    ssh_name = machine_to_ssh_name(machine)
     if ssh_name is None:
-        raise ValueError(f"Could not find SSH name for machine {m} with hostname={hostname}. Please check your ~/.ssh/config file.")
+        raise ValueError(f"Could not find SSH name for machine {machine} with hostname={hostname}. Please check your ~/.ssh/config file.")
     else:
-        result = subprocess.getoutput(f"ssh {ssh_name} '{command}'")
+        ssh_args_str = " ".join(ssh_args)
+        command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
+        result = subprocess.getoutput(command_to_run)
         os.chdir(cwd)
         return result
 
@@ -260,7 +273,7 @@ def get_updated_machine_info(m, verbose=0):
     m           -- machine name, which must be a key in [machine2info], or a hostname
     """
     m = hostname_to_machine(m) if not m in machine2info else m
-    result = run_command_on_machine(m, "nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
+    result = run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
 
     result = result.split("\n")
     nvidia_smi_lines = result[:-2]
@@ -280,14 +293,14 @@ def get_updated_machine_info(m, verbose=0):
 
     if nvidia_smi_ok:
         user2gpu_ids = defaultdict(lambda: set())
-        result = run_command_on_machine(m, "nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory --format=csv,noheader")
+        result = run_command_on_machine(machine=m, command="nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory --format=csv,noheader")
 
         if len(result) == 0:
             user2gpu_ids = dict()
         else:
             for line in result.split("\n"):
                 pid = line.split()[1].replace(",", "")
-                user = run_command_on_machine(m, f"ps -o user= -p {pid}").strip()
+                user = run_command_on_machine(machine=m, command=f"ps -o user= -p {pid}").strip()
                 if not user == "":
                     user2gpu_ids[user].add(line.split()[0])
 

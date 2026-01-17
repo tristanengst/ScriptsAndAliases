@@ -17,17 +17,17 @@ for m in MachineInfo.machine2info:
     if MachineInfo.hostname_is_current_machine(hostname):
         print(f"Updating host={hostname} (current machine)...")
         if not osp.exists(osp.expanduser("~/.ScriptsAndAliases")):
-            MachineInfo.run_command_on_machine(m, "git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases")
+            MachineInfo.run_command_on_machine(machine=m, command="git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases")
         
-        MachineInfo.run_command_on_machine(m, "cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py")
+        MachineInfo.run_command_on_machine(machine=m, command="cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py")
 
         if osp.exists(osp.expanduser("~/.bashrc")):
-            MachineInfo.run_command_on_machine(m, "source ~/.bashrc",)
+            MachineInfo.run_command_on_machine(machine=m, command="source ~/.bashrc",)
         if osp.exists(osp.expanduser("~/.zshrc")):
-            MachineInfo.run_command_on_machine(m, "source ~/.zshrc",)
+            MachineInfo.run_command_on_machine(machine=m, command="source ~/.zshrc",)
     
     elif Utils.is_workstation() and not args.recursive_call:
         print(f"Updating host={hostname}...")
-        MachineInfo.run_command_on_machine(m, "python ~/.ScriptsAndAliases/UpdateScriptsAndAliases.py",)
+        MachineInfo.run_command_on_machine(machine=m, command="python ~/.ScriptsAndAliases/UpdateScriptsAndAliases.py",)
     else:
         pass
