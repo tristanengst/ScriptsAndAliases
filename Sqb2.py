@@ -429,6 +429,17 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         gpus = "N/A"
     else:
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
+        gpus = UtilsBase.flatten([g.split(",") for g in gpus])
+
+        # At this point, the GPU string will generally be one of the following forms:
+        # 1. Just a number giving the number of GPUs
+        # 2. Just a GPU name, giving the type of one GPU
+        # 3. A list where every even element is a GPU type, and every odd element is
+        # the number requested. When multiple such pairs exist, it probably/always(?)
+        # indicates a heterogeneous job. In this case, I believe (but am not sure)
+        # that the number of simultaneously used GPUs for a given GPU type would be
+        # the max over the counts for that GPU type, not their sum. We'll interpret
+        # the GPU type as the largest requested GPU type by number*VRAM.
         
         if gpus[-1].isdigit() and len(gpus) == 1:
             num_gpus = int(gpus[-1])
@@ -436,11 +447,16 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         elif gpus[-1] in MachineInfo.gpu_alias2name.values() and len(gpus) == 1:
             num_gpus = 1
             gpu_alias = MachineInfo.gpu_name2alias[gpus[-1]]
-        elif gpus[-1].isdigit() and len(gpus) == 2 and gpus[0] in MachineInfo.gpu_alias2name.values():
-            num_gpus = int(gpus[-1])
-            gpu_alias = MachineInfo.gpu_name2alias[gpus[0]]
+        elif gpus[0] in MachineInfo.gpu_alias2name.values() and len(gpus) >= 2 and gpus[1].isdigit():
+            gpu_type2count = defaultdict(int)
+            for gpu_type,gpu_count in zip(gpus[0::2], gpus[1::2]):
+                gpu_count = int(gpu_count)
+                gpu_alias = MachineInfo.gpu_name2alias[gpu_type]
+                gpu_type2count[gpu_alias] = max(gpu_type2count[gpu_alias], gpu_count)
+            num_gpus = sum(gpu_type2count.values())
+            gpu_alias = max(gpu_type2count.keys(), key=lambda x: gpu_type2count[x] * MachineInfo.gpu2vram[x])
         else:
-            raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}")
+            raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}. Job data was {jd}")
         
         num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus
         gpus =  f"{num_gpus * int(multiplier)}"
