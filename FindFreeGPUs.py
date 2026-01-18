@@ -99,6 +99,7 @@ if __name__ == "__main__":
     
     if args.solar == 0 or (args.solar == 2 and not Utils.is_solar()):
         args.hosts = MachineInfo.machine2info.keys() if len(args.hosts) == 0 else args.hosts
+        args.hosts = [h for h in args.hosts if h not in MachineInfo.machines_cc]
 
         # Parallelizing this is ~5x faster
         with Pool(processes=min(16, len(args.hosts))) as p:
