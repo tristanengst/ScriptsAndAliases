@@ -1,8 +1,11 @@
 # 📜 Scripts and Aliases
-Useful scripts and aliases useful for manipulating SLURM and other ML jobs.
+Useful scripts and aliases for manipulating SLURM and other ML jobs. Primarily, they support a number of core functionalities:
+1. Reduced friction in keeping many SLURM experiments running, 
+2. Real-time knowledge of which GPUs of which partitions or which ComputeCanada clusters are better and worse to submit to.
+3. Many miscellaneous utilities. Literally software candy.
 
 ### Installation
-You need to have a base Python environment with Python 3.11 or later. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
+This code is explicitly designed to work with Python>=3.11, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
 ```
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
 python ~/.ScriptsAndAliases/WriteAliases.py
@@ -11,6 +14,62 @@ source ~/.bashrc
 To update:
 ```
 cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc
+```
+
+### Basic Usage
+These commands won't require you to change how you do anything. 
+
+### Better Usage
+These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-model-run model. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. UIDs giving this property will dramatically reduce the friction in research.
+
+Concretely, you need to:
+1. Generate UIDs---I use `wandb.util.generate_id()`.
+2. Have your code either read a UID from the command line, or generate one automatically if it's not provided.
+3. When you generate a SLURM job script, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
+   ```
+   #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}" 
+   ```
+4. Modify `UserConfig.json` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` to their respective lists.
+5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. Use symlinks.
+
+This enables the following super-useful commands:
+
+Extract the UIDs of jobs from `sqb` output:
+```
+exu "copy-and-paste lines from sqb"
+```
+
+Print info on a particular SLURM job:
+```
+scb JOBID or UID
+# alias for scontrol show job JOBID
+```
+
+Update SLURM job(s):
+```
+scu Key=Value list of JOBID or UID
+# On each individual JOBID, does scontrol update job JOBID Key=Value
+# eg. make jobs for two experiments have an 8H time limit: `scu TimeLimit=8:00:00 abcdef uvwxyz 
+```
+
+Print experiment output:
+```
+jcat UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
+```
+
+Print the SLURM script for an experiment:
+```
+jcats UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
+```
+
+Send experiment checkpoints from cluster `source_cluster` to the current machine:
+```
+rsyncb source_cluster list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments
+```
+
+Send experiment checkpoints from the current machine to cluster `destination_cluster`:
+```
+rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
 ```
 
 ### Useful on our SLURM Clusters
