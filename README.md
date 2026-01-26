@@ -29,7 +29,7 @@ Concretely, you need to:
    ```
    #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}" 
    ```
-4. Modify `UserConfig.json` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` to their respective lists.
+4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` to their respective lists.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. Use symlinks.
 
 This enables the following super-useful commands:
