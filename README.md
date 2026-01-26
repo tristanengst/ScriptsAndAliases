@@ -17,7 +17,14 @@ To update:
 cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc
 ```
 
-If you aren't part of APEX lab, in `UserConfig.py`, edit `cluster2accounts` to include all the relevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster.
+### Who this is for, updates, and configuration
+While these utilities are primarily for myself and other members of APEX lab, anyone using ComputeCanada could also get a fair amount of use from this, and I expect the algorithms and ideas are more broadly useful. This primarily manifests through hardcoding things that could in principle be variable, like SLURM account names, cluster names, and types of compute nodes.
+
+This repo is updated frequently, and is provided as-is. Expect things and especially the core useful functionality to work well, but there are likely corner cases I don't know about or aren't yet worth handling.
+
+Please submit pull requests if you want something handled.
+
+APEX lab users can use default values and shouldn't need to input custom data. Other users will unlock functionality by editing `UserConfig.py`. Set `cluster2accounts` to include all the relevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster. You might also need to modify some dictionaries in `MachineInfo.py`.
 
 ### Basic Usage
 These commands won't require you to change how you do anything. 
