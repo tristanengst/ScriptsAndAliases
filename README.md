@@ -11,10 +11,13 @@ git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
 python ~/.ScriptsAndAliases/WriteAliases.py
 source ~/.bashrc
 ```
+
 To update:
 ```
 cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc
 ```
+
+If you aren't part of APEX lab, in `UserConfig.py`, edit `cluster2accounts` to include all the relevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster.
 
 ### Basic Usage
 These commands won't require you to change how you do anything. 
@@ -56,12 +59,13 @@ Send experiment checkpoints from cluster `source_cluster` to the current machine
 ```
 rsyncb source_cluster list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments
 # short for 'rsync better'
+# Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 source_cluster:~/path/to/checkpoint ~/path/to
+# Note: you'll need to have `source_cluster` in your ~/.ssh/config` file for this to work. See below for details.
 ```
 
 Send experiment checkpoints from the current machine to cluster `destination_cluster`:
 ```
 rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
-# Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 /path/to/checkpoint destination_cluster:/path/to/
 ```
 
 Print info on a particular SLURM job:
@@ -198,6 +202,53 @@ If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -
 
 ### Notes
 - The development model for this is very ad-hoc; I fix bugs when they are sufficiently annoying to justify the time. This could change if this impacts other people.
+
+
+
+### SSH Config
+Some functionality for this library assumes SSH is set up in specific good ways. For ComputeCanada clusters, you'll need the name for them used in this codebase as a key for them in your `~/.ssh/config` file. It will also be helpful to configure the connections thus:
+```
+Host *
+  User YOUR_USERNAME_ON_COMPUTECANADA
+  ServerAliveInterval 60
+  StrictHostKeyChecking no
+  ControlPath ~/.ssh/cm-%r@%h:%p
+  ControlPersist yes
+  ControlMaster auto
+
+Host narval
+  HostName narval.computecanada.ca
+Host trillium
+  HostName trillium-gpu.alliancecan.ca
+Host rorqual
+  HostName rorqual.alliancecan.ca
+Host fir
+  HostName fir.alliancecan.ca
+Host nibi
+  HostName nibi.sharcnet.ca
+Host vulcan
+  HostName vulcan.alliancecan.ca
+Host killarney killa
+  HostName killarney.alliancecan.ca
+Host tamia
+  HostName tamia.alliancecan.ca
+```
+
+Some functionality for APEX workstations and servers is predicated on a certain naming convention. We don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file, rather than harcoded here. The naming scheme for workstations is
+```
+Host A1
+   HostName REDACTED
+...
+Host A9
+   HostName REDACTED
+Host A99
+   HostName REDACTED
+```
+while that for servers is identical, but with `S` instead of `A`.
+
+
+
+
 
 
 
