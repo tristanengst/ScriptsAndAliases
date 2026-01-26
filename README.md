@@ -76,6 +76,8 @@ scu Key=Value list of JOBID or UID
 # eg. make jobs for two experiments have an 8H time limit: `scu TimeLimit=8:00:00 abcdef uvwxyz
 ```
 
+You can also leverage this inside the code you write. A key use case is letting jobs modify the SLURM script that submitted them. For example, imagine a job discovers that the node its on has a bad GPU. It then **(1)** modifies its SLURM script to exclude the bad node by appending it to the list of nodes excluded for the job---`#SBATCH exclude=possibly,empty,list,of,bad,nodes`, **(2)** resubmits the SLURM script, **(3)** ends.
+
 ### Useful on our SLURM Clusters
 Make jobs `123` and `456` run on the `def-keli` or `rrg-keli` accounts:
 ```
