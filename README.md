@@ -1,8 +1,8 @@
 # 📜 Scripts and Aliases
 Useful scripts and aliases for manipulating SLURM and other ML jobs. Primarily, they support a number of core functionalities:
-1. Reduced friction in keeping many SLURM experiments running, 
-2. Real-time knowledge of which GPUs of which partitions or which ComputeCanada clusters are better and worse to submit to.
-3. Many miscellaneous utilities. Literally software candy.
+1. Reduced friction in keeping many SLURM experiments running
+2. Real-time knowledge of which GPUs of which partitions or which ComputeCanada clusters are better and worse to submit to
+3. Many miscellaneous utilities. Literally software candy!
 
 ### Installation
 This code is explicitly designed to work with Python>=3.11, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
