@@ -5,7 +5,7 @@ Useful scripts and aliases for manipulating SLURM and other ML jobs. Primarily, 
 3. Many miscellaneous utilities. Literally software candy!
 
 ### Installation
-This code is explicitly designed to work with Python>=3.11, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
+This code is explicitly designed to work with Python after 3.11, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
 ```
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
 python ~/.ScriptsAndAliases/WriteAliases.py
