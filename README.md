@@ -60,7 +60,7 @@ rsyncb source_cluster list of UID or substring of experiment name containing eno
 Send experiment checkpoints from the current machine to cluster `destination_cluster`:
 ```
 rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
-# Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 /path/to/checkpoint destination_cluster:/path/to
+# Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 /path/to/checkpoint destination_cluster:/path/to/
 ```
 
 Print info on a particular SLURM job:
