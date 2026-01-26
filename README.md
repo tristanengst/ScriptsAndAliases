@@ -27,7 +27,8 @@ Concretely, you need to:
 2. Have your code either read a UID from the command line, or generate one automatically if it's not provided.
 3. When you generate a SLURM job script, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
    ```
-   #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}" 
+   #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
+   # The total length of the comment is limited to 256 characters. Shorten `exp_name` as needed to ensure the comment is valid JSON
    ```
 4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` to their respective lists.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. Use symlinks.
