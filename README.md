@@ -39,6 +39,30 @@ Extract the UIDs of jobs from `sqb` output:
 exu "copy-and-paste lines from sqb"
 ```
 
+Print experiment output:
+```
+jcat UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
+# short for 'job cat'
+```
+
+Print the SLURM script for an experiment:
+```
+jcats UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
+# short for 'job cat script'
+```
+
+Send experiment checkpoints from cluster `source_cluster` to the current machine:
+```
+rsyncb source_cluster list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments
+# short for 'rsync better'
+```
+
+Send experiment checkpoints from the current machine to cluster `destination_cluster`:
+```
+rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
+# Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 /path/to/checkpoint destination_cluster:/path/to
+```
+
 Print info on a particular SLURM job:
 ```
 scb JOBID or UID
@@ -49,27 +73,7 @@ Update SLURM job(s):
 ```
 scu Key=Value list of JOBID or UID
 # On each individual JOBID, does scontrol update job JOBID Key=Value
-# eg. make jobs for two experiments have an 8H time limit: `scu TimeLimit=8:00:00 abcdef uvwxyz 
-```
-
-Print experiment output:
-```
-jcat UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
-```
-
-Print the SLURM script for an experiment:
-```
-jcats UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
-```
-
-Send experiment checkpoints from cluster `source_cluster` to the current machine:
-```
-rsyncb source_cluster list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments
-```
-
-Send experiment checkpoints from the current machine to cluster `destination_cluster`:
-```
-rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
+# eg. make jobs for two experiments have an 8H time limit: `scu TimeLimit=8:00:00 abcdef uvwxyz
 ```
 
 ### Useful on our SLURM Clusters
