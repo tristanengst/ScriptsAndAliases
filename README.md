@@ -81,7 +81,11 @@ Cancel SLURM job(s) by JOBID _or_ UID:
 scancelb list of JOBID or UID
 ```
 
-You can also leverage this inside the code you write. A key use case is letting jobs modify the SLURM script that submitted them. For example, imagine a job discovers that the node its on has a bad GPU. It then **(1)** modifies its SLURM script to exclude the bad node by appending it to the list of nodes excluded for the job---`#SBATCH exclude=possibly,empty,list,of,bad,nodes`, **(2)** resubmits the SLURM script, **(3)** ends.
+You can also leverage this inside the code you write. Some key use cases are thus:
+1. Letting jobs modify the SLURM script that submitted them. For example, imagine a job discovers that the node its on has a bad GPU. It then **(1)** modifies its SLURM script to exclude the bad node by appending it to the list of nodes excluded for the job---`#SBATCH exclude=possibly,empty,list,of,bad,nodes`, **(2)** resubmits the SLURM script, **(3)** ends.
+2. Being vastly more stateless with respect to the codebase---so you don't have to spend nearly as much time worrying about what code actually generated a particular result. Your SLURM scripts should **(1)** check to see if a /path/to/experiment_name_with_uid/code.tar` exists, and create this file from the code you want to run if it doesn't (or, create the file when the SLURM script is submitted!). Then, **(2)** untar this onto a job-specific directory on the compute node---usually `$SLURM_TMPDIR`. Now, **(3)** run the code from this directory. Once the tarfile is created, you can modify your code arbitrarily without impacting jobs that use this tarfile.
+
+
 
 ### Useful on our SLURM Clusters
 Make jobs `123` and `456` run on the `def-keli` or `rrg-keli` accounts:
