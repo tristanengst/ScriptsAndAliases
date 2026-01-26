@@ -234,20 +234,7 @@ Host tamia
   HostName tamia.alliancecan.ca
 ```
 
-Some functionality for APEX workstations and servers is predicated on a certain naming convention. We don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file, rather than harcoded here. The naming scheme for workstations is
-```
-Host A1
-   HostName REDACTED
-...
-Host A9
-   HostName REDACTED
-Host A99
-   HostName REDACTED
-```
-while that for servers is identical, but with `S` instead of `A`.
-
-
-
+Some functionality for APEX workstations and servers is predicated on a certain naming convention. We don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file, rather than harcoded here. See the lab's Notion.
 
 
 
