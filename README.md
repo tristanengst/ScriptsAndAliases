@@ -26,7 +26,7 @@ These commands won't require you to change how you do anything.
 These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-model-run model. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. UIDs giving this property will dramatically reduce the friction in research.
 
 Concretely, you need to:
-1. Generate UIDs---I use `wandb.util.generate_id()`.
+1. Generate UIDs—I use `wandb.util.generate_id()`.
 2. Have your code either read a UID from the command line, or generate one automatically if it's not provided.
 3. When you generate a SLURM job script, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
    ```
@@ -87,7 +87,7 @@ scancelb list of JOBID or UID
 ```
 
 You can also leverage this inside the code you write. Some key use cases are thus:
-1. Letting jobs modify the SLURM script that submitted them. For example, imagine a job discovers that the node its on has a bad GPU. It then **(1)** modifies its SLURM script to exclude the bad node by appending it to the list of nodes excluded for the job---`#SBATCH exclude=possibly,empty,list,of,bad,nodes`, **(2)** resubmits the SLURM script, **(3)** ends.
+1. Letting jobs modify the SLURM script that submitted them. For example, imagine a job discovers that the node its on has a bad GPU. It then **(1)** modifies its SLURM script to exclude the bad node by appending it to the list of nodes excluded for the job—`#SBATCH exclude=possibly,empty,list,of,bad,nodes`, **(2)** resubmits the SLURM script, **(3)** ends.
 2. Being vastly more stateless with respect to the codebase---so you don't have to spend nearly as much time worrying about what code actually generated a particular result. Your SLURM scripts should **(1)** check to see if a `/path/to/experiment_name_with_uid/code.tar` exists, and create this file from the code you want to run if it doesn't (or, create the file when the SLURM script is submitted!). Then, **(2)** untar this onto a job-specific directory on the compute node---usually `$SLURM_TMPDIR`. Now, **(3)** run the code from this directory. Once the tarfile is created, you can modify your code arbitrarily without impacting jobs that use this tarfile.
 
 
