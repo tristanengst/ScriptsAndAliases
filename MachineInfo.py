@@ -119,7 +119,8 @@ cluster2node2config = dict(
         h100=dict(cpus_per_gpu=7, mem_per_gpu=250, gpu_alias="h100", gpus_per_node=8, can_allocate=True, gpu_name="h100", gpu_frac=1.0),
         h111=dict(cpus_per_gpu=8, mem_per_gpu=62, gpu_alias="h111", gpus_per_node=16, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", gpu_frac=0.125),
         h122=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h122", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", gpu_frac=0.25),
-        h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5)),
+        h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5),
+        mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
 )
 
@@ -146,7 +147,8 @@ gpu2info = {
     h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0),
     h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
     h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),
-    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5))
+    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5),
+    mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0))
 
 gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v["good"]]
