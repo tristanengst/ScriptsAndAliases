@@ -110,6 +110,9 @@ def tres_to_gres_used(tres, node_name="default"):
             if resource.startswith("=") and node_name and Utils.is_solar():
                 count = int(resource[1:])
                 gpu_name = MachineInfo.cluster2node2config[Utils.get_cluster_type()][node_name]["gpu_name"]
+            elif resource.startswith("=") and Utils.get_cluster_type() == "trillium":
+                count = int(resource[1:])
+                gpu_name = MachineInfo.cluster2node2config[Utils.get_cluster_type()]["default"]["gpu_name"]
             elif not resource.startswith("=") and not Utils.is_solar():
                 gpu_name, count = resource.split("=")
                 count = int(count)
@@ -181,6 +184,8 @@ class Partition:
     def __str__(self):
         node_str = "" if not self.nodes else f", num_nodes={len(self.nodes)}"
         return f"Partition(name={self.name}, time={UtilsBase.time_to_pretty_str(self.time*3600)},{node_str})"
+
+    def __repr__(self): return self.__str__()
 
     @staticmethod
     def get_partitions_from_sinfo(nodes=[]):
