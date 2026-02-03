@@ -24,12 +24,49 @@ This repo is updated frequently, and is provided as-is. Expect things and especi
 
 Please submit pull requests if you want something handled.
 
-APEX lab users can use default values and shouldn't need to input custom data. Other users will unlock functionality by editing `UserConfig.py`. Set `cluster2accounts` to include all the relevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster. You might also need to modify some dictionaries in `MachineInfo.py`.
+**Configuration**. APEX lab users can get the basic functionality without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. For all users, the advanced functionality is unlocked by modifying `...search_dirs` lists in `UserConfig.py`.
 
 ### Basic Usage
-These commands won't require you to change how you do anything. 
+These commands won't require you to change how you do anything.
 
-### Better Usage
+Display cluster state:
+```
+sqb [-p show partitions] [-n show nodes] [-s show start times] [-u show all users in account(s)] .......
+```
+
+Display cluster state without needing working Python, but less info:
+```
+sqbf
+```
+
+Show just LevelFS:
+```
+sshareb
+```
+
+Extract many job IDs:
+```
+exj "copy-and-paste-sqb-output"
+```
+
+Show job info:
+```
+scb JOBID # Or UID, if advanced usage works
+```
+
+Update job info (works on one or many jobs):
+```
+scu Key=Value JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
+makedef JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
+makerrg JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
+```
+
+Show node info:
+```
+scn NODE_HOSTNAME # scn without a node hostname shows all nodes
+```
+
+### Advanced Usage
 These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-model-run model. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. UIDs giving this property will dramatically reduce the friction in research.
 
 Concretely, you need to:
@@ -140,27 +177,6 @@ sshareb
 Extracts all job IDs from string `s` of newline-separated job names (eg. `sqb` output):
 ```
 extract_job_ids 's'
-```
-
-### Useful on SLURM clusters with smart job naming
-I always include a matching UID in **(1)** my experiments' names and **(2)** the directories they save checkpoints to, ensuring an unambiguous provenance to any result or file. On SLURM this extends to **(3)** SLURM jobs, **(4)** their submission scripts, and **(5)** their output files. These UIDs become a central handle with which to interact with the cluster; for example, finding the script that ran an experiment with UID `asdfgh` is simple: `cat some/path/*asdfgh*`!
-
-_To effect this, the Python script that runs an experiment has `--uid ` argument, with the UID generated automatically if `--uid` isn't included. Each of these scripts is run inside a SLURM script, generated from a template file by another Python script. This script can then generate a UID to find the name of the experiment it's submitting, and then include it as a keyword argument to the Python script run inside the job. This allows setting the job's name, output file, and the generated SLURM script to include the UID. I also include the UID in a dictionary of metadata stored in the job's `COMMENT` attribute (up to 256 characters). This is probably the most unambiguous way to specify it, as how the UID appears in how things are named doesn't matter._
-
-View all your jobs (nicer version of `sqb`) and show UIDs too:
-```
-sqb [-a show jobs with duplicate UIDs] [-s show start times] [-u all users as in sqbau]
-```
-The bash commands don't require using flags for ease of typing, eg `sqba` and `sqbus` and `sqbsu` are valid.
-
-Extract UIDs of all jobs from string `s` of newline-separated job names  (eg. `sqb` output):
-```
-extract_uids 's'
-```
-
-Checks to make sure that no two jobs are running the same experiment:
-```
-check_duplicate_jobs
 ```
 
 ### Useful on Workstations and Servers
