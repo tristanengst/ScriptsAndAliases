@@ -468,12 +468,17 @@ def job_info_with_formatted_reason(jd):
     """Returns job info [jd] with the reason formatted."""
     reason = " ".join(jd.reason) if isinstance(jd.reason, list) else jd.reason
     if reason.startswith("Dependency") and not jd.dependency in ["N/A", "None", ""]:
-        dependency_type,depends_on_jobid = jd.dependency.split(":")
-        depends_on_jobid,_ = (depends_on_jobid.split("(")[0] if "(" in depends_on_jobid else depends_on_jobid).strip(), None
-        
-        # CamelCase the dependency type
-        dependency_type = dependency_type.replace("after", "After").replace("ok", "Ok").replace("any", "Any").replace("not", "Not")
-        reason = f"{dependency_type}:{depends_on_jobid}"
+        if jd.dependency.startswith("singleton"):
+            reason = "singleton"
+        elif jd.dependency.startswith("after"):
+            dependency_type,depends_on_jobid = jd.dependency.split(":")
+            depends_on_jobid,_ = (depends_on_jobid.split("(")[0] if "(" in depends_on_jobid else depends_on_jobid).strip(), None
+            
+            # CamelCase the dependency type
+            dependency_type = dependency_type.replace("after", "After").replace("ok", "Ok").replace("any", "Any").replace("not", "Not")
+            reason = f"{dependency_type}:{depends_on_jobid}"
+        else:
+            raise NotImplementedError(f"Unexpected dependency={jd.dependency} for jobid={jd.jobid}")
     else:
         reason = reason.split(":")[0].split(" ")[0].strip()  # Remove the first word and any colons
     return UtilsBase.updated_namespace(jd, reason=reason)
