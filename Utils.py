@@ -7,6 +7,7 @@ import subprocess
 
 import UtilsBase
 from UtilsBase import twrite
+from UserConfig import cluster2accounts
 
 def get_cluster_type():
     """Returns a string for special host types, or None if they are not recognized."""
@@ -17,6 +18,8 @@ def get_cluster_type():
         return "vulcan"
     elif h.startswith("klogin") or h.startswith("kn"):
         return "killarney"
+    elif h.startswith("tamia") or h.startswith("tc") or h.startswith("tg"):
+        return "tamia"
     elif "trig" in h or "trillium" in h:
         return "trillium"
     elif h.startswith("fc") or h.startswith("login"):
@@ -31,31 +34,29 @@ def get_cluster_type():
         return "beluga"
     elif h.startswith("gra-") or h.startswith("gra") or h.startswith("gr"):
         return "graham"
-    elif h == "cs-star" or h.startswith("cs-v"):
+    elif h.startswith("cs-star") or h.startswith("cs-v"):
         return "solar"
-    elif h in ["cs-star2", "cs-star1"]:
-        return "solar1"
     else:
         h_ = "-".join(h.split("-")[:2])
         return os.environ.get("CLUSTER_TYPE", "cs-apex")
 
-def is_solar(): return get_cluster_type() in ["solar", "solar1"]
-def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir", "vulcan", "killarney"]
+def is_solar(): return get_cluster_type() in ["solar"]
+def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir", "vulcan", "killarney", "tamia"]
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 
 cluster2info = dict(
-    nibi=dict(accounts=["rrg-keli_gpu", "def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    trillium=dict(accounts=["def-keli"], conf_file=None, partitions_startswith=["compute", "compute_full_node"]),
-    fir=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    rorqual=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    narval=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    cedar=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    beluga=dict(accounts=["def-keli_gpu"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    vulcan=dict(accounts=["aip-keli"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    killarney=dict(accounts=["aip-keli"], conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
-    solar=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
-    solar1=dict(accounts=None, conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
+    nibi=dict(accounts=cluster2accounts.get("nibi",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    trillium=dict(accounts=cluster2accounts.get("trillium",[]), conf_file=None, partitions_startswith=["compute", "compute_full_node"]),
+    fir=dict(accounts=cluster2accounts.get("fir",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    rorqual=dict(accounts=cluster2accounts.get("rorqual",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    narval=dict(accounts=cluster2accounts.get("narval",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    cedar=dict(accounts=cluster2accounts.get("cedar",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    beluga=dict(accounts=cluster2accounts.get("beluga",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    vulcan=dict(accounts=cluster2accounts.get("vulcan",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    killarney=dict(accounts=cluster2accounts.get("killarney",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase", "interac"]),
+    tamia=dict(accounts=cluster2accounts.get("tamia",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["gpubase"]),
+    solar=dict(accounts=cluster2accounts.get("solar",[]), conf_file="/etc/slurm/slurm.conf", partitions_startswith=["cs-gpu-research"]),
 )
 cluster2info = {k: argparse.Namespace(**v) for k,v in cluster2info.items()}
 

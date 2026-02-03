@@ -13,6 +13,8 @@ import sys
 import subprocess
 
 import Utils
+import UtilsBase
+from UserConfig import cluster2accounts
 
 
 # Dictionary machine names to their information. Note that hostnames are not included,
@@ -34,7 +36,7 @@ machine2info = {
     # "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
     "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A3"]),
     "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A4"]),
-    # "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
+    "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
     # "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A6"]),
     # "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A7"]),
     "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
@@ -66,8 +68,7 @@ machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "ror
 # max_time      -- maximum time in hours that can be requested
 # constraint    -- constraint to use for the scheduler if possible
 cluster2node2config = dict(
-    solar={},
-    solar1={
+    solar={
         "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
         "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
         "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
@@ -97,6 +98,8 @@ cluster2node2config = dict(
         h100=dict(cpus_per_gpu=6, mem_per_gpu=255, gpu_alias="h100", gpus_per_node=8, can_allocate=True, gpu_name="h100", gpu_frac=1.0)),
     vulcan=dict(default=dict(cpus_per_gpu=16, mem_per_gpu=125, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
         l40s=dict(cpus_per_gpu=16, mem_per_gpu=125, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0)),
+    tamia=dict(default=dict(cpus_per_gpu=12, mem_per_gpu=125, gpu_alias="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100", gpu_frac=1.0),
+        h200=dict(cpus_per_gpu=8, mem_per_gpu=125, gpu_alias="h200", gpus_per_node=8, can_allocate=True, gpu_name="h200", gpu_frac=1.0)),
     narval=dict(default=dict(cpus_per_gpu=12, mem_per_gpu=124, gpu_alias="a100", gpus_per_node=4, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
         a100=dict(cpus_per_gpu=12, mem_per_gpu=124, gpu_alias="a100", gpus_per_node=4, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
         a101=dict(cpus_per_gpu=6, mem_per_gpu=60, gpu_alias="a101", gpus_per_node=7, can_allocate=True, gpu_name="a100_1g.5gb", gpu_frac=0.125),
@@ -148,6 +151,7 @@ gpu2info = {
     h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
     h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),
     h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5),
+    h200=dict(vram=141, good=True, gpu_name="h200", ddp=True, gpu_frac=1.0),
     mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0))
 
 gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
@@ -157,29 +161,34 @@ gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
 gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()}
 
 # Maps cluster names to unique prefixes for their compute nodes
-cluster2node_prefix = dict(narval="ng", cedar="cdr", solar="cs-venus", cs_apex="cs-apex", nibi="g", rorqual="rg", trillium="trig", fir="fc", solar1="cs-venus", vulcan="rack")
+cluster2node_prefix = dict(cs_apex="cs-apex", solar="cs-venus", # SFU-only
+    beluga="bg",  cedar="cdr", # Deprecated
+    nibi="g", fir="fc", rorqual="rg", narval="ng",  trillium="trig", # def/rrg
+    vulcan="rack", killarney="kn", tamia="tg") # aip
 
 cluster2misc_reqs = dict(
     nibi=dict(wandb_default_mode="online",
-        default_account="rrg-keli"),
+        default_account=UtilsBase.strip_right(cluster2accounts["nibi"][0], "_gpu")),
     rorqual=dict(wandb_default_mode="online",
-        default_account="def-keli"),
+        default_account=UtilsBase.strip_right(cluster2accounts["rorqual"][0], "_gpu")),
     fir=dict(wandb_default_mode="online",
-        default_account="def-keli"),
-    trillium=dict(wandb_default_mode="online",
-        default_account="def-keli"),
+        default_account=UtilsBase.strip_right(cluster2accounts["fir"][0], "_gpu")),
     narval=dict(wandb_default_mode="online",
-        default_account="def-keli"),
-    cedar=dict(wandb_default_mode="online",
-        default_account="def-keli"),
-    beluga=dict(wandb_default_mode="online",
-        default_account="def-keli"),
+        default_account=UtilsBase.strip_right(cluster2accounts["narval"][0], "_gpu")),
+    trillium=dict(wandb_default_mode="online",
+        default_account=UtilsBase.strip_right(cluster2accounts["trillium"][0], "_gpu")),
     vulcan=dict(wandb_default_mode="online",
-        default_account="aip-keli"),
+        default_account=UtilsBase.strip_right(cluster2accounts["vulcan"][0], "_gpu")),
+    killarney=dict(wandb_default_mode="online",
+        default_account=UtilsBase.strip_right(cluster2accounts["killarney"][0], "_gpu")),
+    tamia=dict(wandb_default_mode="offline",
+        default_account=UtilsBase.strip_right(cluster2accounts["tamia"][0], "_gpu")),
+    cedar=dict(wandb_default_mode="online",
+        default_account=UtilsBase.strip_right(cluster2accounts["cedar"][0], "_gpu")),
+    beluga=dict(wandb_default_mode="online",
+        default_account=UtilsBase.strip_right(cluster2accounts["beluga"][0], "_gpu")),
     solar=dict(wandb_default_mode="online",
-        default_account="cs-gpu-research"),
-    solar1=dict(wandb_default_mode="online",
-        default_account="cs-gpu-research"),
+        default_account=UtilsBase.strip_right(cluster2accounts["solar"][0], "_gpu")),
     cs_apex=dict(wandb_default_mode="online",
         default_account=""))
 

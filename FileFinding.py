@@ -11,23 +11,19 @@ import Utils
 from Utils import get_slurm_status
 import UtilsBase
 from UtilsBase import twrite
+import UserConfig
 
-exp_search_dirs = [osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
-    osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
-    osp.expanduser("~/scratch/IMLE-SSL/finetunes")]
+exp_search_dirs = UserConfig.checkpoints_search_dirs
+slurm_script_search_dirs = UserConfig.slurm_script_search_dirs
+job_result_search_dirs = UserConfig.job_result_search_dirs
 
-file_search_dirs = [
-    osp.expanduser("~/Development/IMLE-SSL-2/pretrain_results"),
-    osp.expanduser("~/Development/IMLE-SSL-2/finetune_results"),
-    osp.expanduser("~/Development/IMLE-SSL-2/slurm"),
-    osp.expanduser("~/Development/IMLE-SSL-Dev/pretrain_results"),
-    osp.expanduser("~/Development/IMLE-SSL-Dev/finetune_results"),
-    osp.expanduser("~/Development/IMLE-SSL-Dev/slurm")]
-
+# Custom code for me; you might delete this
 if Utils.get_cluster_type() == "cedar":
-    file_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm"),
-        osp.expanduser("~/Development/IMLE-SSL-Cedar/pretrain_results"),
+    file_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/pretrain_results"),
         osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results")]
+    slurm_script_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm")]
+
+file_search_dirs = slurm_script_search_dirs + job_result_search_dirs
 
 def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
@@ -274,10 +270,10 @@ def str_to_all_files(s, search_dirs=file_search_dirs, slurm_or_result="slurm", v
     s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
     s_glob = f"*{s}*"
 
-    if Utils.is_slurm() and slurm_or_result == "slurm" and search_dirs == file_search_dirs:
-        search_dirs = [s for s in search_dirs if osp.basename(s) == "slurm"]
+    if search_dirs == file_search_dirs:
+        search_dirs = slurm_script_search_dirs if slurm_or_result == "slurm" else job_result_search_dirs
     else:
-        search_dirs = [s for s in search_dirs if not osp.basename(s) == "slurm"]
+        search_dirs = [s for s in search_dirs if not osp.basename(s) == "slurm"] # Heuristic
 
     search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
     return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isfile(m)]
