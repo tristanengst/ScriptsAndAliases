@@ -135,50 +135,6 @@ You can also leverage this inside the code you write. Some key use cases are thu
 2. Being vastly more stateless with respect to the codebase—so you don't have to spend nearly as much time worrying about what code actually generated a particular result. Your SLURM scripts should **(1)** check to see if a `/path/to/experiment_name_with_uid/code.tar` exists, and create this file from the code you want to run if it doesn't (or, create the file when the SLURM script is submitted!). Then, **(2)** untar this onto a job-specific directory on the compute node—usually `$SLURM_TMPDIR`. Now, **(3)** run the code from this directory. Once the tarfile is created, you can modify your code arbitrarily without impacting jobs that use this tarfile.
 
 
-
-### Useful on our SLURM Clusters
-Make jobs `123` and `456` run on the `def-keli` or `rrg-keli` accounts:
-```
-makedef 123 456
-makerrg 123 456
-```
-
-View information about a job (syntactic sugar for `scontrol show job 123`):
-```
-scb 123
-```
-
-Update jobs `123` and `456` to have a different configuration. See [https://slurm.schedmd.com/sbatch.html](slurm.schedmd.com/sbatch.html) for what you can change. _**Note:** only some parts of a job's configuration can be updated while it's running or pending; otherwise, you will need to resubmit it with the modification, wasting the time it's spent queuing on ComputeCanada._ 
-```
-scu KEY=VALUE 123 456
-scu TimeLimit=12:00:00 123 456 # Updates jobs 123 and 456 to have a time limit of 12H
-```
-
-Exclude nodes `node123` and `node456` from being used by any job currently running or queueing—after it is submitted again. 🤔 _This has to modify job submission scripts, so it will only work correctly only if each job is submitted from a unique one... see below._
-```
-exclude_nodes node123 node456
-```
-
-View all your jobs (nicer version of `squeue`):
-```
-sqbf
-```
-
-View all `def-keli` and `rrg-keli` jobs on ComputeCanada, or all users' jobs on Solar:
-```
-sqbau
-```
-
-View `LevelFS` (nicer version of `sshare`):
-```
-sshareb
-```
-
-Extracts all job IDs from string `s` of newline-separated job names (eg. `sqb` output):
-```
-extract_job_ids 's'
-```
-
 ### Useful on Workstations and Servers
 
 
