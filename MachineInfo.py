@@ -125,7 +125,9 @@ cluster2node2config = dict(
         h111=dict(cpus_per_gpu=8, mem_per_gpu=62, gpu_alias="h111", gpus_per_node=16, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", gpu_frac=0.125),
         h122=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h122", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", gpu_frac=0.25),
         h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5),
-        mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0)),
+        mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0),
+        a5000=dict(cpus_per_gpu=16, mem_per_gpu=30.5, gpu_alias="a5000", gpus_per_node=4, can_allocate=True, gpu_name="a5000", gpu_frac=1.0),
+        t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=True, gpu_name="t4", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
 )
 
@@ -134,13 +136,14 @@ gpu2info = {
     "titan": dict(vram=8, good=False, gpu_name="titan_xp", ddp=True, gpu_frac=1.0),
     "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0),
     "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0)} | dict(
+    t4=dict(vram=16, good=True, gpu_name="t4", ddp=True, gpu_frac=1.0),
     p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0),
     p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0),
     q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0),
     q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0),
     v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0),
     v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0),
-    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000", ddp=True, gpu_frac=1.0),
+    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0),
     a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0),
     a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0),
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0),

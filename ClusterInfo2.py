@@ -318,6 +318,7 @@ def format_cluster_state(resource_states, nodes=None):
     all_resources = sorted(set(UtilsBase.flatten([list(resource_states.time2resource2total[time].keys()) for time in all_times])),
         key=lambda g: MachineInfo.gpu2vram[g])
     all_resources = [r for r in all_resources if MachineInfo.gpu2info[r]["good"]]
+    
 
 
     time2resource2str = defaultdict(lambda: defaultdict(str))
