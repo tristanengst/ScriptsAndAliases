@@ -78,17 +78,47 @@ These commands require you to slightly change how you do things in that you need
 
 #### Setup
 Concretely, you need to:
-1. Have a way of generating  UIDs of about 8–however many characters—I use `wandb.util.generate_id()`.
-2. Have your the code for any run either read and assign a UID from the command line, or generate and assign one automatically if it's not provided.
-3. When you generate a SLURM job script for an experiment, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job running the SLURM script, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
+1. Decide on (possibly several of each) paths for SLURM scripts, folders of checkpoints, and job outputs respectively. `/path/to/slurm_scripts`, `/path/to/checkpoints`, and `/path/to/job_outputs`. These should be canonical across clusters and workstations, and be either from your home directory or absolute—prefixed by `~/` or `/`. _**These can be symlinks!**_ The goal is to end up with a filesystem that might be structured something like this:
    ```
-   #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
-   # The total length of the comment is limited to 256 characters, and my code expects valid JSON. Abbreviate the experiment name—not the UID—as needed.
+   ├── /path/to/slurm_scripts
+   │   ├──experiment_with_uidABCD1234.sh
+   │   └──experiment_with_uidEFGH5678.sh
+   ├── /path/to/checkpoints
+   │   ├──experiment_with_uidABCD1234
+   │   │   ├── checkpoint_86.pt
+   │   │   └── checkpoint_99_latest.pt
+   │   ├── experiment_with_uidEFGH5678
+   │   │   └──checkpoint_0.pt
+   ├── /path/to/job_outputs
+   │   ├── experiment_with_uidABCD1234.txt
+   │   └── experiment_with_uidEFGH5678.txt
    ```
-4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
-5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
+2. Have a way of generating  UIDs of about 8 characters, eg. `wandb.util.generate_id()` or steal `generate_uid()` from `YourCode.py`
+3. Have your code for any run either read and assign a UID from the command line, or generate and assign one automatically (eg. as above) if it's not provided.
+4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed
+5. When you generate a SLURM job script for an experiment, it should have a UID contained within its name that can uniquely identify everything associated to the experiment. You shoud:
+   1. Include the UID towards the end of the experiment's name, eg. `experiment_name_with_uid`
+   2. Name the SLURM script file as `/path/to/slurm_scripts/experiment_name_with_uid.sh`
+   3. Give this name to the job running the SLURM script:
+      ```
+      #SBATCH --job-name=experiment_name_with_uid
+      ```
+   4. Make the job **append** outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`:
+      ```
+      #SBATCH --output=/path/to/job_outputs/experiment_name_with_uid.txt
+      #SBATCH --open-mode=append
+      ```
+   5. Comment the SLURM script as follows (see `get_sbatch_comment()` in `YourCode.py` for implementation):
+      ```
+      #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
+      # The total length of the comment is limited to 256 characters, and my code expects valid JSON. Abbreviate the experiment name—not the UID—as needed
+      ```
+   6. Pass the UID to the code actually running the experiment in the SLURM script, allowing it to
+   7. Ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`
 
-<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write a <code>heartbeat.txt</code> file under <code>/path/to/checkpoints/experiment_name_with_uid/</code>. Its sole content should be the current time in <code>YYYY--MM-DD HH:MM:SS</code> format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
+<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write a <code>heartbeat.txt</code> file under <code>/path/to/checkpoints/experiment_name_with_uid/</code>. Its sole content should be the current time in <code>YYYY--MM-DD HH:MM:SS</code> format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old. See <code>write_heartbeat()</code> in <code>YourCode.py</code> for implementation.</details>
+
+<details><summary><b>Extra:</b> Make <code>sqb</code> display latest checkpoints</summary>Modify the <code>checkpoint_extensions</code> and <code>checkpoint_prefixes</code> lists in <code>UserConfig.py</code></details>
 
 #### Advanced Usage Commands and Functionality
 All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
