@@ -175,6 +175,9 @@ Updates this repo on every machine that `find_free_gpus` would query:
 python UpdateScriptsAndAliases.py
 ```
 
+### More Commands
+The functionality above is just the key things I use on a day-to-day basis. There is, in fact, more—see all the scripts herein for details!
+
 ### Miscellaneous
 Generate a UID (requires WandB to be installed):
 ```
