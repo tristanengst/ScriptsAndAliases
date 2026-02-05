@@ -1,14 +1,14 @@
 # 📜 Scripts and Aliases
-Useful scripts and aliases for manipulating SLURM and other ML jobs. Primarily, they support a number of core functionalities:
-1. Reduced friction in keeping many SLURM experiments running
-2. Real-time knowledge of which GPUs of which partitions or which ComputeCanada clusters are better and worse to submit to
-3. Many miscellaneous utilities. Literally software candy!
+Useful scripts called from bash aliases, all for manipulating SLURM.... and more! Together, they
+1. Reduce friction in keeping many SLURM experiments running
+2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
+3. Make for many miscellaneous utilities. Literally software candy!
 
 ### Installation
-This code is explicitly designed to work with Python after 3.11, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
+This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
 ```
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
-python ~/.ScriptsAndAliases/WriteAliases.py
+python ~/.ScriptsAndAliases/WriteAliases.py # Maintains a chunk of ~/.bashrc containing aliases that call Python scripts
 source ~/.bashrc
 ```
 
@@ -18,20 +18,18 @@ cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py
 ```
 
 ### Who this is for, updates, and configuration
-While these utilities are primarily for myself and other members of APEX lab, anyone using ComputeCanada could also get a fair amount of use from this, and I expect the algorithms and ideas are more broadly useful. This primarily manifests through hardcoding things that could in principle be variable, like SLURM account names, cluster names, and types of compute nodes.
+While these utilities are primarily for myself and other members of APEX lab, not only should anyone using ComputeCanada be able to get a fair amount of use from this, but also I expect the algorithms and ideas are more broadly useful.
 
-This repo is updated frequently, and is provided as-is. Expect things and especially the core useful functionality to work well, but there are likely corner cases I don't know about or aren't yet worth handling.
+This repo is updated frequently, and is provided as-is. Expect things and especially the core useful functionality to work well, but there are likely corner cases I don't know about or aren't yet worth handling. Often unannounced changes to ComputeCanada clusters necessitate rapid updates. Please submit an issues or pull requests as desired.
 
-Please submit pull requests if you want something handled.
-
-**Configuration**. APEX lab users can get the basic functionality without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. For all users, the advanced functionality is unlocked by modifying `...search_dirs` lists in `UserConfig.py`.
+**Configuration**. APEX lab users get the **basic functionality** without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the **advanced functionality** is unlocked by modifying `...search_dirs` lists in `UserConfig.py`, and taking actions described below._
 
 ### Basic Usage
 These commands won't require you to change how you do anything.
 
-Display cluster state:
+Display the state of your/your group's jobs on a cluster:
 ```
-sqb [-p show partitions] [-n show nodes] [-s show start times] [-u show all users in account(s)] .......
+sqb [-p show partitions] [-n show nodes] [-s show start times] [-u show all users in your account(s)] .......
 ```
 
 Display cluster state without needing working Python, but less info:
@@ -57,59 +55,69 @@ scb JOBID # Or UID, if advanced usage works
 Update job info (works on one or many jobs):
 ```
 scu Key=Value JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
+# Example: scu TimeLimit=8:00:00 123456 654321
+```
+
+Swap (lists of) jobs between `def-` and `rrg-` partitions:
+```
 makedef JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
 makerrg JOBID1 ... JOBIDN # Or UIDs, if advanced usage works
 ```
 
 Show node info:
 ```
-scn NODE_HOSTNAME # scn without a node hostname shows all nodes
+scn NODE_HOSTNAME
+# scn without a node hostname shows all nodes.
+# Sometimes this reveals information not in the ComputeCanada wiki!
 ```
 
 ### Advanced Usage
-These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-model-run model. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. UIDs giving this property will dramatically reduce the friction in research.
+These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-run research paradigm. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. _UIDs giving this property will dramatically reduce the friction in research!_
 
 Concretely, you need to:
-1. Generate UIDs—I use `wandb.util.generate_id()`.
-2. Have your code either read a UID from the command line, or generate one automatically if it's not provided.
-3. When you generate a SLURM job script, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
+1. Have a way of generating  UIDs of about 8–however many characters—I use `wandb.util.generate_id()`.
+2. Have your the code for any run either read and assign a UID from the command line, or generate and assign one automatically if it's not provided.
+3. When you generate a SLURM job script for an experiment, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job running the SLURM script, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
    ```
    #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
-   # The total length of the comment is limited to 256 characters. Abbreviate the experiment name as needed with an eye towards making it uniquely identify checkpoints to ensure the comment is valid JSON
+   # The total length of the comment is limited to 256 characters, and my code expects valid JSON. Abbreviate the experiment name—not the UID—as needed.
    ```
-4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` to their respective lists.
-5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. Use symlinks.
+4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
+5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
 
-This enables the following super-useful commands:
+All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
+- Output from `sqb` includes UIDs, so the map between experiments, results, SLURM scripts, checkpoints, and SLURM jobs is really obvious
+- In most places where you can provide a job ID, a UID will also work
 
-Extract the UIDs of jobs from `sqb` output:
-```
-exu "copy-and-paste lines from sqb"
-```
-
-Print experiment output:
+Find and print experiment output:
 ```
 jcat UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
-# short for 'job cat'
+# think: 'job cat'
 ```
 
-Print the SLURM script for an experiment:
+Find and print the SLURM script for an experiment:
 ```
 jcats UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
-# short for 'job cat script'
+# think: 'job cat script'
+```
+
+Extract all the UIDs of jobs from some lines of `sqb` output (like `exj`):
+```
+exu "copy-and-paste-sqb-output"
 ```
 
 Send experiment checkpoints from cluster `source_cluster` to the current machine:
 ```
-rsyncb source_cluster list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments
-# short for 'rsync better'
+rsyncb source_cluster [list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments]
+# Example: rsyncb nibi UIDA UIDB UIDC
+# think: 'rsync better'
 # Essentially iterates over all the uniquely-identified checkpoint folders: rsync -rh --info=progress2 source_cluster:~/path/to/checkpoint ~/path/to
 # Note: you'll need to have `source_cluster` in your ~/.ssh/config` file for this to work. See below for details.
 ```
 
 Send experiment checkpoints from the current machine to cluster `destination_cluster`:
 ```
-rsyncb list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments destination_cluster
+rsyncb [list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments] destination_cluster
 ```
 
 Print info on a particular SLURM job:
@@ -148,9 +156,9 @@ tpython_ddp2 PythonScript.py ... --gpus 6 7 ...
 
 View available GPUs across all workstations and servers:
 ```
-find_free_gpus
+sqb # Completely different functionality on workstations/servers, but it remains probably the first command you'll run when you log in!
 ```
-**Note:** This command requires that your `~/.ssh/config` file has an entry `ssh_name` for some entry in `ssh_names` for each machine in the `machine2info` dictionary in `MachineInfo.py` such that `ssh ssh_name` will SSH onto the given machine without password authentication. _This is for network security—our machines' hostnames won't be publicly available in plaintext. If you use an SSH name not in the dictionary that doesn't give away the hostname, submit a pull request!_
+**Note:** This command requires that your `~/.ssh/config` file has an entry `ssh_name` for some entry in `ssh_names` for each machine in the `machine2info` dictionary in `MachineInfo.py` such that `ssh ssh_name` will SSH onto the given machine without password authentication. _This is for network security—APEX lab workstations and servers' hostnames won't be publicly available in plaintext. If you use an SSH name not in the dictionary that doesn't give away the hostname, submit a pull request!_
 
 Updates this repo on every machine that `find_free_gpus` would query:
 ```
@@ -163,7 +171,7 @@ Generate a UID (requires WandB to be installed):
 get_wandb_id
 ```
 
-PKill WandB when it's slow. _Probably a good idea not to use this on servers or where someone else might be using WandB_:
+PKill WandB when it's slow. _Maybe not a good idea not to use this on servers or where someone else might be using WandB?_:
 ```
 killwandb
 ```
@@ -178,10 +186,6 @@ Tar files modified within the last `--last_k_days` for saving. _Unlike many not-
 python TarFiles.py --dir directory_to_tar --out name_of_tar_file --last_k_days 60 --ignore_no_pt 0
 ```
 If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -xf name_of_tar_file -C directory_to_extract_under some_file_or_folder`
-
-### Notes
-- The development model for this is very ad-hoc; I fix bugs when they are sufficiently annoying to justify the time. This could change if this impacts other people.
-
 
 
 ### SSH Config
@@ -212,8 +216,7 @@ Host killarney killa
 Host tamia
   HostName tamia.alliancecan.ca
 ```
-
-Some functionality for APEX workstations and servers is predicated on a certain naming convention. We don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file, rather than harcoded here. See the lab's Notion.
+For APEX lab servers and workstations, we don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file. The code then tries to associate the hostnames to servers and workstations it knows about. See the lab's Notion for a sample `~/.ssh/config` file that has names for which this association works.
 
 
 
