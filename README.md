@@ -87,10 +87,11 @@ Concretely, you need to:
    ```
 4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
+6. <details><summary>Extra: Make `sqb` colorize by experiment heartbeat</summary>Have your code occassionally write `heartbeat.txt` file under `/path/to/checkpoints/experiment_name_with_uid/`. Its sole content should be the current time in `YYYY--MM-DD HH:MM:SS` format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
 
 #### Advanced Usage Commands and Functionality
 All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
-- Output from `sqb` includes UIDs, so the map between experiments, results, SLURM scripts, checkpoints, and SLURM jobs is really obvious
+- `sqb` gets much more useful! It will colorize the `STATE` column based on (1)
 - In most places where you can provide a job ID, a UID will also work
 
 Find and print experiment output:
