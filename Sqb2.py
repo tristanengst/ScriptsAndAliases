@@ -24,6 +24,7 @@ from ShowCluster import Node
 import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize, decolorize, get_color_scale
+import UserConfig
 
 ##### Miscellaneous ##################################################################
 
@@ -33,7 +34,7 @@ from UtilsBase import twrite, colorize, decolorize, get_color_scale
 ######################################################################################
 def colorize_submit_times(job_infos):
     """Returns each job info in [job_infos] with the time left colorized."""
-    cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
+    cutoff_values = UserConfig.colorize_submit_times_cutoffs
     color_scale = get_color_scale(
         start="blue",
         mid="purple",
@@ -55,7 +56,7 @@ def colorize_submit_times(job_infos):
 
 def colorize_time_lefts(job_infos, cur_user=True):
     """Returns each job info in [job_infos] with the time left colorized."""
-    cutoff_values = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In hours
+    cutoff_values = UserConfig.colorize_time_lefts_cutoffs
     color_scale = get_color_scale(
         start="red",
         mid="purple",
@@ -86,7 +87,7 @@ def colorize_time_lefts(job_infos, cur_user=True):
 
 def colorize_start_times(job_infos):
     """Returns each job info in [job_infos] with the start time colorized."""
-    cutoff_values = [0.25, 1, 3, 6, 12, 18, 24, 36, 48, 72] # In hours
+    cutoff_values = UserConfig.colorize_start_times_cutoffs
     color_scale = get_color_scale(
         start="blue",
         mid="purple",
@@ -139,7 +140,7 @@ def colorize_reasons(job_infos):
 
 def colorize_queues(job_infos):
     """Returns each job info in [job_infos] with the queue time colorized."""
-    cutoff_values = [0.25, 0.5, 1, 3, 6, 12, 18, 24, 36, 72] # In hours
+    cutoff_values = UserConfig.colorize_queue_times_cutoffs
     color_scale = get_color_scale(
         start="green",
         mid="yellow",
@@ -164,7 +165,7 @@ def colorize_states(job_infos):
     The first half of the state value reflects a potential heartbeat key, while the
     rest reflects the time since the job's output was written to.
     """
-    cutoff_values = [1, 2, 5, 10, 20, 30, 40, 50, 60, 90] # In minutes
+    cutoff_values = UserConfig.colorize_states_cutoff_values
     color_scale = get_color_scale(
         start="green",
         mid="yellow",
@@ -517,20 +518,32 @@ def job_info_with_heartbeat(jd):
 
 def job_info_with_latest_str(*, args, jd):
     """Returns the latest checkoint for job data [jd] per a heuristic."""
-    def checkpoint_to_sort_value(c):
-        """Returns the prefix for checkpoint [c]."""
-        if c.startswith("probe_pretep"):
-            pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
-            probe_epoch = UtilsBase.digits_after(c, "prbep")
-            return float(f"{pretrain_epoch}.{probe_epoch}")
-        elif c.startswith("fn"):
-            fn_epoch = UtilsBase.digits_after(c, "fn")
-            return float(f"0.{fn_epoch}")
-        elif c[0].isnumeric():
-            pretrain_epoch = UtilsBase.digits_after(c, "")
-            return float(f"{pretrain_epoch}.0")
+    # def checkpoint_to_sort_value(c):
+    #     """Returns the prefix for checkpoint [c]."""
+    #     if c.startswith("probe_pretep"):
+    #         pretrain_epoch = UtilsBase.digits_after(c, "probe_pretep")
+    #         probe_epoch = UtilsBase.digits_after(c, "prbep")
+    #         return float(f"{pretrain_epoch}.{probe_epoch}")
+    #     elif c.startswith("fn"):
+    #         fn_epoch = UtilsBase.digits_after(c, "fn")
+    #         return float(f"0.{fn_epoch}")
+    #     elif c[0].isnumeric():
+    #         pretrain_epoch = UtilsBase.digits_after(c, "")
+    #         return float(f"{pretrain_epoch}.0")
+    #     else:
+    #         return 0
+
+    def checkpoint_is_valid(c):
+        """Returns whether checkpoint [c] is valid for being considered the latest."""
+        if any([c.endswith(ext) for ext in UserConfig.checkpoint_extensions]):
+            if "" in UserConfig.checkpoint_prefixes and c[0].isdigit():
+                return True
+            elif any([c.startswith(p) for p in UserConfig.checkpoint_prefixes if not p == ""]):
+                return True
+            else:
+                return False
         else:
-            return 0
+            return False
 
     if "comment" in jd:
         if "exp_name" in jd.comment:
@@ -548,12 +561,14 @@ def job_info_with_latest_str(*, args, jd):
             return UtilsBase.updated_namespace(jd, chkpt="multiple exp names")
         else:
             exp_folder = found_exp_folders[0]
-            checkpoints = [f for f in os.listdir(exp_folder) if f.endswith(".pt") and not f.startswith("wandb_data")]
-            checkpoints = sorted(checkpoints, key=checkpoint_to_sort_value, reverse=True)
-            checkpoint = checkpoints[0] if len(checkpoints) > 0 else "no checkpoints"
-            return UtilsBase.updated_namespace(jd, chkpt=checkpoint)
-    else:
-        return UtilsBase.updated_namespace(jd, chkpt="")
+            
+            checkpoints = [c for c in os.listdir(exp_folder) if checkpoint_is_valid(c)]
+            if len(checkpoints) == 0:
+                return UtilsBase.updated_namespace(jd, chkpt="no checkpoints")
+            else:
+                # Sort checkpoints by their modification time
+                checkpoints = sorted(checkpoints, key=lambda c: osp.getmtime(osp.join(exp_folder, c)), reverse=True)
+                return UtilsBase.updated_namespace(jd, chkpt=checkpoints[0])
 
 # def job_info_with_diagnosis(ji):
 #     """Returns [jd] with a diagnosis field. Basically, look at the past stderr/stdout
