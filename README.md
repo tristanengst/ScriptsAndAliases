@@ -4,7 +4,7 @@ Useful Python scripts called from bash aliases, all for manipulating SLURM.... a
 2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
 3. Make for many miscellaneous utilities. Literally software candy!
 
-A bunch of this functionality is given by the [**basic usage**](#basic-usage), while more, cooler functionality comes from the [**advanced usage**](#advanced-usage), which requires a little more configuration and you to submit SLURM jobs in smart ways.
+A bunch of this functionality is given by the [**basic usage**](#basic-usage), while additional, cooler functionality comes from the [**advanced usage**](#advanced-usage), which requires a little more configuration and you to submit SLURM jobs in smart ways.
 
 While these utilities are primarily for myself and other members of APEX lab, not only should anyone using ComputeCanada be able to get a fair amount of use from this, but also I expect the algorithms and ideas are more broadly useful.
 
@@ -19,7 +19,7 @@ source ~/.bashrc
 **Configuration**. APEX lab users get the [**basic functionality**](#basic-usage) without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the [**advanced functionality**](#advanced-usage) is unlocked by modifying `...search_dirs` lists in `UserConfig.py`, and taking actions described below._
 
 ### Updates and Future Development
-_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while ore useful functionality to work well, but there are likely corner cases I'm unaware of or haven't hand time to deal with.
+_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while the core useful functionality to should work correctly, there are likely corner cases I'm unaware of or haven't hand time to deal with.
 
 Please submit a issues or pull requests as desired. To update:
 ```
