@@ -19,7 +19,7 @@ source ~/.bashrc
 **Configuration**. APEX lab users get the [**basic functionality**](#basic-usage) without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the [**advanced functionality**](#advanced-usage) is unlocked as described [below](#below)._
 
 ### Updates and Future Development
-_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while the core useful functionality should work, there are likely corner case issues I'm unaware of or haven't had time to deal with. Please submit a issues or pull requests for new or fixed functionality as desired.
+_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while the core useful functionality should work, there are likely corner case issues I'm unaware of or haven't had time to deal with. _Please submit issues or pull requests for new or fixed functionality as desired._
 
 To update:
 ```
