@@ -88,12 +88,14 @@ Concretely, you need to:
 4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
 
-<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write `heartbeat.txt` file under `/path/to/checkpoints/experiment_name_with_uid/`. Its sole content should be the current time in `YYYY--MM-DD HH:MM:SS` format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
+<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write a <code>heartbeat.txt</code> file under <code>/path/to/checkpoints/experiment_name_with_uid/</code>. Its sole content should be the current time in <code>YYYY--MM-DD HH:MM:SS</code> format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
 
 #### Advanced Usage Commands and Functionality
 All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
-- `sqb` gets much more useful! It can:
-   - colorize the `STATE` column based on **(1)** experiment heartbeat (first half) and **(2)** the last write to its output file (second half). Green is more recent.
+- `sqb` gets much more useful! It will:
+   - Allow spotting issues super easily by colorizing the `STATE` column based on **(1)** experiment heartbeat if possible (first half) and **(2)** the last write to its output file (second half). Green is more recent.
+   - Display UIDs
+   - Display the latest saved checkpoint
 - In most places where you can provide a job ID, a UID will also work
 
 Find and print experiment output:
