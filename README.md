@@ -116,7 +116,7 @@ Extract all the UIDs of jobs from some lines of `sqb` output (like `exj`):
 exu "copy-and-paste-sqb-output"
 ```
 
-Send experiment checkpoints from cluster `source_cluster` to the current machine:
+Send folders of experiment checkpoints from cluster `source_cluster` to the current machine:
 ```
 rsyncb source_cluster [list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments]
 # Example: rsyncb nibi UIDA UIDB UIDC
@@ -125,7 +125,7 @@ rsyncb source_cluster [list of UID or substring of experiment name containing en
 # Note: you'll need to have `source_cluster` in your ~/.ssh/config` file for this to work. See below for details.
 ```
 
-Send experiment checkpoints from the current machine to cluster `destination_cluster`:
+Send folders of experiment checkpoints from the current machine to cluster `destination_cluster`:
 ```
 rsyncb [list of UID or substring of experiment name containing enough of the UID to uniquely identify the experiments] destination_cluster
 ```
