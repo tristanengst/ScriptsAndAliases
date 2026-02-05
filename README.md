@@ -175,9 +175,6 @@ Updates this repo on every machine that `find_free_gpus` would query:
 python UpdateScriptsAndAliases.py
 ```
 
-### More Commands
-The functionality above is just the key things I use on a day-to-day basis. There is, in fact, more—see all the scripts herein for details!
-
 ### Miscellaneous
 Generate a UID (requires WandB to be installed):
 ```
@@ -200,6 +197,9 @@ python TarFiles.py --dir directory_to_tar --out name_of_tar_file --last_k_days 6
 ```
 If `directory_to_tar/some_file_or_folder` exists, you can extract it with `tar -xf name_of_tar_file -C directory_to_extract_under some_file_or_folder`
 
+
+### More Commands
+The functionality above is just the key things I use on a day-to-day basis. There is, in fact, more—see all the scripts herein for details!
 
 ### SSH Config
 Some functionality for this library assumes SSH is set up in specific good ways. For ComputeCanada clusters, you'll need the name for them used in this codebase as a key for them in your `~/.ssh/config` file. It will also be helpful to configure the connections thus:
