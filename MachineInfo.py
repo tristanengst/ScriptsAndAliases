@@ -297,12 +297,10 @@ def to_machine_name(x=None):
         # Try again, this might work sometimes
         if x in machine2info:
             return x
-        # [x] is either a hostname or an IP address. Either way, hostname_to_machine()
-        # will give us the machine name if possible.
-        else: 
-            return hostname_to_machine(x)
-    else:
-        return None
+    # Now [x] is either a hostname or an IP address or something else. Either way,
+    # hostname_to_machine() will give us the machine name if possible.
+    return hostname_to_machine(x)
+
         
 def hostname_to_machine(hostname):
     """Returns the SSH name in [ssh_name2info] of [hostname]."""
@@ -312,7 +310,7 @@ def hostname_to_machine(hostname):
         """
         try:
             digits = [c for c in hostname if c.isdigit()]            
-            prefix = true_hostname[9].upper()
+            prefix = true_hostname[8].upper()
             result = f"{prefix}{int(''.join(digits))}"
             return result if result in machine2info else None
         except:
@@ -373,6 +371,7 @@ def get_updated_machine_info(m, verbose=0):
     nvidia_smi_output = "\n".join(nvidia_smi_lines)
     
     # Find the total number of GPUs and if nvidia-smi is working
+    m = to_machine_name(m)
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
         if verbose:
             print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
