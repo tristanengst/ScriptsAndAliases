@@ -10,6 +10,7 @@ import os
 import os.path as osp
 import uuid
 import time
+from threading import Thread
 
 try:
     from tqdm import tqdm
@@ -631,6 +632,9 @@ def persisted_state_clear():
 ######################################################################################
 ######################################################################################
 
+
+
+###### User Query Functions ##########################################################
 def query_among_list(*, prompt, options):
     """Returns the element of [options] chosen by the user given [prompt]."""
     assert len(options) > 0, "Cannot query among empty list"
@@ -658,6 +662,16 @@ def query_yes_no(msg="Proceed? (y/n): "):
             return False
         else:
             print(f"[WARNING] Invalid choice: {choice} -> try again")
+######################################################################################
+######################################################################################
+######################################################################################
+
+###### Miscellaneous Functions #######################################################
+def run_in_new_thread(fn, *args, **kwargs):
+    """Runs [fn] with [args] and [kwargs] in a new thread."""
+    thread = Thread(target=fn, args=args, kwargs=kwargs,)
+    thread.start()  # Start the thread, it will run in the background
+    return thread  # Return the thread object if you need to join or manage it later
 
 
 
