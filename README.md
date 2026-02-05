@@ -1,12 +1,12 @@
-# 📜 Scripts and Aliases
-Useful Python scripts called from bash aliases, all for manipulating SLURM.... and more! Together, they
-1. Reduce friction in keeping many SLURM experiments running
-2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
-3. Make for many miscellaneous utilities. Literally software candy!
+# Scripts and Aliases
+Useful Python scripts called from bash aliases, all for manipulating SLURM.... and more!
+1. 🚀 Reduce friction in keeping many SLURM experiments running
+2. ℹ️ Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
+3. 🍭 Make for many miscellaneous useful utilities
 
-A bunch of this functionality is given by the [**basic usage**](#basic-usage), while additional, cooler functionality comes from the [**advanced usage**](#advanced-usage), which requires a little more configuration and you to submit SLURM jobs in smart ways.
+[**Basic usage**](#basic-usage) functionality requires zero to extremely minimal setup, while additional, cooler [**advanced usage**](#advanced-usage) functionality requires a little more configuration and for you to submit SLURM jobs in smart ways.
 
-While these utilities are primarily for myself and other members of APEX lab, not only should anyone using ComputeCanada be able to get a fair amount of use from this, but also I expect the algorithms and ideas are more broadly useful.
+**Intended users.** These utilities are primarily for myself, other members of [APEX lab](https://sfuapex.ca/), and secondarily others at [Simon Fraser University](https://www.sfu.ca/fas/computing.html). However, not only should anyone using ComputeCanada be able to get a fair amount of use from them, but also I expect the algorithms and ideas are more broadly useful.
 
 ### Installation
 This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
@@ -16,12 +16,12 @@ python ~/.ScriptsAndAliases/WriteAliases.py # Maintains a chunk of ~/.bashrc con
 source ~/.bashrc
 ```
 
-**Configuration**. APEX lab users get the [**basic functionality**](#basic-usage) without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the [**advanced functionality**](#advanced-usage) is unlocked by modifying `...search_dirs` lists in `UserConfig.py`, and taking actions described below._
+**Configuration**. APEX lab users get the [**basic functionality**](#basic-usage) without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the [**advanced functionality**](#advanced-usage) is unlocked as described [below](#below)._
 
 ### Updates and Future Development
-_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while the core useful functionality should work, there are likely corner case issues I'm unaware of or haven't had time to deal with.
+_This repo is provided as-is._ It uses a **move-fast-and-fix-things** development model, since often it needs to adapt to unforeseen needs or unannounced changes to clusters. Moreover, my job is research and not research tooling, so while the core useful functionality should work, there are likely corner case issues I'm unaware of or haven't had time to deal with. _Please submit issues or pull requests for new or fixed functionality as desired._
 
-Please submit a issues or pull requests as desired. To update:
+To update:
 ```
 cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc
 ```
@@ -77,18 +77,48 @@ scn NODE_HOSTNAME
 These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-run research paradigm. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. _UIDs giving this property will dramatically reduce the friction in research!_
 
 #### Setup
-Concretely, you need to:
-1. Have a way of generating  UIDs of about 8–however many characters—I use `wandb.util.generate_id()`.
-2. Have your the code for any run either read and assign a UID from the command line, or generate and assign one automatically if it's not provided.
-3. When you generate a SLURM job script for an experiment, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job running the SLURM script, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
+Concretely, you need to do the following. It will be much easier if you generate SLURM scripts (very easy, few mistakes) from templates rather than writing them manually (typos kill jobs).
+1. Decide on (possibly several of each) paths for SLURM scripts, folders of checkpoints, and job outputs respectively. `/path/to/slurm_scripts`, `/path/to/checkpoints`, and `/path/to/job_outputs`. These should be canonical across clusters and workstations, and be either from your home directory or absolute—prefixed by `~/` or `/`. _**These can be symlinks!**_ The goal is to end up with a filesystem that might be structured something like this:
    ```
-   #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
-   # The total length of the comment is limited to 256 characters, and my code expects valid JSON. Abbreviate the experiment name—not the UID—as needed.
+   ├── /path/to/slurm_scripts
+   │   ├──experiment_with_uidABCD1234.sh
+   │   └──experiment_with_uidEFGH5678.sh
+   ├── /path/to/checkpoints
+   │   ├──experiment_with_uidABCD1234
+   │   │   ├── checkpoint_86.pt
+   │   │   └── checkpoint_99_latest.pt
+   │   ├── experiment_with_uidEFGH5678
+   │   │   └──checkpoint_0.pt
+   ├── /path/to/job_outputs
+   │   ├── experiment_with_uidABCD1234.txt
+   │   └── experiment_with_uidEFGH5678.txt
    ```
-4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
-5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
+2. Have a way of generating  UIDs of about 8 characters, eg. `wandb.util.generate_id()` or steal `generate_uid()` from `YourCode.py`
+3. Have your code for any run either read and assign a UID from the command line, or generate and assign one automatically (eg. as above) if it's not provided.
+4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed
+5. When you generate a SLURM job script for an experiment, it should have a UID contained within its name that can uniquely identify everything associated to the experiment. You shoud:
+   1. Include the UID towards the end of the experiment's name, eg. `experiment_name_with_uid`
+   2. Name the SLURM script file as `/path/to/slurm_scripts/experiment_name_with_uid.sh`
+   3. Give this name to the job running the SLURM script:
+      ```
+      #SBATCH --job-name=experiment_name_with_uid
+      ```
+   4. Make the job **append** outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`:
+      ```
+      #SBATCH --output=/path/to/job_outputs/experiment_name_with_uid.txt
+      #SBATCH --open-mode=append
+      ```
+   5. Comment the SLURM script as follows (see `get_sbatch_comment()` in `YourCode.py` for implementation):
+      ```
+      #SBATCH --comment="{'uid': 'UID', 'exp_name': 'experiment_name_with_uid'}"
+      # The total length of the comment is limited to 256 characters, and my code expects valid JSON. Abbreviate the experiment name—not the UID—as needed
+      ```
+   6. Pass the UID to the code actually running the experiment in the SLURM script, allowing it to
+   7. Ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`
 
-<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write a <code>heartbeat.txt</code> file under <code>/path/to/checkpoints/experiment_name_with_uid/</code>. Its sole content should be the current time in <code>YYYY--MM-DD HH:MM:SS</code> format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
+<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write a <code>heartbeat.txt</code> file under <code>/path/to/checkpoints/experiment_name_with_uid/</code>. Its sole content should be the current time in <code>YYYY--MM-DD HH:MM:SS</code> format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old. See <code>write_heartbeat()</code> in <code>YourCode.py</code> for implementation.</details>
+
+<details><summary><b>Extra:</b> Make <code>sqb</code> display latest checkpoints</summary>Modify the <code>checkpoint_extensions</code> and <code>checkpoint_prefixes</code> lists in <code>UserConfig.py</code></details>
 
 #### Advanced Usage Commands and Functionality
 All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
