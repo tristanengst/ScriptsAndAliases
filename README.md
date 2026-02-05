@@ -4,7 +4,7 @@ Useful scripts called from bash aliases, all for manipulating SLURM.... and more
 2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
 3. Make for many miscellaneous utilities. Literally software candy!
 
-A bunch of this functionality is given by the **basic usage**, while more, cooler functionality comes from the **advanced usage**, which requires a little more configuration and you to submit SLURM jobs in smart ways.
+A bunch of this functionality is given by the **basic usage**, while more, cooler functionality comes from the [**advanced usage**](#advanced-usage), which requires a little more configuration and you to submit SLURM jobs in smart ways.
 
 ### Installation
 This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
