@@ -80,8 +80,8 @@ checkpoint_prefixes = ["fn", "probe_pretep", ""]
 # value sits within a list of thresholds.
 # Each list below contains the thresholds for a particular part of the output. The
 # color scale is reasonable but hardcoded.
-# You may change the values in the lists, but the number of values in each probably
-# shouldn't be changed.
+# You may change the values in the lists to be discriminative for your use case, but
+# the number of values in each probably shouldn't be changed.
 ######################################################################################
 
 # 10 values. Colorizes TIME_LEFT column red-to-green depending on how many HOURS there
