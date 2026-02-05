@@ -12,7 +12,7 @@ if __name__ == "__main__":
     args = P.parse_args()
 
 for m in MachineInfo.machine2info:
-    hostname = MachineInfo.machine_to_hostname(m)
+    hostname = MachineInfo.to_hostname(m)
     
     if MachineInfo.hostname_is_current_machine(hostname):
         print(f"Updating host={hostname} (current machine)...")

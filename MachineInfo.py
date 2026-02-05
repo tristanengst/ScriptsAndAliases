@@ -14,6 +14,7 @@ import subprocess
 
 import Utils
 import UtilsBase
+from UtilsBase import twrite
 from UserConfig import cluster2accounts
 
 
@@ -223,44 +224,110 @@ def get_ssh_config():
                 machine2ssh_config[cur_host][k] = v
     return machine2ssh_config
 
+class HostInfoError(Exception):
+    """Custom exception for HostInfo-related errors."""
+    pass
 
 def get_current_machine():
     """Returns the machine name of the current machine, or None if it can't be found."""
     return Utils.get_cluster_type() if Utils.is_slurm() else machine_to_ssh_name(os.uname().nodename)
 
-def machine_to_ssh_name(m):
-    """Returns the SSH-able name corresponding to the machine [m], or  None if it
-    can't be found. The mapping should exist in your ~/.ssh/config file.
+def to_ssh_name(x=None):
+    """Returns an SSH-able name corresponding to machine/hostname/SSH name [x]. If no name can be determined, return None.
     """
-    m = os.uname().nodename if m is None else m
-    machine2ssh_config = get_ssh_config()
-    if m in machine2info:
-        possible_ssh_names = machine2info[m]["ssh_names"]
-    elif hostname_to_machine(m) in machine2info:
-        possible_ssh_names = machine2info[hostname_to_machine(m)]["ssh_names"]
-    else:
-        raise ValueError()
-
-    for m_user in machine2ssh_config:
-        if m_user in possible_ssh_names:
-            return m_user
-    print(f"Couldn't find SSH name for machine {m}. Ensure that for some element of ssh_names={possible_ssh_names} of {m} in machine2info in HostInfo.py, there is a corresponding entry in your ~/.ssh/config file")
-    return None
-    
-def machine_to_hostname(m):
-    """Returns the SSH-able name of [m] or None if it can't be found."""
     ssh_config = get_ssh_config()
-    ssh_name = machine_to_ssh_name(m)
-    return ssh_config[ssh_name]["HostName"]
+    x = os.uname().nodename if x is None else x
 
+    # CASE 1: [x] is an SSH-able name already
+    if x in ssh_config:
+        return x
+    # CASE 2: [x] is the machine name of a machine in [machine2info], and it has a recorded SSH name in the user's config file
+    if x in machine2info:
+        possible_ssh_names = machine2info[x]["ssh_names"]
+        matches = [p for p in possible_ssh_names if p in ssh_config]
+        if matches:
+            return matches[0]
+    # CASE 3: [x] is a hostname already; we can hopefully just SSH to it directly. In this case, we can query the connection quickly.
+    connection_test_command = f"ssh -o ConnectTimeout=3 {x} 'echo connected'"
+    connection_test_result = subprocess.getoutput(connection_test_command)
+    if connection_test_result == "connected":
+        return x
+    else:
+        return None
+
+
+def to_hostname(x=None):
+    """Returns the hostname corresponding to machine/hostname/SSH name [x]. If no
+    hostname can be determined, return None.
+    """
+    x = os.uname().nodename if x is None else x
+
+    # CASE 1: [x] is an SSH-able name, so we should be able to read the hostname
+    # directly from the ~/.ssh/config file.
+    # CASE 2: [x] is a machine name in [machine2info]. In this case, one of its
+    # [ssh_names] might be an entry in the user's ~/.ssh/config file. However, we
+    # would've already tried this route in CASE 1, so nothing to do here.
+    # CASE 3: [x] is a hostname already. In this case, it would be SSH-able, so we
+    # would've already returned it in CASE 1.
+    ssh_name = to_ssh_name(x)
+    ssh_config = get_ssh_config()
+    if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
+        return ssh_config[ssh_name]["HostName"]
+    elif not ssh_name is None:
+        return ssh_name
+    else:
+        return None
+
+def to_machine_name(x=None):
+    """Returns the machine name corresponding to machine/hostname/SSH name [x]. If no
+    machine name can be determined, return None.
+    """
+    # CASE 1: is an SSH-able name, so we should be able to read the hostname
+    # directly from the ~/.ssh/config file. From this we can determine the machine name.
+    # CASE 2: [x] is a machine name in [machine2info]. In this case, we can just return it.
+    # CASE 3: [x] is a hostname already. In this case, we can determine the machine name from it.
+    x = os.uname().nodename if x is None else x
+    if x in machine2info:
+        return x
+    
+    ssh_name = to_ssh_name(x)
+    ssh_config = get_ssh_config()
+    if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
+        x = ssh_config[ssh_name]["HostName"]
+        # Try again, this might work sometimes
+        if x in machine2info:
+            return x
+        # [x] is either a hostname or an IP address. Either way, hostname_to_machine()
+        # will give us the machine name if possible.
+        else: 
+            return hostname_to_machine(x)
+    else:
+        return None
+        
 def hostname_to_machine(hostname):
     """Returns the SSH name in [ssh_name2info] of [hostname]."""
+    def extract_machine_from_true_hostname_heuristic(true_hostname):
+        """Given a true hostname of form REDACTED, returns the machine name using a
+        convoluted heuristic.
+        """
+        try:
+            digits = [c for c in hostname if c.isdigit()]            
+            prefix = true_hostname[9].upper()
+            result = f"{prefix}{int(''.join(digits))}"
+            return result if result in machine2info else None
+        except:
+            return None
+
     if hostname in cluster2node2config:
         return hostname
+    elif all([c.isdigit() or c == "." for c in hostname]):
+        # If it's an IP address, we can SSH to it and ask for the hostname directly
+        command = f"ssh -o ConnectTimeout=3 {hostname} 'hostname'"
+        result = subprocess.getoutput(command)
+        return hostname_to_machine(result)
     else:
-        hostname_numeric = [c for c in hostname if c.isdigit()]
-        prefix = "S" if "r" in hostname else "A" # Heuristic, possibly brittle
-        return f"{prefix}{int(''.join(hostname_numeric))}"
+        return extract_machine_from_true_hostname_heuristic(hostname)
+        
 
 def hostname_is_current_machine(hostname):
     """Returns True if [hostname] is the current machine."""
@@ -270,14 +337,13 @@ def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
     """Runs [command] on machine [m] and returns the output."""
     cwd = os.getcwd()
     os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-    hostname = machine_to_hostname(machine)
-    if os.uname().nodename == hostname:
+    if os.uname().nodename == to_hostname(machine):
         result = subprocess.getoutput(command)
         os.chdir(cwd)
         return result
-    ssh_name = machine_to_ssh_name(machine)
+    ssh_name = to_ssh_name(machine)
     if ssh_name is None:
-        raise ValueError(f"Could not find SSH name for machine {machine} with hostname={hostname}. Please check your ~/.ssh/config file.")
+        raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
     else:
         ssh_args_str = " ".join(ssh_args)
         command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
@@ -292,8 +358,15 @@ def get_updated_machine_info(m, verbose=0):
     Args:
     m           -- machine name, which must be a key in [machine2info], or a hostname
     """
-    m = hostname_to_machine(m) if not m in machine2info else m
-    result = run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
+    try:
+        result = run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
+    except HostInfoError as e:
+        twrite(f"Error: Could not connect to machine {m} to get updated machine info: {e}. Skipping.")
+        return argparse.Namespace(nvidia_smi="",
+            nvidia_smi_ok=False,
+            total_gpus=0,
+            total_cpus=0,
+            user2num_gpus=dict())
 
     result = result.split("\n")
     nvidia_smi_lines = result[:-2]
