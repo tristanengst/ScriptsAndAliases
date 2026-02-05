@@ -24,7 +24,7 @@ While these utilities are primarily for myself and other members of APEX lab, no
 
 This repo is updated frequently, and is provided as-is. Expect things and especially the core useful functionality to work well, but there are likely corner cases I don't know about or aren't yet worth handling. Often unannounced changes to ComputeCanada clusters necessitate rapid updates. Please submit an issues or pull requests as desired.
 
-**Configuration**. APEX lab users get the **basic functionality** without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the **advanced functionality** is unlocked by modifying `...search_dirs` lists in `UserConfig.py`, and taking actions described below._
+**Configuration**. APEX lab users get the [**basic functionality**](#basic-usage) without any configuration. Other users will need to modify `cluster2account` in `UserConfig.py` by adding the elevant `def-your-PI-name`, `rrg-your-PI-name`, and `aip-your-PI-name` accounts for each cluster, and maybe should modify dictionaries in `MachineInfo.py`. _For all users, the [**advanced functionality**](#advanced-usage) is unlocked by modifying `...search_dirs` lists in `UserConfig.py`, and taking actions described below._
 
 ### Basic Usage
 These commands won't require you to change how you do anything.
