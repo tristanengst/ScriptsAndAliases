@@ -76,7 +76,8 @@ scn NODE_HOSTNAME
 ### Advanced Usage
 These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-run research paradigm. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. _UIDs giving this property will dramatically reduce the friction in research!_
 
-**Setup.** Concretely, you need to:
+#### Setup
+Concretely, you need to:
 1. Have a way of generating  UIDs of about 8–however many characters—I use `wandb.util.generate_id()`.
 2. Have your the code for any run either read and assign a UID from the command line, or generate and assign one automatically if it's not provided.
 3. When you generate a SLURM job script for an experiment, generate a UID. Include the UID towards the end of the experiment's name. You will then **(a)** give this name to the job running the SLURM script, **(2)** name the SLURM script as `/path/to/slurm_scripts/experiment_name_with_uid.sh`, **(3)** have the job write outputs to `/path/to/job_outputs/experiment_name_with_uid.txt`, **(4)** ensure the job will create and write checkpoints under the directory `/path/to/checkpoints/experiment_name_with_uid/`, **(5)** pass the UID to the code actually running the experiment in the SLURM script, **(6)** comment the SLURM script as follows:
@@ -87,7 +88,8 @@ These commands require you to slightly change how you do things in that you need
 4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
 
-**Advanced usage commands and functionality.** All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
+#### Advanced Usage Commands and Functionality
+All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
 - Output from `sqb` includes UIDs, so the map between experiments, results, SLURM scripts, checkpoints, and SLURM jobs is really obvious
 - In most places where you can provide a job ID, a UID will also work
 
