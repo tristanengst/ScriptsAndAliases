@@ -1,5 +1,5 @@
 # 📜 Scripts and Aliases
-Useful scripts called from bash aliases, all for manipulating SLURM.... and more! Together, they
+Useful Python scripts called from bash aliases, all for manipulating SLURM.... and more! Together, they
 1. Reduce friction in keeping many SLURM experiments running
 2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
 3. Make for many miscellaneous utilities. Literally software candy!
