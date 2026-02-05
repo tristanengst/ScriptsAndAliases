@@ -6,7 +6,7 @@ Useful Python scripts called from bash aliases, all for manipulating SLURM.... a
 
 A bunch of this functionality is given by the [**basic usage**](#basic-usage), while additional, cooler functionality comes from the [**advanced usage**](#advanced-usage), which requires a little more configuration and you to submit SLURM jobs in smart ways.
 
-**Intended users.** These utilities are primarily for myself, other members of APEX lab, and secondarily others at Simon Fraser University. However, not only should anyone using ComputeCanada be able to get a fair amount of use from them, but also I expect the algorithms and ideas are more broadly useful.
+**Intended users.** These utilities are primarily for myself, other members of [APEX lab](https://sfuapex.ca/), and secondarily others at [Simon Fraser University](https://www.sfu.ca/fas/computing.html). However, not only should anyone using ComputeCanada be able to get a fair amount of use from them, but also I expect the algorithms and ideas are more broadly useful.
 
 ### Installation
 This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
