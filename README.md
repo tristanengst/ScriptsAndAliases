@@ -77,7 +77,7 @@ scn NODE_HOSTNAME
 These commands require you to slightly change how you do things in that you need to assign experiments UIDs and adopt a one-unique-SLURM-script-per-run research paradigm. This allows every unique instance of training a neural net to be associated to **(1)**  all the files that configure the training (eg. SLURM `sbatch` scripts, config files), **(2)** all the files/data generated (SLURM job output, checkpoints, logged results), **(3)** the SLURM job(s) that perform the training. _UIDs giving this property will dramatically reduce the friction in research!_
 
 #### Setup
-Concretely, you need to:
+Concretely, you need to do the following. It will be much easier if you generate SLURM scripts (very easy, few mistakes) from templates rather than writing them manually (typos kill jobs).
 1. Decide on (possibly several of each) paths for SLURM scripts, folders of checkpoints, and job outputs respectively. `/path/to/slurm_scripts`, `/path/to/checkpoints`, and `/path/to/job_outputs`. These should be canonical across clusters and workstations, and be either from your home directory or absolute—prefixed by `~/` or `/`. _**These can be symlinks!**_ The goal is to end up with a filesystem that might be structured something like this:
    ```
    ├── /path/to/slurm_scripts
