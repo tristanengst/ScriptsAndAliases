@@ -4,6 +4,8 @@ Useful scripts called from bash aliases, all for manipulating SLURM.... and more
 2. Provide real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
 3. Make for many miscellaneous utilities. Literally software candy!
 
+A bunch of this functionality is given by the **basic usage**, while more, cooler functionality comes from the **advanced usage**, which requires a little more configuration and you to submit SLURM jobs in smart ways.
+
 ### Installation
 This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
 ```
@@ -99,6 +101,12 @@ Find and print the SLURM script for an experiment:
 ```
 jcats UID or substring of experiment name containing enough of the UID to uniquely identify the experiment
 # think: 'job cat script'
+```
+
+Run `ls` on the directory an experiment would've saved checkpoints in:
+```
+lse [list of UIDs or identifying substrings] [-l as in normal ls] [-t as in normal ls] ...
+# Accepts many (or all?) flags to the ls command too, AFTER the UIDs
 ```
 
 Extract all the UIDs of jobs from some lines of `sqb` output (like `exj`):
