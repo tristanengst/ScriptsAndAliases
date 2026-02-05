@@ -85,6 +85,36 @@ def colorize_time_lefts(job_infos, cur_user=True):
 
     return [colorize_time_left(ji) for ji in job_infos]
 
+def colorize_time_limits(job_infos, cur_user=True):
+    cutoff_values = UserConfig.colorize_time_lefts_cutoffs # Use the same color scale as for TIME_LEFT
+    color_scale = get_color_scale(
+        start="red",
+        mid="purple",
+        end="blue",
+        light_bias=2,
+        num_colors=len(cutoff_values)+1)
+
+    def colorize_time_limit(ji):
+        if (ji.time_limit in ["N/A", None]
+            or ji.time_limit.strip().startswith("INV")
+            or not "user" in ji
+            or not ji.time_limit.strip()[0].isdigit()):
+            return ji
+        else:
+            time_limit_hours = UtilsBase.time_to_hours(ji.time_limit)
+            if time_limit_hours <= 1:
+                idxs = [idx for idx,c in enumerate(cutoff_values) if time_limit_hours <= c]
+                min_valid_idx = min(idxs) if len(idxs) else len(cutoff_values)
+            else:
+                frac_remaining = time_limit_hours / UtilsBase.time_to_hours(ji.time_limit)
+                min_valid_idx = min(int(frac_remaining * 8 + 3), len(cutoff_values))
+
+            time_limit = colorize(ji.time_limit, color=color_scale[min_valid_idx])
+            return UtilsBase.updated_namespace(ji, time_limit_color=time_limit)
+
+    return [colorize_time_limit(ji) for ji in job_infos]
+
+
 def colorize_start_times(job_infos):
     """Returns each job info in [job_infos] with the start time colorized."""
     cutoff_values = UserConfig.colorize_start_times_cutoffs
@@ -675,7 +705,7 @@ def job_info_with_parition(ji):
 
 
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
-    submit_time=False, eligible_time=False, queue=False, checkpoint=False,
+    submit_time=False, eligible_time=False, time_limit=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
     partition=False,
     verbose=False):
@@ -690,6 +720,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     nodes       -- if True, include the node list for all jobs
     submit_time -- if True, include the submit time for all jobs
     eligible_time -- if True, include the eligible time for all jobs
+    time_limit -- if True, include the requested time for all jobs
     queue       -- if True, include the queue time for all jobs
     checkpoint  -- if True, try to find the latest checkpoint for each job
     excluded    -- if True, include the excluded nodes for all jobs
@@ -705,6 +736,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_info_with_formatted_date_time(v, key="submit_time", tz=args.tz) for j,v in job2info.items()}
     if eligible_time:
         job2info = {j: job_info_with_formatted_date_time(v, key="eligible_time", tz=args.tz) for j,v in job2info.items()}
+    if time_limit:
+        job2info = {j: job_info_with_formatted_time_delta(v, key="time_limit") for j,v in job2info.items()}
     if queue or heartbeat_analysis:
         job2info = {j: job_info_with_queue(v) for j,v in job2info.items()}
     if checkpoint:
@@ -739,6 +772,7 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         "queue" if queue else None,
         "chkpt" if checkpoint else None,
         "start_time",
+        "time_limit" if time_limit else None,
         "heartbeat" if heartbeat else None,
         "gpus", "name", "time_left", "reason",]
     col_names = [c for c in col_names if not c is None]        
@@ -919,6 +953,8 @@ if __name__ == "__main__":
         help="Show show the submit time for all jobs")
     P.add_argument("-p", "--partition", action="store_true", default=False,
         help="Show the partition for all jobs")
+    P.add_argument("-t", "--time_limit", action="store_true", default=False,
+        help="Show the time requested for all jobs")
 
     P.set_defaults(queue=True)
     P.add_argument("-q", "--queue", action="store_true",
@@ -981,6 +1017,7 @@ if __name__ == "__main__":
             excluded=args.exclude,
             submit_time=args.submit_time,
             eligible_time=args.eligible_time,
+            time_limit=args.time_limit,
             queue=args.queue,
             heartbeat=args.heartbeat,
             heartbeat_analysis=args.heartbeat_analysis,
@@ -998,6 +1035,7 @@ if __name__ == "__main__":
                 excluded=args.exclude,
                 submit_time=args.submit_time,
                 eligible_time=args.eligible_time,
+                time_limit=args.time_limit,
                 queue=args.queue,
                 heartbeat=args.heartbeat,
                 heartbeat_analysis=args.heartbeat_analysis,
@@ -1061,6 +1099,7 @@ if __name__ == "__main__":
         job_datas = colorize_queues(job_datas) if "queue" in col2max_chars else job_datas
         job_datas = colorize_time_lefts(job_datas) if "time_left" in col2max_chars else job_datas
         job_datas = colorize_start_times(job_datas) if "start_time" in col2max_chars else job_datas
+        job_datas = colorize_time_limits(job_datas) if "time_limit" in col2max_chars else job_datas
         job_datas = colorize_reasons(job_datas) if "reason" in col2max_chars else job_datas
         job_datas = colorize_states(job_datas) if "state" in col2max_chars else job_datas
         job_datas = colorize_submit_times(job_datas) if "submit_time" in col2max_chars else job_datas
