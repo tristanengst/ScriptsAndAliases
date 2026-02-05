@@ -29,7 +29,7 @@ cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py
 ### Basic Usage
 These commands won't require you to change how you do anything.
 
-Display the state of your/your group's jobs on a cluster:
+Display the state of your/your group's jobs on a cluster. Especially with the [advanced usage](#advanced-usage) enabled, this becomes a great dashboard:
 ```
 sqb [-p show partitions] [-n show nodes] [-s show start times] [-u show all users in your account(s)] .......
 ```
@@ -87,11 +87,13 @@ Concretely, you need to:
    ```
 4. Modify `UserConfig.py` by adding `/path/to/slurm_scripts`, `/path/to/job_outputs`, and `/path/to/checkpoints` as needed.
 5. Ensure that `/path/to/checkpoints` from your home directory is canonical on all the systems you'd ever consider using. _**Use symlinks.**_
-6. <details><summary>Extra: Make `sqb` colorize by experiment heartbeat</summary>Have your code occassionally write `heartbeat.txt` file under `/path/to/checkpoints/experiment_name_with_uid/`. Its sole content should be the current time in `YYYY--MM-DD HH:MM:SS` format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
+
+<details><summary><b>Extra:</b> Make <code>sqb</code> colorize by experiment heartbeat</summary>Have your code occassionally write `heartbeat.txt` file under `/path/to/checkpoints/experiment_name_with_uid/`. Its sole content should be the current time in `YYYY--MM-DD HH:MM:SS` format. The first half of the entry in the `STATE` column will be colorized from green to red depending on the extent to which this timestamp is old.</details>
 
 #### Advanced Usage Commands and Functionality
 All this not only enables the following super-useful commands, but also expands the functionality of many basic usage commands. For instance,
-- `sqb` gets much more useful! It will colorize the `STATE` column based on (1)
+- `sqb` gets much more useful! It can:
+   - colorize the `STATE` column based on **(1)** experiment heartbeat (first half) and **(2)** the last write to its output file (second half). Green is more recent.
 - In most places where you can provide a job ID, a UID will also work
 
 Find and print experiment output:
