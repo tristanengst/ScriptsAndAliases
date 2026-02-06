@@ -299,6 +299,7 @@ def to_machine_name(x=None):
         # Try again, this might work sometimes
         if x in machine2info:
             return x
+        
     # Now [x] is either a hostname or an IP address or something else. Either way,
     # hostname_to_machine() will give us the machine name if possible.
     return hostname_to_machine(x)
@@ -312,8 +313,8 @@ def hostname_to_machine(hostname):
         """
         try:
             digits = [c for c in hostname if c.isdigit()]            
-            prefix = true_hostname[8].upper()
-            result = f"{prefix}{int(''.join(digits))}"
+            prefix = true_hostname[8] if true_hostname[8].isalpha() else (true_hostname[3] if true_hostname[3].isalpha() else true_hostname[0])
+            result = f"{prefix.upper()}{int(''.join(digits))}"
             return result if result in machine2info else None
         except:
             return None

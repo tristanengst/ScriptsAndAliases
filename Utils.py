@@ -192,8 +192,8 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     
     jobs = sq.split("\n")
 
-    # Hack because Solar's SLURM is different?
-    if is_solar():
+    # Hack because Solar's SLURM is different? As of 2026-02-06, maybe no longer needed?
+    if is_solar() and False:
         jobs = [j.strip().split()[:len(key2sq_format_O.values())] for j in jobs]
     else:
         jobs = [j.strip().split(sep) for j in jobs]
