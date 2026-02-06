@@ -14,14 +14,12 @@ import sys
 from collections import defaultdict
 
 import FileFinding
+import MachineInfo
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
 
-known_clusters = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A99", "emily",
-    "S1", "S2", "S3",
-    "solar", "solar1",
-    "trillium", "cedar", "narval", "rorqual", "fir", "nibi", "vulcan"]
+known_clusters = UtilsBase.flatten([MachineInfo.machine2info[m]["ssh_names"] for m in MachineInfo.machine2info])
 
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)

@@ -46,7 +46,7 @@ machine2info = {
 } | dict( # Made up info for the ComputeCanada clusters so we can run commands on them. This should probably be refactored!
     narval=dict(num_cpus=40, num_gpus=4, hyperthread=False, ssh_names=["narval"]),
     cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["cedar"]),
-    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["killarney"]),
+    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["killarney", "killa"]),
     vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["vulcan"]),
     trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
     fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
