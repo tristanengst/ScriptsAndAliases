@@ -21,11 +21,24 @@ class Node:
         self.partitions = partitions
         self.states = states
 
+        if name == "rack01-14":
+            twrite(gres_total=gres_total, gres_alloc=gres_alloc)
+
         idle_states = ["IDLE", "DYNAMIC_NORM"]
 
         if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
             self.state = "down"
-        elif "IDLE" in self.states and all([s in idle_states for s in self.states]):        
+
+        # I have a hunch that GPUs which list 'shard' as a resource that could be
+        # allocated are empirically not actually allocatable by real jobs
+        elif (Utils.get_cluster_type() == "vulcan"
+            and "IDLE" in self.states
+            and all([s in idle_states for s in self.states])
+            and not any([g.endswith("_shard") for g in gres_total.keys()])):
+            self.state = "free"
+        elif (not Utils.get_cluster_type() == "vulcan"
+            and "IDLE" in self.states
+            and all([s in idle_states for s in self.states])):
             self.state = "free"
         else:
             self.state = "avail"
@@ -38,8 +51,14 @@ class Node:
         # Sort from most to least VRAM
         self.gres_total = {k: gres_total[k] for k in sorted(gres_total.keys(), key=lambda g: MachineInfo.gpu2vram[g], reverse=True)}
         self.gres_alloc = {k: gres_total[k] for k in sorted(gres_alloc.keys(), key=lambda g: MachineInfo.gpu2vram[g], reverse=True)}
-        self.set_resource_availability()
+        
+        # If the cluster is Vulcan, count apparently free L40s GPUs as used if there
+        # are also L40s_shard GPUs that could be allocated
+        if Utils.get_cluster_type() == "vulcan" and "l40s_shard" in self.gres_total:
+            self.gres_alloc["l40s"] = self.gres_total["l40s"]
 
+        self.set_resource_availability()
+        
         # Note that this is different from [gres_alloc] since it accounts for CPU and memory usage
         self.gres_used = {gpu: self.gres_total[gpu] - self.gres_avail[gpu] for gpu in self.gres_total.keys()}
         self.gres_state = ",".join([f"{gpu}={self.gres_avail[gpu]}/{self.gres_total[gpu]}" for gpu in self.gres_total.keys()])
@@ -102,10 +121,14 @@ def tres_to_gres_used(tres, node_name="default"):
     tres = UtilsBase.strip_left(tres, "CfgTRES=")
     gres2count = dict()
     for resource in tres.split(","):
-        if resource.startswith("gres/gpu"):
+        if resource.startswith("gres/gpu") or resource.startswith("gres/shard"):
+            is_shard = "gres/shard" in resource
+
             # Both of these can appear and should be removed
             resource = UtilsBase.strip_left(resource, "gres/gpu:")
             resource = UtilsBase.strip_left(resource, "gres/gpu")
+            resource = UtilsBase.strip_left(resource, "gres/shard:")
+            resource = UtilsBase.strip_left(resource, "gres/shard")
 
             if resource.startswith("=") and node_name and Utils.is_solar():
                 count = int(resource[1:])
@@ -119,8 +142,10 @@ def tres_to_gres_used(tres, node_name="default"):
             else:
                 continue
 
+            gpu_name = f"{gpu_name}_shard" if is_shard else gpu_name
             gpu_type = MachineInfo.gpu_name2alias[gpu_name]
             gres2count[gpu_type] = count
+            
     return gres2count
 
 def get_nodes_from_scontrol_data(args):
@@ -294,7 +319,7 @@ def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2confi
         time2resource2total=time2resource2total,
         time2resource2total_nodes=time2resource2total_nodes)
 
-def format_cluster_state(resource_states, nodes=None):
+def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
     """Returns a string describing what resources are available on the cluster.
 
     The vertical axis lists different times, while the horizontal axis lists different
@@ -346,12 +371,14 @@ def format_cluster_state(resource_states, nodes=None):
 
             if Utils.is_cc() and node2config[resource]["gpu_frac"] >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
                 full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
-                full_node_free = full_node_free[:min(len(full_node_free), 3)]
-                full_node_str = " nodes=(" + ",".join(full_node_free) + ")"
+                num_free_nodes = len(full_node_free)
+                full_node_free = full_node_free[:min(len(full_node_free), printable_free_nodes)]
+                additional_free_node_str = f", ...{num_free_nodes} total" if num_free_nodes > len(full_node_free) else ""
+                full_node_str = " nodes=(" + ",".join(full_node_free) + f"{additional_free_node_str})"
                 full_node_str = UtilsBase.colorize(full_node_str, color="lightblue")
             elif Utils.is_solar() and resource_states.time2resource2full_node_free[time][resource]:
                 full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
-                full_node_free = full_node_free[:min(len(full_node_free), 3)]
+                full_node_free = full_node_free[:min(len(full_node_free), printable_free_nodes)]
                 full_node_free = [UtilsBase.strip_left(n, "cs-") for n in full_node_free]
                 full_node_str = " nodes=(" + ",".join(full_node_free) + ")"
                 full_node_str = UtilsBase.colorize(full_node_str, color="lightblue")
@@ -389,7 +416,7 @@ def format_cluster_state(resource_states, nodes=None):
         s += new_line_chars + "\t".join([f"{time2resource2str[time][resource]}" for resource in all_resources])
     return s
 
-def get_str():
+def get_str(printable_free_nodes=4):
     """Returns a string representation of the cluster info."""
     args = get_args(args=[])
     node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
@@ -397,7 +424,7 @@ def get_str():
     partitions = Partition.get_partitions_from_sinfo(nodes=nodes)
     partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in Utils.cluster2info[Utils.get_cluster_type()].partitions_startswith])]
     resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=False, node2config=node2config)
-    s = format_cluster_state(resource_states, nodes=nodes)
+    s = format_cluster_state(resource_states, nodes=nodes, printable_free_nodes=printable_free_nodes)
     return s
 
 

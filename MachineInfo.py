@@ -98,7 +98,8 @@ cluster2node2config = dict(
         l40s=dict(cpus_per_gpu=16, mem_per_gpu=255, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
         h100=dict(cpus_per_gpu=6, mem_per_gpu=255, gpu_alias="h100", gpus_per_node=8, can_allocate=True, gpu_name="h100", gpu_frac=1.0)),
     vulcan=dict(default=dict(cpus_per_gpu=16, mem_per_gpu=125, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
-        l40s=dict(cpus_per_gpu=16, mem_per_gpu=125, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0)),
+        l40s=dict(cpus_per_gpu=16, mem_per_gpu=125, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+        l40s_shard=dict(cpus_per_gpu=1, mem_per_gpu=7, gpu_alias="l40s_shard", gpus_per_node=16, can_allocate=False, gpu_name="l40s_shard", gpu_frac=0.0625)),
     tamia=dict(
         default=dict(cpus_per_gpu=12, mem_per_gpu=125, gpu_alias="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100", gpu_frac=1.0),
         h100=dict(cpus_per_gpu=12, mem_per_gpu=125, gpu_alias="h100", gpus_per_node=4, can_allocate=True, gpu_name="h100", gpu_frac=1.0),
@@ -153,6 +154,7 @@ gpu2info = {
     a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5),
     a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5),
     l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0),
+    l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625),
     h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0),
     h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
     h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),

@@ -1003,6 +1003,8 @@ if __name__ == "__main__":
     P.set_defaults(color=True)
     P.add_argument("--no_color", action="store_false", dest="color",
         help="Do not colorize the output")
+    P.add_argument("-f", "--printable_free_nodes", type=int, default=5,
+        help="Number of free nodes (if any) to show in the printable output. Default is 5.")
 
 
     P.add_argument("--tz", default="America/Vancouver",
@@ -1135,7 +1137,7 @@ if __name__ == "__main__":
         account2lfs = None
         meta_str2 = ""    
     
-    meta_str2 += "\t| " + ClusterInfo2.get_str()
+    meta_str2 += "\t| " + ClusterInfo2.get_str(printable_free_nodes=args.printable_free_nodes)
     # meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
     if args.verbose:
         print(meta_str2)
