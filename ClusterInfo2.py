@@ -21,9 +21,6 @@ class Node:
         self.partitions = partitions
         self.states = states
 
-        if name == "rack01-14":
-            twrite(gres_total=gres_total, gres_alloc=gres_alloc)
-
         idle_states = ["IDLE", "DYNAMIC_NORM"]
 
         if any([s in self.states for s in ["INVALID_REG", "DOWN", "DRAIN", "NOT_RESPONDING", "MAINT", "FAIL", "POWER_SAVE", "REBOOT", "RESERVED"]]):
