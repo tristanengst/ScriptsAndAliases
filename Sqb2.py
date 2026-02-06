@@ -374,7 +374,7 @@ def job_info_with_formatted_date_time(jd, *, key, tz="America/Vancouver"):
             if c.isnumeric() or c in "-:T":
                 date_time_chars.append(c)
             else:
-                print(f"Unexpected character in start time: {c}")
+                twrite(f"Unexpected character in start time: {c}")
                 break
         date_time = "".join(date_time_chars)
         date_time = date_time[:-3].replace("T", "-") # Exclude seconds
