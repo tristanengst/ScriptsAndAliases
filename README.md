@@ -1,7 +1,7 @@
 # Scripts and Aliases
 Useful Python scripts called from bash aliases, all for manipulating SLURM.... and more! This repo
 1. 🚀 Reduces friction in keeping many SLURM experiments running
-2. ℹ️ Provides real-time knowledge of which GPUs of which partitions of which ComputeCanada clusters are better and worse to submit to
+2. ℹ️ Provides real-time knowledge of which partitions of which ComputeCanada clusters are better and worse to submit to
 3. 🍭 Contains many miscellaneous useful utilities
 
 [**Basic usage**](#basic-usage) functionality requires zero to extremely minimal setup, while additional, cooler [**advanced usage**](#advanced-usage) functionality requires a little more configuration and for you to submit SLURM jobs in smart ways.
