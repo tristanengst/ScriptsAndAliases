@@ -292,7 +292,6 @@ def to_hostname(x=None):
     # CASE 3: [x] is a hostname already. In this case, it would be SSH-able, so we
     # would've already returned it in CASE 1.
     ssh_name = to_ssh_name(x)
-    twrite(ssh_name)
     ssh_config = get_ssh_config()
     if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
         return ssh_config[ssh_name]["HostName"]
