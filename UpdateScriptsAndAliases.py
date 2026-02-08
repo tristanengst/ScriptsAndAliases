@@ -4,7 +4,7 @@ import subprocess
 
 import MachineInfo
 import Utils
-from UtilsBase import twrite
+from UtilsBase import twrite, tqdm_lite
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
@@ -14,14 +14,14 @@ if __name__ == "__main__":
 
     args.update_on = [MachineInfo.get_current_machine()] if args.update_on is None else args.update_on
     if "all" in args.update_on:
-        update_on = MachineInfo.get_all_usable_ssh_names()
+        args.update_on = MachineInfo.get_all_usable_ssh_names()
         twrite(f"[INFO] will update on all SSH-able machines with SSH names: {update_on}")
     else:
         update_on2ssh_name = {m: MachineInfo.to_ssh_name(m) for m in args.update_on}
         twrite(f"[INFO] will update machines using machine-to-SSH-name mapping: {update_on2ssh_name}")
-        update_on = update_on2ssh_name.values()
+        args.update_on = update_on2ssh_name.values()
 
-    for u in update_on:
+    for u in tqdm_lite(args.update_on):
         twrite("-" * 80)
         twrite(f"Updating host={u}...")
         result = MachineInfo.run_command_on_machine(machine=u,
