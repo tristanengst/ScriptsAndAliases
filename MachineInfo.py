@@ -234,6 +234,16 @@ def get_current_machine():
     """Returns the machine name of the current machine, or None if it can't be found."""
     return Utils.get_cluster_type() if Utils.is_slurm() else machine_to_ssh_name(os.uname().nodename)
 
+def get_all_usable_ssh_names():
+    """Returns a list of all SSH names for all machines that could be SSHed to."""
+    if Utils.is_cc():
+        machine_names = [m for m in machine2info if m in machines_cc]
+    else:
+        machine_names = list(machine2info.keys())
+    ssh_names = [to_ssh_name(m) for m in machine_names]
+    return [s for s in ssh_names if not s is None]
+
+
 def to_ssh_name(x=None):
     """Returns an SSH-able name corresponding to machine/hostname/SSH name [x]. If no
     name can be determined, return None.
@@ -352,7 +362,7 @@ def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
     """Runs [command] on machine [m] and returns the output."""
     cwd = os.getcwd()
     os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-    if os.uname().nodename == to_hostname(machine):
+    if os.uname().nodename == to_hostname(machine) or machine is None:
         result = subprocess.getoutput(command)
         os.chdir(cwd)
         return result

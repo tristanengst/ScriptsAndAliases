@@ -4,30 +4,25 @@ import subprocess
 
 import MachineInfo
 import Utils
+from UtilsBase import twrite
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("--recursive_call", default=0, type=int, choices=[0, 1],
-        help="If 1, then this script was made to run from another machine and should not attempt to update other machines.")
+    P.add_argument("--update_on", nargs="*", default=None,
+        help="Which machines to update on. If empty, interpreted as the current machine. If 'all', interpreted as every SSH-able machine. Other values are interpreted as giving the machine to update on.")
     args = P.parse_args()
 
-for m in MachineInfo.machine2info:
-    hostname = MachineInfo.to_hostname(m)
-    
-    if MachineInfo.hostname_is_current_machine(hostname):
-        print(f"Updating host={hostname} (current machine)...")
-        if not osp.exists(osp.expanduser("~/.ScriptsAndAliases")):
-            MachineInfo.run_command_on_machine(machine=m, command="git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases")
-        
-        MachineInfo.run_command_on_machine(machine=m, command="cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py")
-
-        if osp.exists(osp.expanduser("~/.bashrc")):
-            MachineInfo.run_command_on_machine(machine=m, command="source ~/.bashrc",)
-        if osp.exists(osp.expanduser("~/.zshrc")):
-            MachineInfo.run_command_on_machine(machine=m, command="source ~/.zshrc",)
-    
-    elif Utils.is_workstation() and not args.recursive_call:
-        print(f"Updating host={hostname}...")
-        MachineInfo.run_command_on_machine(machine=m, command="python ~/.ScriptsAndAliases/UpdateScriptsAndAliases.py",)
+    args.update_on = [MachineInfo.get_current_machine()] if args.update_on is None else args.update_on
+    if "all" in args.update_on:
+        update_on = MachineInfo.get_all_usable_ssh_names()
+        twrite(f"[INFO] will update on all SSH-able machines with SSH names: {update_on}")
     else:
-        pass
+        update_on2ssh_name = {m: MachineInfo.to_ssh_name(m) for m in args.update_on}
+        twrite(f"[INFO] will update machines using machine-to-SSH-name mapping: {update_on2ssh_name}")
+        update_on = update_on2ssh_name.values()
+
+    for u in update_on:
+        twrite(f"Updating host={u}...")
+        result = MachineInfo.run_command_on_machine(machine=u,
+            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"")
+        twrite(f"Result of updating host={u}:\n{result}")
