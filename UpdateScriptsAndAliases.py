@@ -8,7 +8,7 @@ from UtilsBase import twrite
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("--update_on", nargs="*", default=None,
+    P.add_argument("update_on", nargs="*", default=None,
         help="Which machines to update on. If empty, interpreted as the current machine. If 'all', interpreted as every SSH-able machine. Other values are interpreted as giving the machine to update on.")
     args = P.parse_args()
 
@@ -22,6 +22,7 @@ if __name__ == "__main__":
         update_on = update_on2ssh_name.values()
 
     for u in update_on:
+        twrite("-" * 80)
         twrite(f"Updating host={u}...")
         result = MachineInfo.run_command_on_machine(machine=u,
             command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"")
