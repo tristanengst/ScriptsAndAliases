@@ -21,7 +21,7 @@ if __name__ == "__main__":
         twrite(f"[INFO] will update machines using machine-to-SSH-name mapping: {update_on2ssh_name}")
         args.update_on = update_on2ssh_name.values()
 
-    for u in tqdm_lite(args.update_on):
+    for u in tqdm(args.update_on):
         twrite("-" * 80)
         twrite(f"Updating host={u}...")
         result = MachineInfo.run_command_on_machine(machine=u,
