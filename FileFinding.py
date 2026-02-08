@@ -25,6 +25,11 @@ if Utils.get_cluster_type() == "cedar":
 
 file_search_dirs = slurm_script_search_dirs + job_result_search_dirs
 
+class MultipleMatchesError(Exception):
+    def __init__(self, message, *, matches):
+        super().__init__(message)
+        self.matches = matches
+
 def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
     """Returns the list of files that match the substring [f], but in a way where
     existing globs would be treated nicely by bash.
@@ -135,10 +140,11 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=Fa
     s           -- string to match. Does not need pre-globbing
     search_dirs -- directories to search in if [s] does not exist directly
     resolve     -- how to resolve multiple matches. One of:
-                    ps -- the one where the match ends nearest to the end of the string is chosen
+                    pos -- the one where the match ends nearest to the end of the string is chosen
                     user -- the user is prompted to choose
                     half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
                     latest -- the one with the most recent modification time is chosen
+                    all -- all matches are returned as a list
     matches     -- if provided, use this list of matches instead of searching
     verbose     -- whether to print verbose messages
     """
@@ -170,7 +176,7 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=Fa
         if len(new_matches) == 0:
             raise ValueError(f"[ERROR] str_to_exp_folder(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
         elif len(new_matches) > 1:
-            raise ValueError(f"[ERROR] str_to_exp_folder(): multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
+            raise MultipleMatchesError(f"[ERROR] str_to_exp_folder(): multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
         else:
             return new_matches[0]
 
@@ -207,8 +213,15 @@ def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
                         nearest to the end of the string is chosen
     """
     s = s.strip()
-    s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
-    s_glob = f"*{s}*"
+    # Tentative hack to see if we like this behavior better: if [s] either ends with
+    # or starts with a glob, then that glob is kept and no other is added. Otherwise,
+    # globs are added to both sides as before
+    s_glob = s if s.startswith("*") or s.endswith("*") else f"*{s}*"
+
+    # Old way of doing this
+    # s = s.strip()
+    # s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
+    # s_glob = f"*{s}*"
 
     search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
     return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isdir(m)]

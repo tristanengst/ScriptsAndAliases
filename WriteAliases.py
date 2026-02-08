@@ -43,7 +43,7 @@ aliases = [
     "alias exj=\"python ~/.ScriptsAndAliases/ExtractJobIds.py \"",
 
     # LS a model without typing an annoying path
-    "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py -m \"",
+    "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py \"",
 
     # Common ways to run Sqb2.py.
     "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
