@@ -235,10 +235,19 @@ def get_current_machine():
     return Utils.get_cluster_type() if Utils.is_slurm() else machine_to_ssh_name(os.uname().nodename)
 
 def to_ssh_name(x=None):
-    """Returns an SSH-able name corresponding to machine/hostname/SSH name [x]. If no name can be determined, return None.
+    """Returns an SSH-able name corresponding to machine/hostname/SSH name [x]. If no
+    name can be determined, return None.
+
+    Args:
+    x -- thing to get SSH name for, or None for the current machine/cluster
     """
     ssh_config = get_ssh_config()
-    x = os.uname().nodename if x is None else x
+    if x is None and Utils.is_slurm():
+        cluster_type = Utils.get_cluster_type()
+        if cluster_type in ssh_config:
+            return cluster_type
+    else:
+        x = os.uname().nodename if x is None else x
 
     # CASE 1: [x] is an SSH-able name already
     if x in ssh_config:
@@ -249,7 +258,7 @@ def to_ssh_name(x=None):
         matches = [p for p in possible_ssh_names if p in ssh_config]
         if matches:
             return matches[0]
-    # CASE 3: [x] is a hostname already; we can hopefully just SSH to it directly. In this case, we can query the connection quickly.
+    # CASE 4: [x] is a hostname already; we can hopefully just SSH to it directly. In this case, we can query the connection quickly.
     connection_test_command = f"ssh -o ConnectTimeout=3 {x} 'echo connected'"
     connection_test_result = subprocess.getoutput(connection_test_command)
     if connection_test_result == "connected":
@@ -261,9 +270,10 @@ def to_ssh_name(x=None):
 def to_hostname(x=None):
     """Returns the hostname corresponding to machine/hostname/SSH name [x]. If no
     hostname can be determined, return None.
-    """
-    x = os.uname().nodename if x is None else x
 
+    Args:
+    x -- thing to get SSH name for, or None for the current machine/cluster
+    """
     # CASE 1: [x] is an SSH-able name, so we should be able to read the hostname
     # directly from the ~/.ssh/config file.
     # CASE 2: [x] is a machine name in [machine2info]. In this case, one of its
@@ -272,6 +282,7 @@ def to_hostname(x=None):
     # CASE 3: [x] is a hostname already. In this case, it would be SSH-able, so we
     # would've already returned it in CASE 1.
     ssh_name = to_ssh_name(x)
+    twrite(ssh_name)
     ssh_config = get_ssh_config()
     if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
         return ssh_config[ssh_name]["HostName"]
@@ -331,7 +342,10 @@ def hostname_to_machine(hostname):
         
 
 def hostname_is_current_machine(hostname):
-    """Returns True if [hostname] is the current machine."""
+    """Returns True if [hostname] is the current machine. NOTE: this won't necessarily
+    work as expected on clusters, where by machine we typically are thinking of any
+    login node.
+    """
     return os.uname().nodename == hostname
 
 def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
@@ -468,3 +482,6 @@ class SlurmNodeInfo:
         scontrol_show_nodes = subprocess.getoutput(s).split("\n\n")
         node_infos = [SlurmNodeInfo(s) for s in scontrol_show_nodes]
         return node_infos
+
+if __name__ == "__main__":
+    print(to_ssh_name())
