@@ -233,7 +233,7 @@ class HostInfoError(Exception):
 
 def get_current_machine():
     """Returns the machine name of the current machine, or None if it can't be found."""
-    return Utils.get_cluster_type() if Utils.is_slurm() else machine_to_ssh_name(os.uname().nodename)
+    return Utils.get_cluster_type() if Utils.is_slurm() else to_ssh_name(os.uname().nodename)
 
 def get_all_usable_ssh_names():
     """Returns a list of all SSH names for all machines that could be SSHed to."""
