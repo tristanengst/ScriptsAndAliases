@@ -4,7 +4,7 @@ import subprocess
 
 import MachineInfo
 import Utils
-from UtilsBase import twrite, tqdm_lite
+from UtilsBase import twrite, tqdm
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
