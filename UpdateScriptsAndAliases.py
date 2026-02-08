@@ -15,7 +15,7 @@ if __name__ == "__main__":
     args.update_on = [MachineInfo.get_current_machine()] if args.update_on is None else args.update_on
     if "all" in args.update_on:
         args.update_on = MachineInfo.get_all_usable_ssh_names()
-        twrite(f"[INFO] will update on all SSH-able machines with SSH names: {update_on}")
+        twrite(f"[INFO] will update on all SSH-able machines with SSH names: {args.update_on}")
     else:
         update_on2ssh_name = {m: MachineInfo.to_ssh_name(m) for m in args.update_on}
         twrite(f"[INFO] will update machines using machine-to-SSH-name mapping: {update_on2ssh_name}")
