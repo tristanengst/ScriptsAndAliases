@@ -335,6 +335,8 @@ if __name__ == "__main__":
         help="Has no effect, but can resolve bugs where we accidentally use this.")
     P.add_argument("--taskset_debug", action="store_true",
         help="Print the taskset script instead of running it")
+
+    P.add_argument("--basic", action="store_true",)
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_slurm() and not args.allow_on_slurm:
@@ -356,7 +358,17 @@ if __name__ == "__main__":
     elif args.cpu_range == "none":
         taskset_str = ""
     else:
-        taskset_str = f"taskset -c {args.cpu_range}"
+        taskset_str = f"taskset -c {args.cpu_range}"    
+
+    # Add --gpus to [args] unless they were set with --strip_gpus
+    if not args.strip_gpus:
+        script_args.gpus = [int(g) for g in args.gpus]
+    cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}" 
+    
+    if args.basic:
+        remaining_args = " ".join(unparsed_args)
+        print(f"{cuda_visible_devices_str} {taskset_str} {remaining_args}")
+        sys.exit(0)
 
     # Parse remaining arguments to those before the script being run, the script, and
     # a Namespace of arguments to the script
@@ -364,11 +376,6 @@ if __name__ == "__main__":
 
     # Map the tpython_ddpX or other prefix to the script to what it should actually be
     before_script = get_script_from_alias(before_script)
-
-    # Add --gpus to [args] unless they were set with --strip_gpus
-    if not args.strip_gpus:
-        script_args.gpus = [int(g) for g in args.gpus]
-    cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}"
 
     # Query the script that we are running for metadata about the run. In particular,
     # this includes the experiment name, which is the folder stuff will save to, and
