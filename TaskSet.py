@@ -308,10 +308,16 @@ if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-c", "--cpu_range", default="parse_gpus",
         help="CPU specification")
-    P.add_argument("--gpus", nargs="*", type=int, default=None,
+    gpu_parser = P.add_mutually_exclusive_group(required=True)
+    gpu_parser.add_argument("--gpus", nargs="*", type=int, default=None,
         help="GPU specification")
-    P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
+    gpu_parser.add_argument("--strip_gpus", nargs="*", type=int, default=None,
         help="Like --gpus but not added to the arguments of the script being run")
+
+    # P.add_argument("--gpus", nargs="*", type=int, default=None,
+    #     help="GPU specification")
+    # P.add_argument("--strip_gpus", nargs="*", type=int, default=None,
+    #     help="Like --gpus but not added to the arguments of the script being run")
     P.add_argument("--shell", default="bash", choices=["bash", "zsh"],
         help="Shell type")
     
@@ -336,34 +342,29 @@ if __name__ == "__main__":
     P.add_argument("--taskset_debug", action="store_true",
         help="Print the taskset script instead of running it")
 
-    P.add_argument("--basic", action="store_true",)
+    P.add_argument("--basic", action="store_true",
+        help="Print something morally equivalent to the command being run: CUDA_VISIBLE_DEVICES=... taskset -c ... python script.py --args ...")
     args, unparsed_args = P.parse_known_args()
 
     if Utils.is_slurm() and not args.allow_on_slurm:
         print("tpython_ddpX not for use on ComputeCanada.")
         sys.exit(1)
 
-    if args.gpus is None and not args.strip_gpus is None:
-        args.gpus = args.strip_gpus
-        args.strip_gpus = True
-    elif not args.gpus is None and not args.strip_gpus is None:
-        raise ValueError("Cannot specify both --gpus and --strip_gpus")
-    elif args.gpus is None and args.strip_gpus is None:
-        raise ValueError("Must specify either --gpus or --strip_gpus")
+    # Parse the GPUs to use and whether or not to add a --gpus argument with them back
+    # into the script that actually gets run
+    specified_gpus = args.gpus if not args.gpus is None else args.strip_gpus
+    add_back_gpus = args.strip_gpus is None
 
     # Get the CPU string for taskset based on --cpu_range and --gpus
     if args.cpu_range == "parse_gpus":
-        args.cpu_range = get_cpus_from_gpus(gpus=args.gpus)
+        args.cpu_range = get_cpus_from_gpus(gpus=specified_gpus)
         taskset_str = f"taskset -c {args.cpu_range}"
     elif args.cpu_range == "none":
         taskset_str = ""
     else:
-        taskset_str = f"taskset -c {args.cpu_range}"    
+        taskset_str = f"taskset -c {args.cpu_range}"
 
-    # Add --gpus to [args] unless they were set with --strip_gpus
-    if not args.strip_gpus:
-        script_args.gpus = [int(g) for g in args.gpus]
-    cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in args.gpus])}" 
+    cuda_visible_devices_str = f"CUDA_VISIBLE_DEVICES={','.join([str(g) for g in specified_gpus])}" 
     
     if args.basic:
         remaining_args = " ".join(unparsed_args)
@@ -373,6 +374,7 @@ if __name__ == "__main__":
     # Parse remaining arguments to those before the script being run, the script, and
     # a Namespace of arguments to the script
     before_script, script, script_args = unparsed_args_to_args(unparsed_args=unparsed_args)
+    script_args = UtilsBase.updated_namespace(script_args, gpus=specified_gpus) if add_back_gpus else script_args
 
     # Map the tpython_ddpX or other prefix to the script to what it should actually be
     before_script = get_script_from_alias(before_script)
