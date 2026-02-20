@@ -44,11 +44,9 @@ def args_with_sanitized_partitions(args):
 	if args.partition is None:
 		return args
 
-	time2partitions = time2partitions if time2partitions else get_time_to_partitions()
-	avail_partitions = UtilsBase.flatten(time2partitions.values())
-	partitions = [update_partition(partition=p, avail_partitions=avail_partitions) for p in args.partition.split(",")]
+	partitions = [update_partition(partition=p, avail_partitions=get_partitions()) for p in args.partition.split(",")]
 	partitions = ",".join(partitions)
-	return UtilsBase.update_argparse(args, partition=partitions)
+	return UtilsBase.updated_namespace(args, partition=partitions)
 
 def args_to_scontrol_prefix(args):
 	if args.hold:
