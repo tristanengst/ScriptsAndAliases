@@ -2,6 +2,7 @@
 import argparse
 from collections import defaultdict
 import copy
+from functools import cached_property
 import os
 import subprocess
 import sys
@@ -192,34 +193,70 @@ class Partition:
     """
     Args:
     name        -- the name of the partition
-    time_limit  -- the time limit of the partition in hours
+    time_limit  -- the time limit of the partition as a hhhHmmM string
+    seconds     -- the time limit of the partition in seconds (int)
+    hours       -- the time limit of the partition in hours (int)
+
+    priority_tier       -- the priority tier of the partition
+    priority_job_factor -- the priority job factor of the partition
+
     nodes       -- list of Node objects in this partition, likely set after construction
     children    -- list of partition names for child partitions
     """
-    def __init__(self, name, time_limit, nodes=[], children=None):
+    def __init__(self, *, name,
+        time_limit: str | None = None, seconds: int | None = None, hours: int | None = None, 
+        priority_tier=1, priority_job_factor=1,
+        nodes=[], children=None):
+        ##############################################################################
+        # Ensure consistency between [time_limit], [seconds], and [hours]
+        ##############################################################################
+        time_limit_ = UtilsBase.time_to_seconds(time_limit) if time_limit else None
+        seconds_ = UtilsBase.time_to_seconds(seconds) if seconds else None
+        hours_ = UtilsBase.time_to_seconds(hours * 3600) if hours else None
+        seconds_values = [t for t in [hours_, seconds_, time_limit_] if t is not None]
+        if len(seconds_values) == 0:
+            raise ValueError(f"At least one of time_limit, seconds, or hours must be provided, got: time_limit={time_limit}, seconds={seconds}, hours={hours}")
+        elif len(set(seconds_values)) > 1:
+            raise ValueError(f"time_limit, seconds, and hours must all represent the same time duration. Got time_limit={time_limit} seconds={seconds} hours={hours}")
+        else:
+            self.seconds = seconds_values[0]
+            self.hours = UtilsBase.time_to_hours(self.seconds)
+            self.time_limit = UtilsBase.time_to_pretty_str(self.seconds)
+        ##############################################################################
+        ##############################################################################
+        ##############################################################################
         self.name = name
-        self.time_limit = time_limit
-        self.time = UtilsBase.time_to_hours(time_limit)
+
+        self.priority_tier = UtilsBase.try_make_number(priority_tier)
+        self.priority_job_factor = UtilsBase.try_make_number(priority_job_factor)
+
         self.nodes = [n for n in nodes if self.name in n.partitions]
         self.children = children if children else []
 
     def __str__(self):
         node_str = "" if not self.nodes else f", num_nodes={len(self.nodes)}"
-        return f"Partition(name={self.name}, time={UtilsBase.time_to_pretty_str(self.time*3600)},{node_str})"
+        return f"Partition(name={self.name}, time={self.time_limit} prio_tier={self.priority_tier}, prio_factor={self.priority_job_factor},{node_str})"
 
     def __repr__(self): return self.__str__()
 
+    @cached_property
+    def max_total_gpus(self):
+        """Returns the maximum number of total GPUs available on any node on the partition."""
+        return max([sum(n.gres_total.values()) for n in self.nodes]) if len(self.nodes) > 0 else 0 
+
     @staticmethod
-    def get_partitions_from_sinfo(nodes=[]):
+    def get_partitions_from_sinfo(nodes=[], verbose=False):
         """Returns a list of Partition objects representing the partitions on the cluster."""
-        key2si_format_O = dict(name="PartitionName:32", time_limit="Time:32",)
+        key2si_format_O = dict(name="PartitionName:32", time_limit="Time:32", priority_tier="PriorityTier:32", priority_job_factor="PriorityJobFactor:32", )
 
         si_format_strs = ",".join(key2si_format_O.values())
         si_cmd = f"sinfo -O '{si_format_strs}'"
-        # print(f"[INFO] Running command: {si_cmd}")
+        if verbose:
+            print(f"[INFO] Running command: {si_cmd}")
 
         si = subprocess.getoutput(si_cmd)
-        # print(f"[INFO] Got sinfo output:\n{si}")
+        if verbose:
+            print(f"[INFO] Got sinfo output:\n{si}")
         si_lines = [line for line in si.strip().split("\n") if len(line.strip()) > 0]
         si_lines = si_lines[1:] # Remove the header line
         si_lines = [line.split() for line in si_lines]
@@ -228,8 +265,11 @@ class Partition:
 
         partitions = list()
         for ld in line_dicts:
-            time_limit = UtilsBase.time_to_hours(ld["time_limit"])
-            partition = Partition(name=ld["name"], time_limit=time_limit, nodes=nodes)
+            partition = Partition(name=ld["name"],
+                time_limit=ld["time_limit"],
+                priority_tier=ld["priority_tier"], 
+                priority_job_factor=ld["priority_job_factor"],
+                nodes=nodes,)
             partitions.append(partition)
         partitions = [p for p in partitions if not p.name.startswith("cpu")]
         return partitions
@@ -244,8 +284,36 @@ class Partition:
 
     @staticmethod
     def contains(p1, p2):
-        """Returns if every job that could run on partition [p2] can run on [p1]."""
-        return p1.time_limit >= p2.time_limit and all([n in p1.nodes for n in p2.nodes])
+        """Partition [p1] contains partition [p2] if the marginal benefit of queueing
+        on [p2] and [p1] over just [p1] is zero. This is a bit heuristic.
+        """
+        return p1.seconds >= p2.seconds and all([n in p1.nodes for n in p2.nodes])
+
+    @staticmethod
+    def equivalent(p1, p2):
+        """Returns if partitions [p1] and [p2] are equivalent, meaning that they
+        contain each other."""
+        return (Partition.contains(p1, p2) and Partition.contains(p2, p1)) or (p1.name == p2.name)
+
+    @staticmethod
+    def partition_better_than(p1, p2):
+        """Returns if partition [p1] is better than partition [p2]."""
+        result = (not Partition.equivalent(p1, p2)
+            and Partition.contains(p1, p2)
+            and (p1.priority_tier > p2.priority_tier or (
+                p1.priority_tier == p2.priority_tier
+                and p1.priority_job_factor >= p2.priority_job_factor))
+            )
+        return result
+
+    @staticmethod
+    def filter_partitions(partitions):
+        """Returns a minimal list of partitions such that no partition can be removed
+        without making it worse to queue on the remainder. Interactive partitions do
+        not knock out other partitions however.
+        """
+        return [p1 for p1 in partitions if not any([Partition.partition_better_than(p2, p1) for p2 in partitions if not "interac" in p2.name])]
+        
 
 def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2config):
     node2config = node2config if node2config else MachineInfo.cluster2node2config[Utils.get_cluster_type()]
@@ -335,14 +403,13 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
     if Utils.is_solar():
         all_times = [max(resource_states.time2resource2total.keys())]
     else:
-        all_times = sorted(resource_states.time2resource2total.keys())
+        # all_times = sorted(resource_states.time2resource2total.keys())
+        all_times = sorted(resource_states.time2resource2total.keys(), key=UtilsBase.time_to_seconds)
 
     all_resources = sorted(set(UtilsBase.flatten([list(resource_states.time2resource2total[time].keys()) for time in all_times])),
         key=lambda g: MachineInfo.gpu2vram[g])
     all_resources = [r for r in all_resources if MachineInfo.gpu2info[r]["good"]]
     
-
-
     time2resource2str = defaultdict(lambda: defaultdict(str))
     time2resource2str["time"] = dict(time="\t\ttime") | {r: r for r in all_resources}
 

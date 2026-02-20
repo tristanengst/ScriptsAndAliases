@@ -153,6 +153,8 @@ if __name__ == "__main__":
         # args.search_dirs = [os.getcwd()] + args.extra_search_dirs + args.search_dirs
         args.search_dirs = args.search_dirs + args.extra_search_dirs
         args.files = list(set(args.files))
+
+        twrite(files=args.files, search_dirs=args.search_dirs)
         
         # These globs represent the files that will actually be sent with rsync
         sources = [FileFinding.file_substr_to_glob(f, search_dirs=args.search_dirs) for f in args.files]

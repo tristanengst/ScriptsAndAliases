@@ -257,6 +257,20 @@ def try_make_number(s):
             return s
 
 def is_numeric(s): return not isinstance(try_make_number(s), str)
+
+def last_numeric_substring(s):
+    """Returns the longest tail of [s] that is numeric."""
+    for idx in range(len(s)):
+        if is_numeric(s[idx:]):
+            return s[idx:]
+    return ""
+
+def first_numeric_substring(s):
+    """Returns the longest head of [s] that is numeric."""
+    for idx in range(len(s), 0, -1):
+        if is_numeric(s[:idx]):
+            return s[:idx]
+    return ""
     
 def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
     """Returns list [l] as a pretty string. The intended usage is to get its elements
@@ -539,13 +553,31 @@ def time_to_seconds(time_str):
 
     time_str = time_str.strip()
     if time_str.lower().endswith("s"):
-        return float(time_str[:-1])
+        # Extract the last numeric characters before the 's', convert these to a float
+        # and return time_to_seconds(remainder) + that number of seconds.
+        last_numeric_tail = last_numeric_substring(time_str[:-1])
+        time_str_head = time_str[:-len(last_numeric_tail)-1]
+        time_head = 0 if not time_str_head else time_to_seconds(time_str_head)
+        seconds = float(last_numeric_tail) if last_numeric_tail else 0
+        return time_head + seconds
     elif time_str.lower().endswith("m"):
-        return float(time_str[:-1]) * 60
+        last_numeric_tail = last_numeric_substring(time_str[:-1])
+        time_str_head = time_str[:-len(last_numeric_tail)-1]
+        time_head = 0 if not time_str_head else time_to_seconds(time_str_head)
+        minutes = float(last_numeric_tail) if last_numeric_tail else 0
+        return time_head + minutes * 60
     elif time_str.lower().endswith("h"):
-        return float(time_str[:-1]) * 3600
+        last_numeric_tail = last_numeric_substring(time_str[:-1])
+        time_str_head = time_str[:-len(last_numeric_tail)-1]
+        time_head = 0 if not time_str_head else time_to_seconds(time_str_head)
+        hours = float(last_numeric_tail) if last_numeric_tail else 0
+        return time_head + hours * 3600
     elif time_str.lower().endswith("d"):
-        return float(time_str[:-1]) * 24 * 3600
+        last_numeric_tail = last_numeric_substring(time_str[:-1])
+        time_str_head = time_str[:-len(last_numeric_tail)-1]
+        time_head = 0 if not time_str_head else time_to_seconds(time_str_head)
+        days = float(last_numeric_tail) if last_numeric_tail else 0
+        return time_head + days * 24 * 3600
     elif "-" in time_str:
         days, time_str = time_str.split("-")
         

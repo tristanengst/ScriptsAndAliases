@@ -215,7 +215,7 @@ def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
     s = s.strip()
     # Tentative hack to see if we like this behavior better: if [s] either ends with
     # or starts with a glob, then that glob is kept and no other is added. Otherwise,
-    # globs are added to both sides as before
+    # globs are added to both sides as before. This gives more control.
     s_glob = s if s.startswith("*") or s.endswith("*") else f"*{s}*"
 
     # Old way of doing this
