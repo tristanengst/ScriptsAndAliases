@@ -19,6 +19,8 @@ if __name__ == "__main__":
         help="Print job results")
     P.add_argument("-s", "--slurm", action="store_true",
         help="Print job submission script")
+    P.add_argument("-e", "--error", action="store_true",
+        help="Print job error log")
     P.add_argument("--substr", required=True,
         help="Substring that identifies job")
     P.add_argument("--search_dirs", nargs="+", default="default",
@@ -34,9 +36,10 @@ if __name__ == "__main__":
     if not Utils.is_slurm() and not args.slurm:
         twrite(f"Not on cluster -> find output under experiment directory")
         args.search_dirs = FileFinding.exp_search_dirs if args.search_dirs == "default" else args.search_dirs
+
         exp_name = FileFinding.str_to_exp_folder(args.substr, search_dirs=args.search_dirs, resolve="half_then_user")
 
-        possible_result_exts = [".txt", ".out", ".log", ".json"]
+        possible_result_exts = [".txt", ".out", ".log", ".json", ".err"]
         non_result_files = ["heartbeat.txt", "config.json", "wandb_attempt.txt"]
 
         possible_result_files = [osp.join(exp_name, f) for f in os.listdir(exp_name) if any([f.endswith(ext) for ext in possible_result_exts]) and f not in non_result_files]
@@ -53,7 +56,7 @@ if __name__ == "__main__":
 
         fname = FileFinding.str_to_file(args.substr,
             search_dirs=args.search_dirs,
-            slurm_or_result="slurm" if args.slurm else "result",
+            file_type="result" if args.result else ("slurm" if args.slurm else ("error" if args.error else None)),
             resolve="half_then_user")
 
     subprocess.run(f"cat {fname}", shell=True)

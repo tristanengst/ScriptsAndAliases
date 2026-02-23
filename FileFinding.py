@@ -16,6 +16,7 @@ import UserConfig
 exp_search_dirs = UserConfig.checkpoints_search_dirs
 slurm_script_search_dirs = UserConfig.slurm_script_search_dirs
 job_result_search_dirs = UserConfig.job_result_search_dirs
+job_error_search_dirs = UserConfig.job_error_search_dirs
 
 # Custom code for me; you might delete this
 if Utils.get_cluster_type() == "cedar":
@@ -23,7 +24,7 @@ if Utils.get_cluster_type() == "cedar":
         osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results")]
     slurm_script_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm")]
 
-file_search_dirs = slurm_script_search_dirs + job_result_search_dirs
+file_search_dirs = slurm_script_search_dirs + job_result_search_dirs + job_error_search_dirs
 
 class MultipleMatchesError(Exception):
     def __init__(self, message, *, matches):
@@ -226,12 +227,12 @@ def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
     search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
     return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isdir(m)]
 
-def str_to_file(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbose=False, matches=None, resolve="pos"):
+def str_to_file(s, search_dirs=file_search_dirs, file_type="slurm", verbose=False, matches=None, resolve="pos"):
     s = s.strip()
     if osp.exists(s) and osp.isfile(s):
         return s
     
-    matches = matches if matches else str_to_all_files(s, search_dirs=search_dirs, verbose=verbose, slurm_or_result=slurm_or_result)
+    matches = matches if matches else str_to_all_files(s, search_dirs=search_dirs, verbose=verbose, file_type=file_type)
 
     if len(matches) == 0:
         raise FileNotFoundError(f"str_to_file(): No files folders found matching {s} in {search_dirs}")
@@ -263,7 +264,7 @@ def str_to_file(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbos
         if len(matches) == 0:
             raise ValueError(f"[ERROR] str_to_file(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
         else:
-            return str_to_file(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches, slurm_or_result=slurm_or_result)
+            return str_to_file(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches, file_type=file_type)
     
     # Return the most-recently modified match. Need to check all files in the folder,
     # but assume we don't need to do so recursively.
@@ -277,16 +278,20 @@ def str_to_file(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbos
     else:
         raise ValueError(f"str_to_file(): Unknown resolve method {resolve}")
 
-def str_to_all_files(s, search_dirs=file_search_dirs, slurm_or_result="slurm", verbose=False):
-    """Returns all SLURM/result files that match the string [s]."""
+def str_to_all_files(s, search_dirs=file_search_dirs, file_type="result", verbose=False):
+    """Returns all files that match the string [s]."""
     s = s.strip()
     s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
     s_glob = f"*{s}*"
 
-    if search_dirs == file_search_dirs:
-        search_dirs = slurm_script_search_dirs if slurm_or_result == "slurm" else job_result_search_dirs
-    else:
-        search_dirs = [s for s in search_dirs if not osp.basename(s) == "slurm"] # Heuristic
+    if file_type == "result":
+        search_dirs = job_result_search_dirs
+    elif file_type == "slurm":
+        search_dirs = slurm_script_search_dirs
+    elif file_type == "error":
+        search_dirs = job_error_search_dirs
+    elif file_type == "exp":
+        search_dirs = exp_search_dirs
 
     search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
     return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isfile(m)]
@@ -346,9 +351,9 @@ if __name__ == "__main__":
     elif args.fn == "uid_to_slurm_info":
         result = uid_to_slurm_info(args.value, job2info=get_slurm_status(cur_user=True, verbose=args.verbose), verbose=args.verbose, **args.json_kwargs)
     elif args.fn == "str_to_file":
-        result = str_to_file(args.value, search_dirs=args.file_search_dirs, slurm_or_result="slurm", resolve=args.resolve, verbose=args.verbose, **args.json_kwargs)
+        result = str_to_file(args.value, search_dirs=args.file_search_dirs, file_type="slurm", resolve=args.resolve, verbose=args.verbose, **args.json_kwargs)
     elif args.fn == "str_to_all_files":
-        result = str_to_all_files(args.value, search_dirs=args.file_search_dirs, slurm_or_result="slurm", verbose=args.verbose, **args.json_kwargs)
+        result = str_to_all_files(args.value, search_dirs=args.file_search_dirs, file_type="slurm", verbose=args.verbose, **args.json_kwargs)
     elif args.fn == "get_slurm_info_by_key":
         result = get_slurm_info_by_key(args.value, key=args.key, job2info=get_slurm_status(cur_user=True, verbose=args.verbose), verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
     else:

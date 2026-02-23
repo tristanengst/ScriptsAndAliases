@@ -70,8 +70,7 @@ aliases = [
     # Prints a job's output and/or SLURM script given a substring from its name
     "alias jcat=\"python ~/.ScriptsAndAliases/JobCat.py -r --substr \"",
     "alias jcats=\"python ~/.ScriptsAndAliases/JobCat.py -s --substr \"",
-    "alias jcatsr=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
-    "alias jcatrs=\"python ~/.ScriptsAndAliases/JobCat.py -rs --substr \"",
+    "alias jcate=\"python ~/.ScriptsAndAliases/JobCat.py -e --substr \"",
 
     # Prints a job's command given a substring from its name
     "alias scmd=\"python ~/.ScriptsAndAliases/ShowCommand.py --substrs \"",
