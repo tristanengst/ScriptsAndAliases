@@ -530,6 +530,9 @@ def job_info_with_heartbeat(jd):
             return UtilsBase.updated_namespace(jd, heartbeat="no name")
 
         found_exp_folders = UtilsBase.flatten([glob.glob(osp.join(s, exp_name)) for s in args.exp_search_dirs])
+
+        twrite(exp_search_dirs=args.exp_search_dirs, exp_name=exp_name)
+
         if len(found_exp_folders) == 0:
             return UtilsBase.updated_namespace(jd, heartbeat="not found")
         elif len(found_exp_folders) > 1:
@@ -995,10 +998,7 @@ if __name__ == "__main__":
     
     
     P.add_argument("--exp_search_dirs", nargs="+",
-        default=[osp.expanduser("~/scratch/IMLE-SSL/models_imle"),
-            osp.expanduser("~/scratch/IMLE-SSL/models_mae"),
-            osp.expanduser("~/scratch/IMLE-SSL/finetunes"),
-            osp.expanduser("~/scratch/IMLE-SSL/models_stop")],
+        default=FileFinding.exp_search_dirs,
         help="Directories to search for latest checkpoints in. If empty, no checkpoints are searched for.")
     P.set_defaults(color=True)
     P.add_argument("--no_color", action="store_false", dest="color",

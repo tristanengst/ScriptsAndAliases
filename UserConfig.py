@@ -36,7 +36,8 @@ checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
     "~/scratch/IMLE-SSL/models_mae",
     "~/scratch/IMLE-SSL/finetunes",
     "~/Development/IMLE-SSL-2/probes",
-    "~/scratch/openPiMLE/exps",]
+    "~/scratch/openPiMLE/exps",
+    "~/scratch/LeRobot/exps"]
 job_result_search_dirs = [
     "~/Development/IMLE-SSL-2/pretrain_results",
     "~/Development/IMLE-SSL-2/finetune_results",
@@ -44,7 +45,8 @@ job_result_search_dirs = [
     "~/Development/IMLE-SSL-Dev/pretrain_results",
     "~/Development/IMLE-SSL-Dev/finetune_results",
     "~/Development/IMLE-SSL-Dev/probe_results",
-    "~/Development/openPiMLE-lerobot/results"
+    "~/Development/openPiMLE-lerobot/results",
+    "~/Development/LeRobot/results"
 ]
 job_error_search_dirs = [
     "~/Development/openPiMLE-lerobot/errors"
@@ -52,7 +54,8 @@ job_error_search_dirs = [
 slurm_script_search_dirs = [
     "~/Development/IMLE-SSL-2/slurm",
     "~/Development/IMLE-SSL-Dev/slurm",
-    "~/Development/openPiMLE-lerobot/slurm"
+    "~/Development/openPiMLE-lerobot/slurm",
+    "~/Development/LeRobot/slurm"
 ]
 
 checkpoints_search_dirs = [osp.expanduser(p) for p in checkpoints_search_dirs]
