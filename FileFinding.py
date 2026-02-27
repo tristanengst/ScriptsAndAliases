@@ -31,7 +31,73 @@ class MultipleMatchesError(Exception):
         super().__init__(message)
         self.matches = matches
 
-def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False):
+resolve_choices = ["pos", "user", "half", "half_then_user", "latest", "all"]
+def maybe_resolve_multiple_matches(*, matches, s, resolve="pos", verbose=False):
+    """Returns a single match from [matches] according to the strategy [resolve] if
+    possible.
+
+    Args:
+    matches -- list of matches to resolve among
+    s       -- string that was matched on, used for some resolution strategies
+    resolve -- strategy to use to resolve among multiple matches. One of:
+                pos -- the one where the match ends nearest to the end of the string is chosen
+                user -- the user is prompted to choose
+                half -- the one where the match is in the second half of the basename is chosen; if multiple, an error is raised
+                half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
+                latest -- the one with the most recent modification time is chosen
+                all -- all matches are returned as a list
+    """
+    if len(matches) == 0:
+        raise ValueError(f"[ERROR] no matches for {s}")
+    elif len(matches) == 1:
+        return matches[0]
+
+    # Resolve by finding the match where the match ends nearest to the end of the
+    # string. This is a simple heuristic that's highly exploitable; put the UID of the
+    # current thing towards the end.
+    elif resolve == "pos":
+        matches = sorted(matches, key=lambda m: len(s) - m.rfind(s))
+        return matches[0]
+
+    # Resolve by asking the user
+    elif resolve == "user":
+        print(f"[INFO] Found multiple matches for {s}:")
+        return UtilsBase.query_among_list(prompt=f"Multiple matches found for {s}, please choose:", options=matches)
+
+    # Valid matches are those where the match ends in the second half of the basename.
+    # This tends to be the most unique part of the name.
+    elif resolve == "half":
+        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
+        new_matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
+        if len(new_matches) == 0:
+            raise ValueError(f"[ERROR] zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
+        elif len(new_matches) > 1:
+            raise MultipleMatchesError(f"[ERROR] multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
+        else:
+            return new_matches[0]
+
+    # Try first using resolve='half', and if this fails, fall back to the user.
+    elif resolve == "half_then_user":
+        try:
+            half_matches = maybe_resolve_multiple_matches(matches=matches, s=s, resolve="half", verbose=verbose)
+            half_match = half_matches[0] if isinstance(half_matches, list) else half_matches
+            twrite(f"[INFO] Resolved with resolve='half' for {s} -> {half_match}", verbose=verbose)
+            return half_match
+        except Exception as e:
+            return maybe_resolve_multiple_matches(matches=matches, s=s, resolve="user", verbose=verbose)
+    
+    # Return the most-recently modified match. Need to check all files in the folder,
+    # but assume we don't need to do so recursively.
+    elif resolve == "latest":
+        matches2mtime = {m: max([osp.getmtime(osp.join(m, f)) for f in os.listdir(m)]) for m in matches}
+        matches = sorted(matches, key=lambda m: matches2mtime[m])
+        return matches[-1]
+    elif resolve == "all":
+        return matches
+    else:
+        raise ValueError(f"[ERROR] Unknown resolve method {resolve}")
+
+def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, first_match=False, resolve="half_then_user", verbose=False):
     """Returns the list of files that match the substring [f], but in a way where
     existing globs would be treated nicely by bash.
 
@@ -39,6 +105,12 @@ def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, fi
     f           -- substring to match. Can contain * at beginning and/or end
     search_dirs -- directories to search in if [f] is not an absolute path
     first_match -- return on the first match found
+    resolve     -- how to resolve multiple matches. One of:
+                    pos -- the one where the match ends nearest to the end of the string is chosen
+                    user -- the user is prompted to choose
+                    half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
+                    latest -- the one with the most recent modification time is chosen
+                    all -- all matches are returned as a list
     """
     if osp.exists(f):
         return [f]
@@ -61,9 +133,17 @@ def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, fi
         
         if len(globs) == 0:
             raise ValueError(f"No files found matching substring {f} in search_dirs={search_dirs}")
-        elif not "*" in f and len(all_matched_files) > 1:
-            globs = "\n\t".join(sorted(globs))
-            _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{sorted(globs)}\nall_matched_files=\n{sorted(all_matched_files)}")
+        elif not "*" in f and len(all_matched_files) > 1 and resolve is None:
+            globs = "\t" + "\n\t".join(sorted(globs))
+            all_matched_files = "\t" + "\n\t".join(sorted(all_matched_files))
+            _ = twrite(f"[ERROR] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{globs}\nall_matched_files=\n{all_matched_files}")
+        elif not "*" in f and len(all_matched_files) > 1 and resolve in ["pos", "user", "half", "half_then_user", "latest"]:
+            globs = "\t" + "\n\t".join(sorted(globs))
+            all_matched_files_str = "\t" + "\n\t".join(sorted(all_matched_files))
+            _ = twrite(f"[WARNING] file={f} matches multiple possibilities but does not contain *:\nglobs=\n{globs}\nall_matched_files=\n{all_matched_files_str}\n-------------- [INFO] -> resolve using resolve='{resolve}'... --------------")
+            result = maybe_resolve_multiple_matches(matches=list(all_matched_files), s=f, resolve=resolve, verbose=False)
+            twrite(f"[INFO] Got {result}\n")
+            return result
         else:
             return globs
 
