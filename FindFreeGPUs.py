@@ -89,6 +89,8 @@ def find_free_solar_gpus():
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
+    P.add_argument("-c", "--current", "--current-machine-only", action="count", default=0,
+        help="0: find information for all machines, 1: find information for all machines but print the current machine's info ASAP, 2: find information for only the current machine")
     P.add_argument("--hosts", type=str, nargs="*", default=MachineInfo.machine2info.keys(), choices=list(MachineInfo.machine2info.keys()),
         help="workstation/server names to check for free GPUs.")
     P.add_argument("--solar", type=int, default=2, choices=[0, 1, 2],
@@ -102,18 +104,33 @@ if __name__ == "__main__":
         args.hosts = MachineInfo.machine2info.keys() if len(args.hosts) == 0 else args.hosts
         args.hosts = [h for h in args.hosts if h not in MachineInfo.machines_cc and not h == "solar"]
 
-        # Parallelizing this is ~5x faster
-        with Pool(processes=min(16, len(args.hosts))) as p:
-            infos = p.map(find_free_gpus, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
-            machine2info = {h: info for h,info in zip(args.hosts, infos)}
-
-        host2gpu2free = {h: gpu2free for h,(gpu2free, _) in machine2info.items()}
-        host2users = {h: users_str for h,(_, users_str) in machine2info.items()}
+        if args.current == 0:
+            pass
+        elif args.current == 1 or args.current == 2:
+            current_machine = MachineInfo.to_machine_name(MachineInfo.get_current_machine())
+            if current_machine in args.hosts:
+                info = find_free_gpus(current_machine)
+                print(f"Current machine {current_machine}: free={sum(info[0].values())}/{len(info[0])} IDs={[gpu_id for gpu_id,free in info[0].items() if free]} users={info[1]}")
+            else:
+                print(f"Current machine {current_machine} not in hosts to check, so not checking it.")
+            
+            args.hosts = [h for h in args.hosts if not h == current_machine]
+        else:
+            pass
         
-        host2num_free = {h: sum(gpu2free.values()) for h,gpu2free in host2gpu2free.items()}
-        host2total = {h: len(gpu2free) for h,gpu2free in host2gpu2free.items()}
+        if args.current == 0 or args.current == 1:
+            # Parallelizing this is ~5x faster
+            with Pool(processes=min(16, len(args.hosts))) as p:
+                infos = p.map(find_free_gpus, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
+                machine2info = {h: info for h,info in zip(args.hosts, infos)}
 
-        for h in sorted(host2gpu2free, key=lambda h: host2num_free[h], reverse=True):
-            print(f"{h}: free={host2num_free[h]}/{host2total[h]} IDs={[gpu_id for gpu_id,free in host2gpu2free[h].items() if free]} users={host2users[h]}")
-        
-        print(f"Total free GPUs: {sum(host2num_free.values())}/{sum(host2total.values())}")
+            host2gpu2free = {h: gpu2free for h,(gpu2free, _) in machine2info.items()}
+            host2users = {h: users_str for h,(_, users_str) in machine2info.items()}
+            
+            host2num_free = {h: sum(gpu2free.values()) for h,gpu2free in host2gpu2free.items()}
+            host2total = {h: len(gpu2free) for h,gpu2free in host2gpu2free.items()}
+
+            for h in sorted(host2gpu2free, key=lambda h: host2num_free[h], reverse=True):
+                print(f"{h}: free={host2num_free[h]}/{host2total[h]} IDs={[gpu_id for gpu_id,free in host2gpu2free[h].items() if free]} users={host2users[h]}")
+            
+            print(f"Total free GPUs: {sum(host2num_free.values())}/{sum(host2total.values())}")
