@@ -10,7 +10,7 @@ import ClusterInfo2
 import MachineInfo
 import Utils
 import UtilsBase
-from UtilsBase import twrite
+from UtilsBase import twrite, tqdm
 
 def find_partitions_for_job(*, time_limit, full_node, gpu_type=None, args):
 	"""Returns a list of the best partitions for a given time limit.
@@ -274,6 +274,9 @@ if __name__ == "__main__":
 	# Configuration options for how SCU should behave
 	P.add_argument("--match_partition_to_time", type=UtilsBase.truthy_type, default=True,
 		help="If updating time, match partitions to the new time limit")
+
+	P.add_argument("--stagger", action="store_true",
+		help="Stagger job updates. Occassionally useful")
 	args = P.parse_args()
 	
 	##################################################################################
@@ -342,33 +345,17 @@ if __name__ == "__main__":
 	##################################################################################
 	##################################################################################
 
-	
+	iter_over = job_substr2jobid_to_update.values()
+	iter_over = tqdm(iter_over, desc="Updating jobs", total=len(iter_over)) if args.stagger else iter_over
 
-		
+	for idx,jobid in enumerate(iter_over):
+		if args.stagger and idx > 0:
+			import random
+			import time
+			wait_time = int(random.gauss(60, 30))
+			twrite(f"[INFO] Sleeping for seconds={wait_time} before updating jobid={jobid}...")
+			time.sleep(wait_time)
 
-	
-
-
-
-	for jobid in job_substr2jobid_to_update.values():
 		_ = update_job(job_info=job2info[jobid], args=args, verbose=True)
-
-		# if args.partition is None:
-		# 	from ClusterInfo2 import Partition
-		# 	partitions = get_partitions_from_sinfo()
-		# 	time2partition_names = defaultdict(list)
-		# 	for p in partitions:
-		# 		time2partition_names[p.time].append(p)
-
-
-		# # TimeLimit and Partition updates handled specially
-		# if args.time is None and args.cmd.startswith("TimeLimit"):
-		# 	args.time = args.cmd.split("TimeLimit=")[-1]
-		# 	args.cmd = None
-
-		# # Check: does the job request a full node?
-
-
-
 		
 		
