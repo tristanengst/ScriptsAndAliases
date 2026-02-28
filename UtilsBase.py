@@ -188,8 +188,8 @@ def strip_left(s, remove):
     return s[len(remove):] if s.startswith(remove) else s
 
 def remove_nonnumeric(s):
-    """Returns [s] with all non-numeric characters removed."""
-    return "".join([c for c in s if c.isnumeric()])
+    """Returns [s] with all non-numeric characters removed or [s] if it is numeric."""
+    return s if isinstance(s, float | int) else "".join([c for c in s if c.isnumeric()])
 
 def digits_after(s, substr):
     """Returns the longest substring of [s] that directly follows [substr] or [substr]
@@ -707,3 +707,17 @@ def run_in_new_thread(fn, *args, **kwargs):
 
 
 
+def warn_once(message):
+    def decorator(fn):
+        warned = False
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            nonlocal warned
+            if not warned:
+                print(message)
+                warned = True
+            return fn(*args, **kwargs)
+
+        return wrapper
+    return decorator

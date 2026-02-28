@@ -433,6 +433,23 @@ def get_updated_machine_info(m, verbose=0):
         total_cpus=total_cpus,
         user2num_gpus=user2num_gpus)
 
+def str_to_gpu_type(s):
+    """Given a string [s], try and figure out what kind of GPUs it means."""
+    node_config = cluster2node2config[Utils.get_cluster_type()]
+    if len(node_config) == 1 and list(node_config.keys())[0] in gpu2info:
+        result = list(node_config.keys())
+    elif len(node_config) == 2 and "default" in node_config:
+        result = [n for n in node_config.keys() if not n == "default"][0]
+    else:
+        matched_gpu_name2alias = {gpu_name: gpu_alias for gpu_alias,gpu_name in gpu_alias2name.items() if gpu_name in s}
+        if len(matched_gpu_name2alias) == 0:
+            result = None
+        else:
+            matched_gpu_name_alias = sorted(matched_gpu_name2alias.items(), key=lambda x: len(x[0]))
+            result = matched_gpu_name_alias[-1][1]
+    return None if (result is None or not result in gpu2info) else result
+
+
 ######################################################################################
 # Useful for Solar
 ######################################################################################

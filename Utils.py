@@ -9,6 +9,24 @@ import UtilsBase
 from UtilsBase import twrite
 from UserConfig import cluster2accounts
 
+def is_apex():
+    """Returns whether a user is a member of APEX lab. This can confer extra
+    functionality that can't be put online. Hardcoded.
+    """
+    import grp
+    groups = [grp.getgrgid(g).gr_name for g in os.getgroups()]
+
+    if is_cc() and any([g in ["rrg-keli", "def-keli", "aip-keli"] for g in groups]):
+        return True
+    elif is_solar() and any([g in ["cs-apex"] for g in groups]):
+        return True
+    elif (osp.exists("/NAS/ScriptsAndAliasesExtra")
+        or osp.exists("/localscratch/ScriptsAndAliasesExtra")
+        or osp.exists(osp.expanduser("~/ScriptsAndAliasesExtra"))):
+        return True
+    else:
+        return False
+
 def get_cluster_type():
     """Returns a string for special host types, or None if they are not recognized."""
     h = os.uname()[1]
@@ -217,4 +235,28 @@ def jobid2info_to_uid2jobids(job2info=None):
         if not info.uid is None:
             uid2jobids[info.uid].append(jobid)
     return dict(uid2jobids)
+
+def get_project_dir(def_or_rrg=None):
+    """Returns a path to the user's group's project directory."""
+    if is_solar():
+        return UserConfig.cluster2project_dirs["solar"][0]
+    elif is_cc():
+        import grp
+        groups = [grp.getgrgid(g).gr_name for g in os.getgroups()]
+        project_dirs = [g for g in groups if osp.exists(osp.join("/project", g))]
+        if len(project_dirs) == 0:
+            raise ValueError(f"Could not find a project directory in the user's groups: {groups}")
+        elif len(project_dirs) == 1:
+            return project_dirs[0]
+        elif len(project_dirs) > 1 and not def_or_rrg is None:
+            project_dirs = [p for p in project_dirs if p.startswith(def_or_rrg)]
+        else:
+            raise NotImplementedError()
+    else:
+        raise NotImplementedError()
+        
+
+
+
+
 

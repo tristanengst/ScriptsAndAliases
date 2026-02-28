@@ -2,7 +2,7 @@
 import argparse
 from collections import defaultdict
 import copy
-from functools import cached_property
+from functools import cached_property, cache
 import os
 import subprocess
 import sys
@@ -11,6 +11,58 @@ import MachineInfo
 import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize
+
+@cache
+def get_all_partitions(*, verbose=False): return get_partitions_from_sinfo(verbose=verbose)
+
+def get_partitions_from_sinfo(nodes=[], verbose=False):
+    """Returns a list of Partition objects representing the partitions on the cluster."""
+    key2si_format_O = dict(name="PartitionName:32",
+        time_limit="Time:32",
+        priority_tier="PriorityTier:32",
+        priority_job_factor="PriorityJobFactor:32", )
+
+    si_format_strs = ",".join(key2si_format_O.values())
+    si_cmd = f"sinfo -O '{si_format_strs}'"
+    if verbose:
+        print(f"[INFO] Running command: {si_cmd}")
+
+    si = subprocess.getoutput(si_cmd)
+    if verbose:
+        print(f"[INFO] Got sinfo output:\n{si}")
+    si_lines = [line for line in si.strip().split("\n") if len(line.strip()) > 0]
+    si_lines = si_lines[1:] # Remove the header line
+    si_lines = [line.split() for line in si_lines]
+    si_lines = [[ll.strip() for ll in line] for line in si_lines]
+    line_dicts = [dict(zip(key2si_format_O.keys(), line)) for line in si_lines]
+
+    partitions = list()
+    for ld in line_dicts:
+        partition = Partition(name=ld["name"],
+            time_limit=ld["time_limit"],
+            priority_tier=ld["priority_tier"], 
+            priority_job_factor=ld["priority_job_factor"],
+            nodes=nodes,)
+        partitions.append(partition)
+    partitions = [p for p in partitions if not p.name.startswith("cpu")]
+    return partitions
+
+@cache
+def time2partition_names():
+	"""Returns a dict mapping time limits to lists of partitions for which that time
+	limit is the maximum. Cached because it's unlikely to change. The time limits are
+	in seconds. Note that interactive partitions are included by default!
+	"""
+	if Utils.is_solar():
+		return {21600: ["cs-gpu-research-debug"], 604800: ["cs-gpu-research"]}
+	elif Utils.is_cc():
+		partitions = get_partitions_from_sinfo()
+		time2partitions = defaultdict(list)
+		for p in partitions:
+			time2partitions[p.seconds].append(p.name)
+		return dict(time2partitions)
+	else:
+		raise NotImplementedError()
 
 class Node:
     def __init__(self, name, partitions, states,
@@ -51,7 +103,7 @@ class Node:
         self.gres_alloc = {k: gres_total[k] for k in sorted(gres_alloc.keys(), key=lambda g: MachineInfo.gpu2vram[g], reverse=True)}
         
         # If the cluster is Vulcan, count apparently free L40s GPUs as used if there
-        # are also L40s_shard GPUs that could be allocated
+        # are also L40s_shard GPUs that could be allocated on them
         if Utils.get_cluster_type() == "vulcan" and "l40s_shard" in self.gres_total:
             self.gres_alloc["l40s"] = self.gres_total["l40s"]
 
@@ -189,6 +241,9 @@ def get_nodes_from_scontrol_data(args):
     nodes = [n for n in nodes if len(n.gres_total) > 0]
     return nodes
 
+
+
+
 class Partition:
     """
     Args:
@@ -243,36 +298,6 @@ class Partition:
     def max_total_gpus(self):
         """Returns the maximum number of total GPUs available on any node on the partition."""
         return max([sum(n.gres_total.values()) for n in self.nodes]) if len(self.nodes) > 0 else 0 
-
-    @staticmethod
-    def get_partitions_from_sinfo(nodes=[], verbose=False):
-        """Returns a list of Partition objects representing the partitions on the cluster."""
-        key2si_format_O = dict(name="PartitionName:32", time_limit="Time:32", priority_tier="PriorityTier:32", priority_job_factor="PriorityJobFactor:32", )
-
-        si_format_strs = ",".join(key2si_format_O.values())
-        si_cmd = f"sinfo -O '{si_format_strs}'"
-        if verbose:
-            print(f"[INFO] Running command: {si_cmd}")
-
-        si = subprocess.getoutput(si_cmd)
-        if verbose:
-            print(f"[INFO] Got sinfo output:\n{si}")
-        si_lines = [line for line in si.strip().split("\n") if len(line.strip()) > 0]
-        si_lines = si_lines[1:] # Remove the header line
-        si_lines = [line.split() for line in si_lines]
-        si_lines = [[ll.strip() for ll in line] for line in si_lines]
-        line_dicts = [dict(zip(key2si_format_O.keys(), line)) for line in si_lines]
-
-        partitions = list()
-        for ld in line_dicts:
-            partition = Partition(name=ld["name"],
-                time_limit=ld["time_limit"],
-                priority_tier=ld["priority_tier"], 
-                priority_job_factor=ld["priority_job_factor"],
-                nodes=nodes,)
-            partitions.append(partition)
-        partitions = [p for p in partitions if not p.name.startswith("cpu")]
-        return partitions
 
     @staticmethod
     def partition_with_children(*, partition, children):
@@ -485,8 +510,9 @@ def get_str(printable_free_nodes=4):
     args = get_args(args=[])
     node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
     nodes = get_nodes_from_scontrol_data(args)
-    partitions = Partition.get_partitions_from_sinfo(nodes=nodes)
-    partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in Utils.cluster2info[Utils.get_cluster_type()].partitions_startswith])]
+    partitions = get_partitions_from_sinfo(nodes=nodes)
+    cluster_info = Utils.cluster2info[Utils.get_cluster_type()]
+    partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in cluster_info.partitions_startswith])]
     resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=False, node2config=node2config)
     s = format_cluster_state(resource_states, nodes=nodes, printable_free_nodes=printable_free_nodes)
     return s
@@ -528,12 +554,14 @@ if __name__ == "__main__":
     for n in nodes:
         print(n)
 
-    partitions = Partition.get_partitions_from_sinfo(nodes=nodes)
-    partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in Utils.cluster2info[Utils.get_cluster_type()].partitions_startswith])]
+    # Get partitions from the nodes, and filter them to include only partitions that
+    # are documented in cluster info.
+    partitions = get_partitions_from_sinfo(nodes=nodes)
+    cluster_info = Utils.cluster2info[Utils.get_cluster_type()]
+    partitions = [p for p in partitions if any([p.name.startswith(pname) for pname in cluster_info.partitions_startswith])]
 
     for p in partitions:
         print(f"Partition(name={p.name}, time_limit={p.time_limit}h)")
-    
     
     resource_states = partitions_nodes_to_resource(partitions=partitions, nodes=nodes, verbose=True, node2config=node2config)
     s = format_cluster_state(resource_states)
