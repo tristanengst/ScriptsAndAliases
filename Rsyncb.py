@@ -20,6 +20,9 @@ import UtilsBase
 from UtilsBase import twrite, tqdm
 
 known_clusters = UtilsBase.flatten([MachineInfo.machine2info[m]["ssh_names"] for m in MachineInfo.machine2info])
+if osp.exists("/NAS") and Utils.is_workstation():
+    known_clusters += [f"{c}->nas" for c in known_clusters] + [f"nas->{c}" for c in known_clusters]
+    known_clusters += ["nas"]
 
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
@@ -190,7 +193,20 @@ if __name__ == "__main__":
             _ = UtilsBase.write_meta(commands=commands)
             sys.exit(0)
         else:
-            commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
+            commands = []
+            for cluster in args.clusters:
+                for dest,file_glob in dest2files.items():
+                    if cluster == "nas":
+                        dest_for_nas = UtilsBase.strip_left(dest, "~/")
+                        dest_for_nas = f"/NAS/{os.getenv('USER')}/{dest_for_nas}"
+                        commands.append(f"{rsync_str} {' '.join(file_glob)} {dest_for_nas}")
+                    else:                    
+                        commands.append(f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}")
+
+                        
+
+
+            # commands = [f"{rsync_str} {' '.join(file_glob)} {cluster}:{dest}" for cluster in args.clusters for dest,file_glob in dest2files.items()]
 
         # If there are multiple clusters, we want to open a connection to each immediately.
         # This ensures that any MFA authentication happens presently, rather than at some
