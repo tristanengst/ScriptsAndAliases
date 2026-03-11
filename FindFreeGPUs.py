@@ -87,6 +87,9 @@ def find_free_solar_gpus():
     s += f"2xGPU: {two_gpu_free}/{two_gpu}\n"
     return s
 
+# Harcoded because this will vary as they are more and less non-broken
+excluded_hosts = ["cs-apex-01s", "cs-apex-02s", "cs-apex-06s", "cs-apex-07s"]
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("-c", "--current", "--current-machine-only", action="count", default=0,
@@ -96,6 +99,8 @@ if __name__ == "__main__":
     P.add_argument("--solar", type=int, default=2, choices=[0, 1, 2],
         help="0: always find information for workstations, 1: always find information for Solar, 2: find information for solar iff on solar")
     args = P.parse_args()
+
+    args.hosts = [h for h in args.hosts if h not in excluded_hosts]
 
     if args.solar == 1 or (args.solar == 2 and Utils.is_solar()):
        print(find_free_solar_gpus())
