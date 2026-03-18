@@ -155,13 +155,16 @@ def file_to_nonambiguous_path(f):
     
     abs_prefix2non_ambiguous_prefix = {
         osp.abspath(osp.expanduser("~/scratch")): "~/scratch",
+        osp.abspath(osp.realpath(osp.expanduser("~/scratch"))) : "~/scratch",
         osp.abspath(osp.expanduser("~")): "~",
+        osp.abspath(osp.realpath(osp.expanduser("~/"))) : "~",
         "/NAS": "~/scratch",
     }
 
     non_ambiguous_f = [osp.join(v, abs_f[len(k)+1:]) for k,v in abs_prefix2non_ambiguous_prefix.items() if abs_f.startswith(k)]
     non_ambiguous_f = list(set(non_ambiguous_f))
     if len(non_ambiguous_f) == 0:
+        twrite(f"[WARNING] Could not find non-ambiguous path for {f}, returning original path", verbose=True)
         return f
     elif len(non_ambiguous_f) > 1:
         _ = twrite(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
