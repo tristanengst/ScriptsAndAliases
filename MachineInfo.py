@@ -52,7 +52,8 @@ machine2info = {
     trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
     fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
     rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["rorqual"]),
-    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),)
+    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),
+    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["tamia"]),)
 
 # All ComputeCanada hosts. Filtering these out of [machine2info] is useful gives just
 # workstation-y machines and Solar.
