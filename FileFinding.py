@@ -24,7 +24,7 @@ if Utils.get_cluster_type() == "cedar":
         osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results")]
     slurm_script_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm")]
 
-file_search_dirs = slurm_script_search_dirs + job_result_search_dirs + job_error_search_dirs
+file_search_dirs = slurm_script_search_dirs + job_result_search_dirs + job_error_search_dirs + exp_search_dirs
 
 class MultipleMatchesError(Exception):
     def __init__(self, message, *, matches):
@@ -40,12 +40,15 @@ def maybe_resolve_multiple_matches(*, matches, s, resolve="pos", verbose=False):
     matches -- list of matches to resolve among
     s       -- string that was matched on, used for some resolution strategies
     resolve -- strategy to use to resolve among multiple matches. One of:
-                pos -- the one where the match ends nearest to the end of the string is chosen
-                user -- the user is prompted to choose
-                half -- the one where the match is in the second half of the basename is chosen; if multiple, an error is raised
-                half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
-                latest -- the one with the most recent modification time is chosen
-                all -- all matches are returned as a list
+                pos     --  choose where the match ends nearest to the end
+                user    -- the user is prompted to choose
+                half    -- choose the one where the match is in the second half of the
+                        basename; if multiple, an error is raised
+                half_then_user  -- the one where the match is in the second half of
+                                    the basename is chosen; if multiple,
+                                    the user is prompted to choose
+                latest  -- the one with the most recent modification time is chosen
+                all     -- all matches are returned as a list
     """
     if len(matches) == 0:
         raise ValueError(f"[ERROR] no matches for {s}")
@@ -116,6 +119,12 @@ def file_substr_to_glob(f, *, search_dirs=exp_search_dirs + file_search_dirs, fi
         return [f]
     else:
         fw = "*" + UtilsBase.strip_left(UtilsBase.strip_right(f, "*"), "*") + "*"
+
+        f = f.strip()
+        # Semantics for globbing: if [f] starts XOR ends with a glob, then no more
+        # globs are added. Otherwise, a glob is added to both sides. A glob in the
+        # middle of [f] has no effect on those added to the ends.
+        fw = f if f.startswith("*") or f.endswith("*") else f"*{f}*"
         
         globs = []
         all_matched_files = set()
@@ -159,55 +168,16 @@ def file_to_nonambiguous_path(f):
     abs_prefix2non_ambiguous_prefix = {osp.abspath(osp.expanduser(p)): p for p in ["~/scratch", "~"]}
     abs_prefix2non_ambiguous_prefix |= {"/NAS": "~/scratch"}
     
-    # abs_prefix2non_ambiguous_prefix = {
-    #     osp.abspath(osp.expanduser("~/scratch")): "~/scratch",
-    #     osp.abspath(osp.realpath(osp.expanduser("~/scratch"))) : "~/scratch",
-    #     osp.abspath(osp.expanduser("~")): "~",
-    #     osp.abspath(osp.realpath(osp.expanduser("~/"))) : "~",
-    #     "/NAS": "~/scratch",
-    # }
-
     non_ambiguous_f = [osp.join(v, abs_f[len(k)+1:]) for k,v in abs_prefix2non_ambiguous_prefix.items() if abs_f.startswith(k)]
     non_ambiguous_f = list(set(non_ambiguous_f))
     if len(non_ambiguous_f) == 0:
-        twrite(f"[WARNING] Could not find non-ambiguous path for {f} and abs_f={abs_f}, returning original path", verbose=True)
+        twrite(f"[WARNING] Could not find non-ambiguous path for {f}. real_f={real_f} abs_f={abs_f} abs_prefix2non_ambiguous_prefix={abs_prefix2non_ambiguous_prefix} -> return original path", verbose=True)
         return f
     elif len(non_ambiguous_f) > 1:
         _ = twrite(f"[ERROR] file={f} has multiple non-ambiguous paths: {sorted(non_ambiguous_f)}")
         return f
     else:
         return non_ambiguous_f[0]
-
-
-def compress_user(path):
-    """Inverse to osp.expanduser(). Tries to follow symlinks wherever possible."""
-    return osp.relpath(osp.abspath(osp.expanduser(path)), osp.expanduser("~"))
-
-def str_to_slurm_info(s, job2info=None, verbose=False):
-    """Tries to find the slurm info for a given string [s]."""
-    return get_slurm_info_by_key(s, key="name", job2info=job2info, verbose=verbose)
-def uid_to_slurm_info(s, job2info=None, verbose=False):
-    """Tries to find the slurm info for a given string [s]."""
-    return get_slurm_info_by_key(s, key="uid", job2info=job2info, verbose=verbose)
-def get_slurm_info_by_key(s, key, job2info=None, verbose=False, resolve="pos", search_dirs=exp_search_dirs):
-    """Tries to find the slurm info for a given string [s]."""
-    job2info = job2info if job2info else get_slurm_status(cur_user=True, verbose=verbose)
-    job2info = {j: info for j,info in job2info.items() if s in vars(info).get(key, "")}
-
-    if len(job2info) == 0:
-        _ = twrite(f"[INFO] No jobs found for str={s}", verbose=verbose)
-        return None
-    elif len(job2info) == 1:
-        return list(job2info.values())[0]
-    elif len(job2info) > 1 and resolve in ["pos"]:
-        job2info = sorted(job2info.values(), key=lambda info: len(info) - info.name.rfind(s))
-        return job2info[0]
-    else:
-        raise NotImplementedError(f"[ERROR] get_slurm_info_by_key(): Multiple jobs found for str={s} with key={key}")
-
-def uid_to_exp_folder(uid, search_dirs=exp_search_dirs, verbose=False, resolve="pos"):
-    """Tries to find the experiment folder for a given UID."""
-    return str_to_exp_folder(uid, search_dirs=search_dirs, resolve=resolve, verbose=verbose)
 
 def exp_folder_to_uid(exp_folder, verbose=False):
     """Tries to find the UID for an experiment folder."""
@@ -222,180 +192,90 @@ def exp_folder_to_uid(exp_folder, verbose=False):
     
     _ = twrite(f"[WARNING] Could not find UID for exp_folder={exp_folder}", verbose=verbose)
     return None
-    
-def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="half", verbose=False, matches=None, if_not_found="error"):
-    """Returns the experiment folder that matches the string [s]. If there are multiple possible matches, then one of several strategies can be used to resolve them.
+
+
+def str_to_result_file(s, search_dirs=job_result_search_dirs, verbose=False, resolve="pos"):
+    """Returns the result file corresponding to string [s].
 
     Args:
     s           -- string to match. Does not need pre-globbing
-    search_dirs -- directories to search in if [s] does not exist directly
-    resolve     -- how to resolve multiple matches. One of:
-                    pos -- the one where the match ends nearest to the end of the string is chosen
-                    user -- the user is prompted to choose
-                    half_then_user -- the one where the match is in the second half of the basename is chosen; if multiple, the user is prompted to choose
-                    latest -- the one with the most recent modification time is chosen
-                    all -- all matches are returned as a list
-    matches     -- if provided, use this list of matches instead of searching
-    verbose     -- whether to print verbose messages
+    search_dirs -- directories to search in if [s] is not an absolute path
+    verbose     -- whether to print verbose output
+    resolve     -- method for resolving multiple matches
     """
-    s = s.strip()
-    if osp.exists(s) and osp.isdir(s):
-        return s
-    
-    matches = str_to_all_exp_folders(s, search_dirs=search_dirs, verbose=verbose) if matches is None else matches
-    matches = list(set([file_to_nonambiguous_path(m) for m in matches]))
+    return str_to_file(s, search_dirs=search_dirs, file_type="result", verbose=verbose, resolve=resolve)
 
-    if len(matches) == 0 and if_not_found == "error":
-        raise FileNotFoundError(f"str_to_exp_folder(): No experiment folders found matching {s} in {search_dirs}")
-    elif len(matches) == 0 and if_not_found == "none":
-        return None
-    elif len(matches) == 1:
-        return matches[0]
-    elif resolve == "pos":
-        matches = sorted(matches, key=lambda m: len(s) - m.rfind(s))
-        return matches[0]
-    elif resolve == "user":
-        print(f"[INFO] Found multiple matches for {s}:")
-        return UtilsBase.query_among_list(prompt=f"Multiple matches found for {s}, please choose:", options=matches)
+def str_to_slurm_script(s, search_dirs=slurm_script_search_dirs, verbose=False, resolve="pos"):
+    """Returns the SLURM script corresponding to string [s].
 
-    # Valid matches are those where the match ends in the second half of the basename.
-    # This tends to be the most unique part of the name.
-    elif resolve == "half":
-        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
-        new_matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
-        if len(new_matches) == 0:
-            raise ValueError(f"[ERROR] str_to_exp_folder(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
-        elif len(new_matches) > 1:
-            raise MultipleMatchesError(f"[ERROR] str_to_exp_folder(): multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
-        else:
-            return new_matches[0]
+    Args:
+    s           -- string to match. Does not need pre-globbing
+    search_dirs -- directories to search in if [s] is not an absolute path
+    verbose     -- whether to print verbose output
+    resolve     -- method for resolving multiple matches
+    """
+    return str_to_file(s, search_dirs=search_dirs, file_type="slurm", verbose=verbose, resolve=resolve)
 
-    # Try first using resolve='half', and if this fails, fall back to the user.
-    elif resolve == "half_then_user":
-        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
-        matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
+def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=False):
+    """Returns the experiment folder corresponding to string [s].
 
-        if len(matches) == 0:
-            raise ValueError(f"[ERROR] str_to_exp_folder(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
-        else:
-            return str_to_exp_folder(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches)
-    
-    # Return the most-recently modified match. Need to check all files in the folder,
-    # but assume we don't need to do so recursively.
-    elif resolve == "latest":
-        matches2mtime = {m: max([osp.getmtime(osp.join(m, f)) for f in os.listdir(m)]) for m in matches}
-        matches = sorted(matches, key=lambda m: matches2mtime[m])
-        return matches[-1]
-    
-    elif resolve == "all":
-        return matches
-    else:
-        raise ValueError(f"str_to_exp_folder(): Unknown resolve method {resolve}")
-
-
-def str_to_all_exp_folders(s, search_dirs=exp_search_dirs, verbose=False):
-    """Returns the list of experiment folders that match the string [s].
-    
     Args:
     s               -- string to match. Does not need pre-globbing
     search_dirs     -- directories to search in if [s] is not an absolute path
-    last_pos_unique -- If there are multiple matches, the one where the match ends
-                        nearest to the end of the string is chosen
+    resolve         -- method for resolving multiple matches
+    verbose         -- whether to print verbose output
+    matches         -- list of existing matches to consider
+    """
+    return str_to_file(s, search_dirs=search_dirs, file_type="exp", verbose=verbose, resolve=resolve)
+
+def str_to_file(s, search_dirs=[], file_type="slurm", verbose=False, matches=None, resolve="pos"):
+    """Returns the file(s) corresponding to string [s].
+    
+    Args:
+    s           -- string to match. Does not need pre-globbing
+    search_dirs -- directories to search in if [s] does not exist directly
     """
     s = s.strip()
-    # Tentative hack to see if we like this behavior better: if [s] either ends with
-    # or starts with a glob, then that glob is kept and no other is added. Otherwise,
-    # globs are added to both sides as before. This gives more control.
-    s_glob = s if s.startswith("*") or s.endswith("*") else f"*{s}*"
-
-    # Old way of doing this
-    # s = s.strip()
-    # s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
-    # s_glob = f"*{s}*"
-
-    search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
-    return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isdir(m)]
-
-def str_to_file(s, search_dirs=file_search_dirs, file_type="slurm", verbose=False, matches=None, resolve="pos"):
-    s = s.strip()
-    if osp.exists(s) and osp.isfile(s):
+    if osp.exists(s) and (osp.isfile(s) or (file_type == "exp" and osp.isdir(s))):
         return s
     
     matches = matches if matches else str_to_all_files(s, search_dirs=search_dirs, verbose=verbose, file_type=file_type)
+    return maybe_resolve_multiple_matches(matches=matches, s=s, resolve=resolve, verbose=verbose)
 
-    if len(matches) == 0:
-        raise FileNotFoundError(f"str_to_file(): No files folders found matching {s} in {search_dirs}")
-    elif len(matches) == 1:
-        return matches[0]
-    elif resolve == "pos":
-        matches = sorted(matches, key=lambda m: len(s) - m.rfind(s))
-        return matches[0]
-    elif resolve == "user":
-        return UtilsBase.query_among_list(prompt=f"Multiple matches found for {s}, please choose:", options=matches)
-
-    # Valid matches are those where the match ends in the second half of the basename.
-    # This tends to be the most unique part of the name.
-    elif resolve == "half":
-        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
-        new_matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
-        if len(new_matches) == 0:
-            raise ValueError(f"[ERROR] str_to_file(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
-        elif len(new_matches) > 1:
-            raise ValueError(f"[ERROR] str_to_file(): multiple matches for {s} with resolve='{resolve}':\n\t{UtilsBase.list_to_pretty_str(new_matches)}")
-        else:
-            return new_matches[0]
-
-    # Try first using resolve='half', and if this fails, fall back to the user.
-    elif resolve == "half_then_user":
-        matches2match_idxs = {m: (osp.basename(m).rfind(s), osp.basename(m).rfind(s) + len(s)) for m in matches if s in m}
-        matches = [m for m, (start_idx, end_idx) in matches2match_idxs.items() if start_idx >= len(osp.basename(m)) // 2]
-
-        if len(matches) == 0:
-            raise ValueError(f"[ERROR] str_to_file(): zero matches for {s} with resolve='{resolve}', but there were multiple original matches:\n\t{UtilsBase.list_to_pretty_str(matches)}")
-        else:
-            return str_to_file(s, search_dirs=search_dirs, resolve="user", verbose=verbose, matches=matches, file_type=file_type)
-    
-    # Return the most-recently modified match. Need to check all files in the folder,
-    # but assume we don't need to do so recursively.
-    elif resolve == "latest":
-        matches2mtime = {m: max([osp.getmtime(osp.join(m, f)) for f in os.listdir(m)]) for m in matches}
-        matches = sorted(matches, key=lambda m: matches2mtime[m])
-        return matches[-1]
-    
-    elif resolve == "all":
-        return matches
-    else:
-        raise ValueError(f"str_to_file(): Unknown resolve method {resolve}")
-
-def str_to_all_files(s, search_dirs=file_search_dirs, file_type="result", verbose=False):
+def str_to_all_files(s, search_dirs=[], file_type="result", verbose=False):
     """Returns all files that match the string [s]."""
     s = s.strip()
-    s = UtilsBase.strip_left(UtilsBase.strip_right(s, "*"), "*")
-    s_glob = f"*{s}*"
+    # Semantics for globbing: if the string starts XOR ends with a glob, then not more
+    # globs are added. Otherwise, a glob is added to both sides. A glob in the middle
+    # of [s] has no effect on those added to the ends.
+    s_glob = s if s.startswith("*") or s.endswith("*") else f"*{s}*"
 
     if file_type == "result":
-        search_dirs = job_result_search_dirs
+        search_dirs = job_result_search_dirs + search_dirs
+        result_is_file = True
     elif file_type == "slurm":
-        search_dirs = slurm_script_search_dirs
+        search_dirs = slurm_script_search_dirs + search_dirs
+        result_is_file = True
     elif file_type == "error":
-        search_dirs = job_error_search_dirs
+        search_dirs = job_error_search_dirs + search_dirs
+        result_is_file = True
     elif file_type == "exp":
-        search_dirs = exp_search_dirs
+        search_dirs = exp_search_dirs + search_dirs
+        result_is_file = False
+    else:
+        search_dirs = search_dirs
+        result_is_file = False
 
-    search_dirs = [d for d in search_dirs if osp.exists(d) and osp.isdir(d)]
-    return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if osp.isfile(m)]
+    search_dirs = set([d for d in search_dirs if osp.exists(d) and osp.isdir(d)])
+    return [m for d in search_dirs for m in glob.glob(osp.join(d, s_glob)) if (osp.isfile(m) if result_is_file else True)]
 
 def get_args(args=None):
     P = argparse.ArgumentParser()
-    P.add_argument("--fn", choices=["str_to_exp_folder",
-        "str_to_all_exp_folders",
-        "exp_folder_to_uid",
-        "uid_to_exp_folder",
-        "str_to_slurm_info",
-        "uid_to_slurm_info",
+    P.add_argument("--fn", choices=["str_to_all_files",
         "str_to_file",
-        "str_to_all_files",
-        "get_slurm_info_by_key"],
+        "str_to_exp_folder",
+        "str_to_slurm_script",
+        "str_to_result_file",],
         required=True, help="Function to run")
     
     P.add_argument("-s", "--value", required=True, help="Value to search for")
@@ -427,24 +307,16 @@ def get_args(args=None):
 if __name__ == "__main__":
     args = get_args()
 
-    if args.fn == "str_to_exp_folder":
-        result = str_to_exp_folder(args.value, search_dirs=args.exp_search_dirs, resolve=args.resolve, verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "str_to_all_exp_folders":
-        result = str_to_all_exp_folders(args.value, search_dirs=args.exp_search_dirs, verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "exp_folder_to_uid":
-        result = exp_folder_to_uid(args.value, verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "uid_to_exp_folder":
-        result = uid_to_exp_folder(args.value, search_dirs=args.exp_search_dirs, resolve=args.resolve, verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "str_to_slurm_info":
-        result = str_to_slurm_info(args.value, job2info=get_slurm_status(cur_user=True, verbose=args.verbose), verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "uid_to_slurm_info":
-        result = uid_to_slurm_info(args.value, job2info=get_slurm_status(cur_user=True, verbose=args.verbose), verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "str_to_file":
-        result = str_to_file(args.value, search_dirs=args.file_search_dirs, file_type="slurm", resolve=args.resolve, verbose=args.verbose, **args.json_kwargs)
+    if args.fn == "str_to_file":
+        result = str_to_file(args.value, search_dirs=args.file_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
     elif args.fn == "str_to_all_files":
-        result = str_to_all_files(args.value, search_dirs=args.file_search_dirs, file_type="slurm", verbose=args.verbose, **args.json_kwargs)
-    elif args.fn == "get_slurm_info_by_key":
-        result = get_slurm_info_by_key(args.value, key=args.key, job2info=get_slurm_status(cur_user=True, verbose=args.verbose), verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
+        result = str_to_all_files(args.value, search_dirs=args.file_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
+    elif args.fn == "str_to_exp_folder":
+        result = str_to_exp_folder(args.value, search_dirs=args.exp_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
+    elif args.fn == "str_to_slurm_script":
+        result = str_to_slurm_script(args.value, search_dirs=args.slurm_script_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
+    elif args.fn == "str_to_result_file":
+        result = str_to_result_file(args.value, search_dirs=args.job_result_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
     else:
         raise ValueError(f"[ERROR] Unknown function {args.fn}")
 

@@ -24,6 +24,23 @@ if osp.exists("/NAS") and Utils.is_workstation():
     known_clusters += [f"{c}->nas" for c in known_clusters] + [f"nas->{c}" for c in known_clusters]
     known_clusters += ["nas"]
 
+def filter_checkpoints_heuristic_to_exclude(checkpoint_folder, verbose=0):
+    """Returns an exclude string for [checkpoint_folder] so that less-relevant
+    checkpoints aren't sent. Excluded ones are all those but the singular more-recent
+    one is a _latest checkpoint; in this case, both it and the most recent non-latest
+    checkpoint can be sent (not excluded).
+    """
+    excluded = ["wandb_data.pt"]
+
+    files = osp.listdir(checkpoint_folder)
+    files = [f for f in files if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions])]
+    files = [f for f in files if any([f.startswith(pref) for pref in UserConfig.checkpoint_prefixes])]
+    files = [f for f in files if any([c.isdigit() for c in f])]
+    files = [f for f in files if not f in excluded]
+
+    file2idx = {f: UtilsBase.remove_nonnumeric_suffix(f) for f in files}
+
+
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
@@ -68,6 +85,11 @@ def get_args(args=None):
         help="If provided, use this as the terminal size instead of querying")
     P.add_argument("--argparse_input_file", type=str, default=None,
         help="If provided, read command line arguments from this file")
+
+    P.add_argument("--fc" "--filter_checkpoints", nargs="*", default=[], dest="filter_checkpoints",
+        help="Allows filtering checkpoint files so that intermediate ones don't need to be sent. Checkpoints indicated here are ignored.")
+    P.add_argument("--fch", "--filter_checkpoints_heuristic", action="store_true", dest="filter_checkpoints_heuristic",
+        help="If set, also filters checkpoints using a heuristic to give only relevant ones.")
 
     
     # If parsing fails, most likely cause is that an element of [files] starts with a

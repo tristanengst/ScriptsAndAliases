@@ -82,7 +82,7 @@ aliases = [
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; cd ~ ; source ~/.bashrc\"",
 
     # Updates SLURM scripts' sbatch arguments
-    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
+    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py \"",
     
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet
