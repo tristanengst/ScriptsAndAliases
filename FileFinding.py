@@ -32,7 +32,7 @@ class MultipleMatchesError(Exception):
         self.matches = matches
 
 resolve_choices = ["pos", "user", "half", "half_then_user", "latest", "all"]
-def maybe_resolve_multiple_matches(*, matches, s, resolve="pos", verbose=False):
+def maybe_resolve_multiple_matches(*, matches, s, resolve="pos", verbose=False, if_not_found="error"):
     """Returns a single match from [matches] according to the strategy [resolve] if
     possible.
 
@@ -50,8 +50,12 @@ def maybe_resolve_multiple_matches(*, matches, s, resolve="pos", verbose=False):
                 latest  -- the one with the most recent modification time is chosen
                 all     -- all matches are returned as a list
     """
-    if len(matches) == 0:
-        raise ValueError(f"[ERROR] no matches for {s}")
+    if len(matches) == 0 and if_not_found == "error":
+        raise FileNotFoundError(f"[ERROR] maybe_resolve_multiple_matches(): no matches for {s}")
+    elif len(matches) == 0 and if_not_found == "none":
+        return None
+    elif len(matches) == 0:
+        return if_not_found() if callable(if_not_found) else if_not_found
     elif len(matches) == 1:
         return matches[0]
 
@@ -194,7 +198,7 @@ def exp_folder_to_uid(exp_folder, verbose=False):
     return None
 
 
-def str_to_result_file(s, search_dirs=job_result_search_dirs, verbose=False, resolve="pos"):
+def str_to_result_file(s, search_dirs=job_result_search_dirs, verbose=False, resolve="pos", if_not_found="error"):
     """Returns the result file corresponding to string [s].
 
     Args:
@@ -202,10 +206,11 @@ def str_to_result_file(s, search_dirs=job_result_search_dirs, verbose=False, res
     search_dirs -- directories to search in if [s] is not an absolute path
     verbose     -- whether to print verbose output
     resolve     -- method for resolving multiple matches
+    if_not_found    -- behavior when no matches are found ('error', 'none', or a default value)
     """
-    return str_to_file(s, search_dirs=search_dirs, file_type="result", verbose=verbose, resolve=resolve)
+    return str_to_file(s, search_dirs=search_dirs, file_type="result", verbose=verbose, resolve=resolve, if_not_found=if_not_found)
 
-def str_to_slurm_script(s, search_dirs=slurm_script_search_dirs, verbose=False, resolve="pos"):
+def str_to_slurm_script(s, search_dirs=slurm_script_search_dirs, verbose=False, resolve="pos", if_not_found="error"):
     """Returns the SLURM script corresponding to string [s].
 
     Args:
@@ -213,10 +218,11 @@ def str_to_slurm_script(s, search_dirs=slurm_script_search_dirs, verbose=False, 
     search_dirs -- directories to search in if [s] is not an absolute path
     verbose     -- whether to print verbose output
     resolve     -- method for resolving multiple matches
+    if_not_found    -- behavior when no matches are found ('error', 'none', or a default value)
     """
-    return str_to_file(s, search_dirs=search_dirs, file_type="slurm", verbose=verbose, resolve=resolve)
+    return str_to_file(s, search_dirs=search_dirs, file_type="slurm", verbose=verbose, resolve=resolve, if_not_found=if_not_found)
 
-def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=False):
+def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=False, if_not_found="error"):
     """Returns the experiment folder corresponding to string [s].
 
     Args:
@@ -225,10 +231,11 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=Fal
     resolve         -- method for resolving multiple matches
     verbose         -- whether to print verbose output
     matches         -- list of existing matches to consider
+    if_not_found    -- behavior when no matches are found ('error', 'none', or a default value)
     """
-    return str_to_file(s, search_dirs=search_dirs, file_type="exp", verbose=verbose, resolve=resolve)
+    return str_to_file(s, search_dirs=search_dirs, file_type="exp", verbose=verbose, resolve=resolve, if_not_found=if_not_found)
 
-def str_to_file(s, search_dirs=[], file_type="slurm", verbose=False, matches=None, resolve="pos"):
+def str_to_file(s, search_dirs=[], file_type="slurm", verbose=False, matches=None, resolve="pos", if_not_found="error"):
     """Returns the file(s) corresponding to string [s].
     
     Args:
@@ -240,7 +247,7 @@ def str_to_file(s, search_dirs=[], file_type="slurm", verbose=False, matches=Non
         return s
     
     matches = matches if matches else str_to_all_files(s, search_dirs=search_dirs, verbose=verbose, file_type=file_type)
-    return maybe_resolve_multiple_matches(matches=matches, s=s, resolve=resolve, verbose=verbose)
+    return maybe_resolve_multiple_matches(matches=matches, s=s, resolve=resolve, verbose=verbose, if_not_found=if_not_found)
 
 def str_to_all_files(s, search_dirs=[], file_type="result", verbose=False):
     """Returns all files that match the string [s]."""

@@ -130,6 +130,7 @@ cluster2node2config = dict(
         h122=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h122", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", gpu_frac=0.25),
         h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5),
         mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0),
+        a100=dict(cpus_per_gpu=32, mem_per_gpu=250, gpu_alias="a100", gpus_per_node=8, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
         a5000=dict(cpus_per_gpu=16, mem_per_gpu=30.5, gpu_alias="a5000", gpus_per_node=4, can_allocate=True, gpu_name="a5000", gpu_frac=1.0),
         t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=True, gpu_name="t4", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
