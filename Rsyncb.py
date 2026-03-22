@@ -18,6 +18,7 @@ import MachineInfo
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
+import UserConfig
 
 known_clusters = UtilsBase.flatten([MachineInfo.machine2info[m]["ssh_names"] for m in MachineInfo.machine2info])
 if osp.exists("/NAS") and Utils.is_workstation():
@@ -86,10 +87,8 @@ def get_args(args=None):
     P.add_argument("--argparse_input_file", type=str, default=None,
         help="If provided, read command line arguments from this file")
 
-    P.add_argument("--fc" "--filter_checkpoints", nargs="*", default=[], dest="filter_checkpoints",
-        help="Allows filtering checkpoint files so that intermediate ones don't need to be sent. Checkpoints indicated here are ignored.")
-    P.add_argument("--fch", "--filter_checkpoints_heuristic", action="store_true", dest="filter_checkpoints_heuristic",
-        help="If set, also filters checkpoints using a heuristic to give only relevant ones.")
+    P.add_argument("-f", "--filter_checkpoints", action="store_true",
+        help="Whether to apply a heuristic to exclude less relevant checkpoints when sending checkpoint folders, thereby saving space/time.")
 
     
     # If parsing fails, most likely cause is that an element of [files] starts with a
@@ -127,19 +126,6 @@ if __name__ == "__main__":
     ##################################################################################
     ##################################################################################
     ##################################################################################
-
-    # Build the initial part of the rsync string
-    rsync_str = "rsync "
-    rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
-    rsync_str += "r" if args.r else ""
-    rsync_str += "v" if args.v else ""
-    rsync_str += "h" if args.h else ""
-    rsync_str += "a" if args.a else ""
-    rsync_str += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
-    rsync_str += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
-    rsync_str += f" --info={args.info} " if args.info else ""
-    
-
 
     # If --clusters wasn't specified, then either the first or last element of
     # --files is the cluser. If there's a colon or @ symbol in either element, then
@@ -186,6 +172,29 @@ if __name__ == "__main__":
         sources = UtilsBase.flatten(sources)
         _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.verbose)
 
+        # If --filter_checkpoints is set, apply the checkpoint filtering heuristic
+        if args.filter_checkpoints:
+            source2files = {s: glob.glob(s) for s in sources}
+            source2files = {sf: os.listdir(sf) for globfiles in source2files.values() for sf in globfiles}
+            source2prefix2files = {s: defaultdict(list) for s in source2files}
+
+            for s,files in source2files.items():
+                for f in files:
+                    if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions]) and UtilsBase.remove_nonnumeric(f):
+                        prefix = UtilsBase.str_to_nonnumeric_prefix(f)
+                        source2prefix2files[s][prefix].append(f)
+                    else:
+                        source2prefix2files[s][f].append(f)
+
+
+            source2prefix2filtered = {s: {p: files[:-1] for p,files in prefix2files.items()} for s,prefix2files in source2prefix2files.items()}
+            source2prefix2filtered = {s: {p: files for p,files in prefix2files.items() if files} for s,prefix2files in source2prefix2filtered.items()}
+
+            # These should all be unique!
+            source2excluded = {s: [osp.join(s, f) for p,files in prefix2files.items() for f in files] for s,prefix2files in source2prefix2filtered.items()}
+            _ = twrite(f"[INFO] Excluding files based on checkpoint filtering heuristic: {source2excluded}", quiet=not args.verbose)
+            args.exclude += UtilsBase.flatten(list(source2excluded.values()))
+
         # These files represent where the files will actually end up on the destination
         dests = [FileFinding.file_to_nonambiguous_path(s) for s in sources]
         _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.verbose)
@@ -197,6 +206,17 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
         dest2files = {dest: set(files) for dest,files in dest2files.items()}
+
+        # Build the rsync command string with the appropriate flags and options. Note that we
+        rsync_str = "rsync "
+        rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
+        rsync_str += "r" if args.r else ""
+        rsync_str += "v" if args.v else ""
+        rsync_str += "h" if args.h else ""
+        rsync_str += "a" if args.a else ""
+        rsync_str += (" " + " ".join([f"--exclude='{e}'" for e in args.exclude]) + " ") if args.exclude else ""
+        rsync_str += (" " +  " ".join([f"--include='{i}'" for i in args.include]) + " ") if args.include else ""
+        rsync_str += f" --info={args.info} " if args.info else ""
 
 
         # If [output_as_meta] is set, then another cluster is calling essentially

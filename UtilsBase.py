@@ -191,6 +191,13 @@ def remove_nonnumeric(s):
     """Returns [s] with all non-numeric characters removed or [s] if it is numeric."""
     return s if isinstance(s, float | int) else "".join([c for c in s if c.isnumeric()])
 
+def str_to_nonnumeric_prefix(s):
+    """Returns the longest prefix of [s] that is not numeric."""
+    for idx,c in enumerate(s):
+        if c.isnumeric():
+            return s[:idx]
+    return s
+
 def digits_after(s, substr):
     """Returns the longest substring of [s] that directly follows [substr] or [substr]
     and an equals sign that permits numeric interpretation. Returns None if no such
