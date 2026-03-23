@@ -82,7 +82,7 @@ aliases = [
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; cd ~ ; source ~/.bashrc\"",
 
     # Updates SLURM scripts' sbatch arguments
-    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py --substrs \"",
+    "alias sbu=\"python ~/.ScriptsAndAliases/UpdateSlurmScript.py \"",
     
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet
@@ -118,6 +118,8 @@ aliases = [
     "alias find_free_gpus=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --hosts \"",
     "alias killwandb=\"pkill -u $USER -9 wandb\"",
     "alias rsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
+    "alias rsyncbf=\"python ~/.ScriptsAndAliases/Rsyncb.py --filter_checkpoints \"",
+    "alias fsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py --filter_checkpoints \"",
     "alias send=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     "alias getfrom=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
 

@@ -917,6 +917,7 @@ def count_jobs_by_state(job_infos):
                 if exp is None:
                     state2count["pending_healthy"] += 1
                 else:
+                    exp = osp.expanduser(exp)
                     checkpoints = [f for f in os.listdir(exp) if f.endswith(".pt") and not f.startswith("wandb_data")]
                     if checkpoints and osp.exists(osp.join(exp, "wandb_attempt.txt")):
                         state2count["pending_healthy"] += 1

@@ -18,11 +18,29 @@ import MachineInfo
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
+import UserConfig
 
 known_clusters = UtilsBase.flatten([MachineInfo.machine2info[m]["ssh_names"] for m in MachineInfo.machine2info])
 if osp.exists("/NAS") and Utils.is_workstation():
     known_clusters += [f"{c}->nas" for c in known_clusters] + [f"nas->{c}" for c in known_clusters]
     known_clusters += ["nas"]
+
+def filter_checkpoints_heuristic_to_exclude(checkpoint_folder, verbose=0):
+    """Returns an exclude string for [checkpoint_folder] so that less-relevant
+    checkpoints aren't sent. Excluded ones are all those but the singular more-recent
+    one is a _latest checkpoint; in this case, both it and the most recent non-latest
+    checkpoint can be sent (not excluded).
+    """
+    excluded = ["wandb_data.pt"]
+
+    files = osp.listdir(checkpoint_folder)
+    files = [f for f in files if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions])]
+    files = [f for f in files if any([f.startswith(pref) for pref in UserConfig.checkpoint_prefixes])]
+    files = [f for f in files if any([c.isdigit() for c in f])]
+    files = [f for f in files if not f in excluded]
+
+    file2idx = {f: UtilsBase.remove_nonnumeric_suffix(f) for f in files}
+
 
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
@@ -69,6 +87,9 @@ def get_args(args=None):
     P.add_argument("--argparse_input_file", type=str, default=None,
         help="If provided, read command line arguments from this file")
 
+    P.add_argument("-f", "--filter_checkpoints", action="store_true",
+        help="Whether to apply a heuristic to exclude less relevant checkpoints when sending checkpoint folders, thereby saving space/time.")
+
     
     # If parsing fails, most likely cause is that an element of [files] starts with a
     # dash. In this case, assume that only the first element of the command line
@@ -105,19 +126,6 @@ if __name__ == "__main__":
     ##################################################################################
     ##################################################################################
     ##################################################################################
-
-    # Build the initial part of the rsync string
-    rsync_str = "rsync "
-    rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
-    rsync_str += "r" if args.r else ""
-    rsync_str += "v" if args.v else ""
-    rsync_str += "h" if args.h else ""
-    rsync_str += "a" if args.a else ""
-    rsync_str += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
-    rsync_str += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
-    rsync_str += f" --info={args.info} " if args.info else ""
-    
-
 
     # If --clusters wasn't specified, then either the first or last element of
     # --files is the cluser. If there's a colon or @ symbol in either element, then
@@ -164,6 +172,29 @@ if __name__ == "__main__":
         sources = UtilsBase.flatten(sources)
         _ = twrite(f"[INFO] Files/globs to send: {sources}", quiet=not args.verbose)
 
+        # If --filter_checkpoints is set, apply the checkpoint filtering heuristic
+        if args.filter_checkpoints:
+            source2files = {s: glob.glob(s) for s in sources}
+            source2files = {sf: os.listdir(sf) for globfiles in source2files.values() for sf in globfiles}
+            source2prefix2files = {s: defaultdict(list) for s in source2files}
+
+            for s,files in source2files.items():
+                for f in files:
+                    if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions]) and UtilsBase.remove_nonnumeric(f):
+                        prefix = UtilsBase.str_to_nonnumeric_prefix(f)
+                        source2prefix2files[s][prefix].append(f)
+                    else:
+                        source2prefix2files[s][f].append(f)
+
+
+            source2prefix2filtered = {s: {p: files[:-1] for p,files in prefix2files.items()} for s,prefix2files in source2prefix2files.items()}
+            source2prefix2filtered = {s: {p: files for p,files in prefix2files.items() if files} for s,prefix2files in source2prefix2filtered.items()}
+
+            # These should all be unique!
+            source2excluded = {s: [osp.join(s, f) for p,files in prefix2files.items() for f in files] for s,prefix2files in source2prefix2filtered.items()}
+            _ = twrite(f"[INFO] Excluding files based on checkpoint filtering heuristic: {source2excluded}", quiet=not args.verbose)
+            args.exclude += UtilsBase.flatten(list(source2excluded.values()))
+
         # These files represent where the files will actually end up on the destination
         dests = [FileFinding.file_to_nonambiguous_path(s) for s in sources]
         _ = twrite(f"[INFO] Non-ambiguous paths to send: {dests}", quiet=not args.verbose)
@@ -175,6 +206,17 @@ if __name__ == "__main__":
         for g,d in zip(sources, dests):
             dest2files[f"{osp.dirname(d)}/"].append(g)
         dest2files = {dest: set(files) for dest,files in dest2files.items()}
+
+        # Build the rsync command string with the appropriate flags and options. Note that we
+        rsync_str = "rsync "
+        rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
+        rsync_str += "r" if args.r else ""
+        rsync_str += "v" if args.v else ""
+        rsync_str += "h" if args.h else ""
+        rsync_str += "a" if args.a else ""
+        rsync_str += (" " + " ".join([f"--exclude='{e}'" for e in args.exclude]) + " ") if args.exclude else ""
+        rsync_str += (" " +  " ".join([f"--include='{i}'" for i in args.include]) + " ") if args.include else ""
+        rsync_str += f" --info={args.info} " if args.info else ""
 
 
         # If [output_as_meta] is set, then another cluster is calling essentially

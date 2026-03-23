@@ -36,7 +36,6 @@ if __name__ == "__main__":
     if not Utils.is_slurm() and not args.slurm:
         twrite(f"Not on cluster -> find output under experiment directory")
         args.search_dirs = FileFinding.exp_search_dirs if args.search_dirs == "default" else args.search_dirs
-
         exp_name = FileFinding.str_to_exp_folder(args.substr, search_dirs=args.search_dirs, resolve="half_then_user")
 
         possible_result_exts = [".txt", ".out", ".log", ".json", ".err"]
@@ -52,11 +51,23 @@ if __name__ == "__main__":
         else:
             fname = UtilsBase.query_among_list(prompt=f"Multiple possible result files found for {args.substr}, please choose:", options=possible_result_files)
     else:
-        args.search_dirs = FileFinding.file_search_dirs if args.search_dirs == "default" else args.search_dirs
+        # This functionality could be useful but isn't really needed at present
+        if args.search_dirs == "default":
+            pass
+        
+        search_dirs = [s for s in args.search_dirs if not s == "default"]
+        if args.result:
+            file_type = "result"
+        elif args.slurm:
+            file_type = "slurm"
+        elif args.error:
+            file_type = "error"
+        else:
+            raise ValueError("One of --result, --slurm, or --error must be specified")
 
         fname = FileFinding.str_to_file(args.substr,
-            search_dirs=args.search_dirs,
-            file_type="result" if args.result else ("slurm" if args.slurm else ("error" if args.error else None)),
+            search_dirs=search_dirs,
+            file_type=file_type,
             resolve="half_then_user")
 
     subprocess.run(f"cat {fname}", shell=True)

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     args = P.parse_args()
 
     args.substrs = [UtilsBase.strip_right(UtilsBase.strip_left(s, "*"), "*") for s in args.substrs]
-    slurm_scripts = [FileFinding.str_to_file(s, slurm_or_result="slurm", resolve="half_then_user") for s in args.substrs]
+    slurm_scripts = [FileFinding.str_to_file(s, file_type="slurm", resolve="half_then_user") for s in args.substrs]
 
     for substr,s in zip(args.substrs, slurm_scripts):
         script = UtilsBase.load_file_lite(s)

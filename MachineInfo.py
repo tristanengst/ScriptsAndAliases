@@ -33,13 +33,13 @@ machine2info = {
     "S1": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S1"]),
     "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S2"]),
     "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S3"]),
-    # "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A1"]),
-    # "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
+    "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A1"]),
+    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
     "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A3"]),
     "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A4"]),
     "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
-    # "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A6"]),
-    # "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A7"]),
+    "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A6"]),
+    "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A7"]),
     "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
     "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A9"]),
     "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
@@ -52,7 +52,8 @@ machine2info = {
     trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
     fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
     rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["rorqual"]),
-    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),)
+    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),
+    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["tamia"]),)
 
 # All ComputeCanada hosts. Filtering these out of [machine2info] is useful gives just
 # workstation-y machines and Solar.
@@ -129,6 +130,7 @@ cluster2node2config = dict(
         h122=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h122", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", gpu_frac=0.25),
         h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5),
         mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0),
+        a100=dict(cpus_per_gpu=32, mem_per_gpu=250, gpu_alias="a100", gpus_per_node=8, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
         a5000=dict(cpus_per_gpu=16, mem_per_gpu=30.5, gpu_alias="a5000", gpus_per_node=4, can_allocate=True, gpu_name="a5000", gpu_frac=1.0),
         t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=True, gpu_name="t4", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
