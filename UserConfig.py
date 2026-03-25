@@ -35,6 +35,7 @@ cluster2accounts = dict(
 checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
     "~/scratch/IMLE-SSL/models_mae",
     "~/scratch/IMLE-SSL/finetunes",
+    "~/scratch/IMLE-SSL/segmentation",
     "~/Development/IMLE-SSL-2/probes",
     "~/scratch/openPiMLE/exps",
     "~/scratch/LeRobot/exps"]
@@ -42,9 +43,11 @@ job_result_search_dirs = [
     "~/Development/IMLE-SSL-2/pretrain_results",
     "~/Development/IMLE-SSL-2/finetune_results",
     "~/Development/IMLE-SSL-2/probe_results",
+    "~/Development/IMLE-SSL-2/segmentation_results",
     "~/Development/IMLE-SSL-Dev/pretrain_results",
     "~/Development/IMLE-SSL-Dev/finetune_results",
     "~/Development/IMLE-SSL-Dev/probe_results",
+    "~/Development/IMLE-SSL-Dev/segmentation_results",
     "~/Development/openPiMLE-lerobot/results",
     "~/Development/LeRobot/results"
 ]
