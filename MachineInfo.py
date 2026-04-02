@@ -149,7 +149,7 @@ gpu2info = {
     v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0),
     v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0),
     a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0),
-    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0),
+    a6000=dict(vram=48, good=True, gpu_name="a6000", ddp=True, gpu_frac=1.0),
     a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0),
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0),
     a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125),
@@ -169,7 +169,7 @@ gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v["good"]]
 bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]
 gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
-gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()}
+gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
 # Maps cluster names to unique prefixes for their compute nodes
 cluster2node_prefix = dict(cs_apex="cs-apex", solar="cs-venus", # SFU-only
