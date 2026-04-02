@@ -55,6 +55,7 @@ aliases = [
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
     "alias sqbl=\"python ~/.ScriptsAndAliases/Sqb2.py -l \"",
+    "alias sqbc=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --current \"",
 
     # Quiet output, saves cluster state to a file
     "alias sqbr=\"python ~/.ScriptsAndAliases/Sqb2.py -ausq --record default --verbose 0\"", 

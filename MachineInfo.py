@@ -360,7 +360,13 @@ def hostname_is_current_machine(hostname):
     """
     return os.uname().nodename == hostname
 
-def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
+
+def check_connection(machine):
+    cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {machine} exit"
+    result = subprocess.getoutput(cmd)
+    return result == ""
+
+def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error", **ssh_kwargs):
     """Runs [command] on machine [m] and returns the output."""
     cwd = os.getcwd()
     os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
@@ -370,8 +376,14 @@ def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
         return result
     ssh_name = to_ssh_name(machine)
     if ssh_name is None:
-        raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
+        if if_ssh_map_error == "HostInfoError":
+            raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
+        else:
+            return if_ssh_map_error() if callable(if_ssh_map_error) else if_ssh_map_error
     else:
+        if not check_connection(ssh_name):
+            return if_connect_error() if callable(if_connect_error) else if_connect_error
+
         ssh_args_str = " ".join(ssh_args)
         command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
         result = subprocess.getoutput(command_to_run)
