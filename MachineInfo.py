@@ -72,6 +72,7 @@ machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "ror
 # constraint    -- constraint to use for the scheduler if possible
 cluster2node2config = dict(
     solar={
+        "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a600a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_a6000_ada", gpu_frac=1),
         "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
         "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
         "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
@@ -158,6 +159,7 @@ gpu2info = {
     a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5),
     l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0),
     l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625),
+    a6000a=dict(vram=48, good=True, gpu_name="rtx_a6000_ada", ddp=True, gpu_frac=1),
     h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0),
     h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
     h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),
