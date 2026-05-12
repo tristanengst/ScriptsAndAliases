@@ -1050,9 +1050,7 @@ if __name__ == "__main__":
                 job_datas += [colnames_job_data] + job_datas_account
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
-        twrite(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py --solar 0 --current"))
-        time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        twrite(time_str)
+        print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py"))
         sys.exit(0)
     
     col2max_chars = {c: len(c) for c in colnames}

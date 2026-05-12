@@ -72,6 +72,7 @@ machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "ror
 # constraint    -- constraint to use for the scheduler if possible
 cluster2node2config = dict(
     solar={
+        "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a600a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_6000_ada", gpu_frac=1),
         "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
         "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
         "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
@@ -136,7 +137,6 @@ cluster2node2config = dict(
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
 )
 
-
 # Information about GPUs. Fields are:
 # vram              -- amount of VRAM in GB
 # good              -- overall judgement on if the GPU is good or not
@@ -181,7 +181,7 @@ gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v["good"]]
 bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]
 gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
-gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()}
+gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
 # Maps cluster names to unique prefixes for their compute nodes
 cluster2node_prefix = dict(cs_apex="cs-apex", solar="cs-venus", # SFU-only
@@ -372,7 +372,13 @@ def hostname_is_current_machine(hostname):
     """
     return os.uname().nodename == hostname
 
-def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
+
+def check_connection(machine):
+    cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {machine} exit"
+    result = subprocess.getoutput(cmd)
+    return result == ""
+
+def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error", **ssh_kwargs):
     """Runs [command] on machine [m] and returns the output."""
     cwd = os.getcwd()
     os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
@@ -382,8 +388,14 @@ def run_command_on_machine(*, machine, command, ssh_args=[], **ssh_kwargs):
         return result
     ssh_name = to_ssh_name(machine)
     if ssh_name is None:
-        raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
+        if if_ssh_map_error == "HostInfoError":
+            raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
+        else:
+            return if_ssh_map_error() if callable(if_ssh_map_error) else if_ssh_map_error
     else:
+        if not check_connection(ssh_name):
+            return if_connect_error() if callable(if_connect_error) else if_connect_error
+
         ssh_args_str = " ".join(ssh_args)
         command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
         result = subprocess.getoutput(command_to_run)

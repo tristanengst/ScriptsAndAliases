@@ -55,6 +55,7 @@ aliases = [
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
     "alias sqbl=\"python ~/.ScriptsAndAliases/Sqb2.py -l \"",
+    "alias sqbc=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --current \"",
 
     # Quiet output, saves cluster state to a file
     "alias sqbr=\"python ~/.ScriptsAndAliases/Sqb2.py -ausq --record default --verbose 0\"", 
@@ -98,8 +99,7 @@ aliases = [
     "alias python_ddp8=\"torchrun --standalone --nnodes=1 --nproc-per-node 8\"",
     "alias python_ddp9=\"torchrun --standalone --nnodes=1 --nproc-per-node 9\"",
     "alias python_ddp10=\"torchrun --standalone --nnodes=1 --nproc-per-node 10\"",
-    "alias tpython=\"python ~/.ScriptsAndAliases/TaskSet.py python\"",
-    "alias tpythonb=\"python ~/.ScriptsAndAliases/TaskSet.py --basic python3 \"",
+
     "alias tpython_ddp1=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp1\"",
     "alias tpython_ddp2=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp2\"",
     "alias tpython_ddp3=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp3\"",
@@ -110,12 +110,27 @@ aliases = [
     "alias tpython_ddp8=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp8\"",
     "alias tpython_ddp9=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp9\"",
     "alias tpython_ddp10=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp10\"",
+
+    "alias tpythonb=\"python ~/.ScriptsAndAliases/TaskSet.py --basic python \"",
+    
+    "alias tpython=\"python ~/.ScriptsAndAliases/TaskSetBasic.py \"",
+    "alias tpython0=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 0 \"",
+    "alias tpython1=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 1 \"",
+    "alias tpython2=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 2 \"",
+    "alias tpython3=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 3 \"",
+    "alias tpython4=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 4 \"",
+    "alias tpython5=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 5 \"",
+    "alias tpython6=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 6 \"",
+    "alias tpython7=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 7 \"",
+    "alias tpython8=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 8 \"",
+    "alias tpython9=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 9 \"",
+    "alias tpython10=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 10 \""
     ##################################################################################
     ##################################################################################
     ##################################################################################
 
     # Useful on APEX workstations and servers: Miscellanous
-    "alias get_wandb_id=\"python -c 'import wandb ; print(wandb.util.generate_id())'\"",
+    "alias get_wandb_id=\"python -c 'import uuid ; print(str(uuid.uuid4())[:8])'\"",
     "alias find_free_gpus=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --hosts \"",
     "alias killwandb=\"pkill -u $USER -9 wandb\"",
     "alias rsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
@@ -127,8 +142,8 @@ aliases = [
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
     
-    
-    
+    # "eval \"$(python ~/.ScriptsAndAliases/LoadLastPyEnv.py)\"",
+
     "# END USEFUL ML ALIASES"]
 
 

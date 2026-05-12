@@ -35,18 +35,23 @@ cluster2accounts = dict(
 checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
     "~/scratch/IMLE-SSL/models_mae",
     "~/scratch/IMLE-SSL/finetunes",
+    "~/scratch/IMLE-SSL/segmentation",
     "~/Development/IMLE-SSL-2/probes",
     "~/scratch/openPiMLE/exps",
-    "~/scratch/LeRobot/exps"]
+    "~/scratch/LeRobot/exps",
+    "~/Development/NewMetric/generated_images"]
 job_result_search_dirs = [
-    "~/Development/IMLE-SSL-2/pretrain_results",
+    "~/Development/IMLE-SSL-2/pretrain_results", "~/Development/IMLE-SSL-2/job_results",
     "~/Development/IMLE-SSL-2/finetune_results",
     "~/Development/IMLE-SSL-2/probe_results",
+    "~/Development/IMLE-SSL-2/segmentation_results",
     "~/Development/IMLE-SSL-Dev/pretrain_results",
     "~/Development/IMLE-SSL-Dev/finetune_results",
     "~/Development/IMLE-SSL-Dev/probe_results",
+    "~/Development/IMLE-SSL-Dev/segmentation_results",
     "~/Development/openPiMLE-lerobot/results",
-    "~/Development/LeRobot/results"
+    "~/Development/LeRobot/results",
+    "~/Development/NewMetric/job_results",
 ]
 job_error_search_dirs = [
     "~/Development/openPiMLE-lerobot/errors"
@@ -55,7 +60,8 @@ slurm_script_search_dirs = [
     "~/Development/IMLE-SSL-2/slurm",
     "~/Development/IMLE-SSL-Dev/slurm",
     "~/Development/openPiMLE-lerobot/slurm",
-    "~/Development/LeRobot/slurm"
+    "~/Development/LeRobot/slurm",
+    "~/Development/NewMetric/slurm",
 ]
 
 checkpoints_search_dirs = [osp.expanduser(p) for p in checkpoints_search_dirs]
