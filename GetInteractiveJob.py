@@ -52,9 +52,9 @@ if __name__ == "__main__":
     P.add_argument("--mem", type=str, default="64G", help="Memory to allocate")
     P.add_argument("--ntasks-per-node", type=int, default=1, help="Number of tasks per node")
     P.add_argument("--cpus-per-task", type=int, default=1, help="Number of CPUs per task")
-    P.add_argument("--gpus_per_node", "--gpus", nargs="?", default=None, help="Number of GPUs per node")
+    P.add_argument("--gpus_per_node", "--gpus", nargs="*", default=None, help="Number of GPUs per node")
     P.add_argument("--time", type=str, default="1:00:00", help="Time limit for the job (e.g., '1:00:00' for 1 hour)")
-    P.add_argument("-n", "--nodelist", type=str, default=None, nargs="?", help="Comma-separated list of nodes to use (e.g., 'node1,node2')")
+    P.add_argument("-n", "--nodelist", type=str, const=None, nargs="?", help="Comma-separated list of nodes to use (e.g., 'node1,node2')")
     P.add_argument("--account", type=str, default=get_default_account(),
         help="Account to use for the job. By default, uses the first account listed for the cluster in UserConfig.py, or no account if none are listed.")
     P.add_argument("--partition", type=str, default=get_default_partition(), 
@@ -73,6 +73,8 @@ if __name__ == "__main__":
     elif not args.nodelist is None:
         nodelist = UtilsBase.flatten([n.split(",") for n in args.nodelist])
         args.nodelist = ",".join(nodelist)
+    elif args.nodelist is None:
+        args.nodelist = None
 
     # Expand --gpus-per-node to allow for GPU shorthands and non-specification.
     # Interpret the --gpus-per-node flag. If no GPU type is given, then assume any is
@@ -84,7 +86,7 @@ if __name__ == "__main__":
         from MachineInfo import cluster2node2config, gpu_alias2name, gpu2info
         import Utils
         node2config = cluster2node2config[Utils.get_cluster_type()]
-        for gpu_spec in args.gpus_per_node or []:
+        for gpu_spec in args.gpus_per_node:
             if Utils.is_solar() and not ":" in gpu_spec:
                 raise NotImplementedError()
             elif not Utils.is_solar() and not ":" in gpu_spec:
