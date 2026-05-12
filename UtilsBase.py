@@ -253,15 +253,74 @@ def try_make_jsonable(x):
     else:
         return str(x)
 
-def try_make_number(s):
+def unit_conversion(x, desc=None, source=None, target=None):
+    """Returns [x] converted from [source] units to [target] units."""
+    # Multiplier types that are unambiguous. 'm' and 'M' are ambiguous.
+    number_multipliers = {"K", "G", "T", "KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB"}
+    time_multipliers = {"seconds", "minutes", "hours", "days", "s", "h", "d", "S", "H", "D"}
+    inferred_multipliers = {"M"}
+    unit2multiplier_wrt_base = dict(K=1e3, G=1e9, T=1e12,
+        KB=1e3, MB=1e6, GB=1e9, TB=1e12,
+        KiB=1024, MiB=1024**2, GiB=1024**3, TiB=1024**4,
+        seconds=1, minutes=60, hours=3600, days=3600*24,
+        s=1, h=3600, d=3600*24,
+        S=1, H=3600, D=3600*24,
+        none=1)
+
+    def infer_m_meaning(*, source, target):
+        if ((source == "M" and target in number_multipliers)
+            or (target == "M" and source in number_multipliers)):
+            return 1e6
+        elif ((source == "M" and target in time_multipliers)
+            or (target == "M" and source in time_multipliers)):
+            return 60
+        else:
+            raise ValueError(f"Ambiguous multiplier 'M' with source={source} and target={target}")
+
+    if source is None and target is None and not desc is None:
+        source, target = [d.strip() for d in desc.split("->")] # Einops style is nice!
+    elif source is None and not target is None and desc is None:
+        source = "none"
+
+    if source in inferred_multipliers and target in unit2multiplier_wrt_base:
+        raise ValueError(f"Cannot infer meaning of multiplier 'M' when target unit is provided: source={source}, target={target}")
+
+    source_multiplier = infer_meaning(source=source, target=target) if source in inferred_multipliers else unit2multiplier_wrt_base.get(source, None)
+    target_multiplier = infer_meaning(source=target, target=source) if target in inferred_multipliers else unit2multiplier_wrt_base.get(target, None)
+
+    if source in unit2multiplier_wrt_base and target in unit2multiplier_wrt_base:
+        return x * source_multiplier / target_multiplier
+    else:
+        raise ValueError(f"Unknown source or target unit for conversion: {source} -> {target}")
+    
+def try_make_number(s, suffixes=False):
     """Tries to convert [s] to an int or float, and returns [s] otherwise."""
-    try:
-        return int(s)
-    except ValueError:
+    def try_make_number_(s):
         try:
-            return float(s)
+            return int(s)
         except ValueError:
-            return s
+            try:
+                return float(s)
+            except ValueError:
+                return s
+
+    if not suffixes:
+        return try_make_number_(s)
+    elif isinstance(s, str) and not suffixes and len(s) > 0:
+        suffix2mul = dict(K=1e3, M=1e6, G=1e9, T=1e12,
+            KB=1e3, MB=1e6, GB=1e9, TB=1e12,
+            KiB=1024, MiB=1024**2, GiB=1024**3, TiB=1024**4)
+        
+        s_tail = s[-1 * min(len(s), 3):]
+        s_head = s[:-len(s_tail)] if len(s) > len(s_tail) else ""
+        s_head_maybe_numeric = try_make_number_(s_head)
+
+        if s_tail in suffix2mul and isinstance(s_head_maybe_numeric, (int, float)):
+            return s_head_maybe_numeric * suffix2mul[s_tail]
+        else:
+            return s_head_maybe_numeric
+    else:
+        raise NotImplementedError(f"try_make_number() s={s} with type(s)={type(s)} and suffixes={suffixes} is not supported")
 
 def is_numeric(s): return not isinstance(try_make_number(s), str)
 
@@ -625,6 +684,25 @@ def time_to_pretty_str(t):
     m = (s % 3600) // 60
     h = str(h).zfill(max(2, len(str(h))+1))
     return f"{h}H{m:02d}M"
+
+def format_timestamp(t, time_format="default"):
+    """Formats a timestamp [t] as a string. Our canonical format is """
+    t_as_datetime = time_stamp_to_datetime(t)
+
+    if time_format == "default": # YYYY_MM_DD_XXhYYm
+        return t_as_datetime.strftime("%Y_%m_%d_%Hh%Mm")
+    elif time_format == "default_long" or time_format == "default_seconds": # YYYY_MM_DD_XXhYYmZZs
+        return t_as_datetime.strftime("%Y_%m_%d_%Hh%Mm%Ss")
+    else:
+        return t_as_datetime.strftime(time_format)
+        
+def try_format_timestamp(t, time_format="default"):
+    """Tries to format [t] as a timestamp. If [t] cannot be parsed as a timestamp, then
+    returns [t] as a string."""
+    try:
+        return format_timestamp(t, time_format=time_format)
+    except Exception:
+        return str(t)
 
 ######################################################################################
 ######################################################################################

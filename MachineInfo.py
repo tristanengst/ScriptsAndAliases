@@ -129,42 +129,54 @@ cluster2node2config = dict(
         h111=dict(cpus_per_gpu=8, mem_per_gpu=62, gpu_alias="h111", gpus_per_node=16, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", gpu_frac=0.125),
         h122=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h122", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", gpu_frac=0.25),
         h143=dict(cpus_per_gpu=8, mem_per_gpu=124, gpu_alias="h143", gpus_per_node=8, can_allocate=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", gpu_frac=0.5),
-        mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=True, gpu_name="mi300a", gpu_frac=1.0),
-        a100=dict(cpus_per_gpu=32, mem_per_gpu=250, gpu_alias="a100", gpus_per_node=8, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
-        a5000=dict(cpus_per_gpu=16, mem_per_gpu=30.5, gpu_alias="a5000", gpus_per_node=4, can_allocate=True, gpu_name="a5000", gpu_frac=1.0),
-        t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=True, gpu_name="t4", gpu_frac=1.0)),
+        mi300a=dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="mi300a", gpus_per_node=4, can_allocate=False, gpu_name="mi300a", gpu_frac=1.0),
+        a100=dict(cpus_per_gpu=32, mem_per_gpu=250, gpu_alias="a100", gpus_per_node=8, can_allocate=False, gpu_name="a100", gpu_frac=1.0),
+        a5000=dict(cpus_per_gpu=16, mem_per_gpu=30.5, gpu_alias="a5000", gpus_per_node=4, can_allocate=False, gpu_name="a5000", gpu_frac=1.0),
+        t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=False, gpu_name="t4", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
 )
 
-gpu2info = {
-    "default_gpu": dict(vram=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1),
-    "titan": dict(vram=8, good=False, gpu_name="titan_xp", ddp=True, gpu_frac=1.0),
-    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0),
-    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0)} | dict(
-    t4=dict(vram=16, good=True, gpu_name="t4", ddp=True, gpu_frac=1.0),
-    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0),
-    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0),
-    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0),
-    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0),
-    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0),
-    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0),
-    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0),
-    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0),
-    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0),
-    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0),
-    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125),
-    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False, gpu_frac=0.25),
-    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5),
-    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5),
-    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0),
-    l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625),
-    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0),
-    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125),
-    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25),
-    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5),
-    h200=dict(vram=141, good=True, gpu_name="h200", ddp=True, gpu_frac=1.0),
-    mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0))
 
+# Information about GPUs. Fields are:
+# vram              -- amount of VRAM in GB
+# good              -- overall judgement on if the GPU is good or not
+# gpu_name          -- name of the GPU as per SLURM
+# ddp               -- whether the GPU can be used with DDP
+# gpu_frac          -- how many fractions of a regular GPU it takes up
+# rgu_multiplier    -- multiplier for RGUs when using this GPU type. See
+#                       docs.alliancecan.ca/wiki/Allocations_and_compute_scheduling.
+#                        Where estimated, should be read as essentially made-up. A
+#                        value over of 3.0+ generally indicates a decent GPU.
+gpu2info = {
+    "default_gpu": dict(vram=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1, rgu_multiplier=3.0),          # Placeholder values
+    "titan": dict(vram=8, good=False, gpu_name="titan_xp", ddp=True, gpu_frac=1.0, rgu_multiplier=0.1),                 # Estimated rgu_multiplier
+    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),                   # Estimated rgu_multiplier
+    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0)} | dict(              # Estimated rgu_multiplier
+    t4=dict(vram=16, good=True, gpu_name="t4", ddp=True, gpu_frac=1.0, rgu_multiplier=1.6),
+    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),
+    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0, rgu_multiplier=1.1),
+    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),             # Estimated rgu_multiplier
+    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.3),            # Estimated rgu_multiplier
+    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0, rgu_multiplier=2.0),
+    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0, rgu_multiplier=2.6),                       # Estimated rgu_multiplier
+    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0), # Estimated rgu_multiplier
+    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.1),                   # Estimated rgu_multiplier
+    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0, rgu_multiplier=3.2),                           # Estimated rgu_multiplier
+    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgu_multiplier=4.0),
+    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgu_multiplier=0.6),
+    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False, gpu_frac=0.25, rgu_multiplier=1.1),
+    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
+    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
+    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                          # Estimated rgu_multiplier
+    l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625, rgu_multiplier=0.3),          # Estimated rgu_multiplier
+    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0, rgu_multiplier=12.2),    
+    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125, rgu_multiplier=1.7),
+    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25, rgu_multiplier=3.5),
+    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5, rgu_multiplier=6.1),
+    h200=dict(vram=141, good=True, gpu_name="h200", ddp=True, gpu_frac=1.0, rgu_multiplier=20.0),                        # Estimated rgu_multiplier
+    mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),                    # Estimated rgu_multiplier
+    )
+    
 gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v["good"]]
 bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]

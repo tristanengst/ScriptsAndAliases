@@ -76,7 +76,8 @@ aliases = [
     "alias scmd=\"python ~/.ScriptsAndAliases/ShowCommand.py --substrs \"",
 
     # Allocates a node
-    "alias sallocb=\"python ~/.ScriptsAndAliases/AllocateNode.py --nodelist \"",
+    "alias sallocb=\"python ~/.ScriptsAndAliases/GetInteractiveJob.py salloc \"",
+    "alias srunb=\"python ~/.ScriptsAndAliases/GetInteractiveJob.py srun \"",
 
     # Updates ScriptsAndAliases
     "alias update_scripts_and_aliases=\"cd ~/.ScriptsAndAliases ; python WriteAliases.py ; cd ~ ; source ~/.bashrc\"",
@@ -125,6 +126,7 @@ aliases = [
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
+    
     
     
     "# END USEFUL ML ALIASES"]
