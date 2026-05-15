@@ -75,7 +75,7 @@ def update_slurm_script(*, fname, args):
         twrite(multi_line_print)
 
     if not args.dry_run:
-        _ = UtilsBase.atomic_save_lite(data=extant_script, fname=fname)
+        _ = UtilsBase.atomic_save_lite(data=extant_script, fpath=fname)
     
     
 

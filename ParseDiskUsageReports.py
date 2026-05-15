@@ -173,7 +173,7 @@ if __name__ == "__main__":
     if args.record is None:
         twrite(f"[INFO] --record not given -> not saving data to file")
     else:
-        UtilsBase.atomic_save_lite(data=user2cluster2project2usage, fname=args.record)
+        UtilsBase.atomic_save_lite(data=user2cluster2project2usage, fpath=args.record)
         twrite(f"[INFO] Wrote aggregated diskusage report to {args.record}")
 
 

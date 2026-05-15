@@ -286,7 +286,7 @@ if __name__ == "__main__":
                 rsync_tmp_file = f"rsyncb_cmd_{str(uuid.uuid4()).replace('-', '')[:8]}.txt"
                 dir_rsync_tmp_file = osp.join(osp.dirname(__file__), rsync_tmp_file)
                 
-                UtilsBase.atomic_save_lite(data=command, fname=dir_rsync_tmp_file)
+                UtilsBase.atomic_save_lite(data=command, fpath=dir_rsync_tmp_file)
                 cmd0 = f"rsync -rv {dir_rsync_tmp_file} {ssh_name}:{rsync_tmp_file}"
                 twrite(f"[INFO] Send command file to {ssh_name} via:\n{cmd0}")
                 result0 = subprocess.getoutput(cmd0)

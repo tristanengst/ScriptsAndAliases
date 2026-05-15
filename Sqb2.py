@@ -1151,7 +1151,7 @@ if __name__ == "__main__":
         import UtilsBase # Imported here to be faster when not needed
         job_datas = [jd for jd in job_datas if not jd.jobid.startswith("__")]
         record = build_record(job_datas=job_datas, account2lfs=account2lfs)
-        _ = UtilsBase.atomic_save_lite(data=record, fname=args.record)
+        _ = UtilsBase.atomic_save_lite(data=record, fpath=args.record)
 
    
 

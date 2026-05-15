@@ -31,7 +31,7 @@ def write_heartbeat_(*, exp_folder, interval=300, verbose=1):
 
     if interval_exceeded:
         time_str = hearbeat_time.isoformat(sep=' ', timespec='seconds') + "\n"
-        _ = UtilsBase.atomic_save_lite(data=time_str, fname=heartbeat_file)
+        _ = UtilsBase.atomic_save_lite(data=time_str, fpath=heartbeat_file)
 
 def write_heartbeat(*, exp_folder, interval=300, verbose=1):
     """Writes to a heartbeat.txt file in [exp_folder] if the last heartbeat written

@@ -108,48 +108,48 @@ def twrite(*args, time=True, verbose=1, quiet=False, offset=False, **kwargs):
     s = separated_str(meta_str, args_str, kwargs_str)
     tqdm.write(s)
 
-def load_file_lite(fname, json_kwargs=dict(), **kwargs):
-    """Loads a file [fname] with [kwargs]. The kind of load function is inferred from
+def load_file_lite(fpath, json_kwargs=dict(), **kwargs):
+    """Loads a file [fpath] with [kwargs]. The kind of load function is inferred from
     the file extension. This version does not support .pt files.
     """
-    with open(fname, "r") as f:
-        if fname.endswith(".pt"):
+    with open(fpath, "r") as f:
+        if fpath.endswith(".pt"):
             raise NotImplementedError("Loading .pt files is not supported")
-        elif fname.endswith(".json"):
+        elif fpath.endswith(".json"):
             return json.load(f, **json_kwargs)
-        elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
+        elif fpath.endswith(".txt") or fpath.endswith(".sh") or fpath.endswith(".py"):
             return f.read()
         else:
-            raise NotImplementedError(f"Unknown file extension for {fname}")
+            raise NotImplementedError(f"Unknown file extension for {fpath}")
 
-def atomic_save_lite(*, data, fname, **kwargs):
-    """Atomically saves [data] to [fname] with [kwargs]. The kind of save function is
+def atomic_save_lite(*, data, fpath, **kwargs):
+    """Atomically saves [data] to [fpath] with [kwargs]. The kind of save function is
     inferred from the file extension. This version does not support .pt files.
     """
-    _ = os.makedirs(osp.dirname(fname), exist_ok=True) if osp.dirname(fname) else None
-    fname_base, ext = osp.splitext(fname)
-    tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fname_base)}.tmp"
-    tmp_file = osp.join(osp.dirname(fname), tmp_file)
+    _ = os.makedirs(osp.dirname(fpath), exist_ok=True) if osp.dirname(fpath) else None
+    fpath_base, ext = osp.splitext(fpath)
+    tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fpath_base)}.tmp"
+    tmp_file = osp.join(osp.dirname(fpath), tmp_file)
 
-    if fname.endswith(".pt"):
+    if fpath.endswith(".pt"):
         raise NotImplementedError("Saving .pt files is not supported")
-    elif fname.endswith(".json"):
+    elif fpath.endswith(".json"):
         kwargs["indent"] = 4 if not "indent" in kwargs else kwargs["indent"]
         with open(tmp_file, "w+") as f:
             json.dump(data, f, **kwargs)
-    elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
+    elif fpath.endswith(".txt") or fpath.endswith(".sh") or fpath.endswith(".py"):
         with open(tmp_file, "w+") as f:
             f.write(data)
     else:
-        raise NotImplementedError(f"Unknown file extension for {fname}")
-    os.rename(tmp_file, fname)
+        raise NotImplementedError(f"Unknown file extension for {fpath}")
+    os.rename(tmp_file, fpath)
 
 def atomic_append_lite(*, data, fname, **kwargs):
     fname = osp.expanduser(fname)
     if fname.endswith(".pt"):
         raise NotImplementedError("Appending to .pt files is not supported")
     elif fname.endswith(".json"):
-        return atomic_save_lite(data=load_file_lite(f) | d, fname=f, indent=4, sort_keys=True)
+        return atomic_save_lite(data=load_file_lite(f) | d, fpath=f, indent=4, sort_keys=True)
     elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
         with open(fname, "a+") as f:
             f.write(data)
@@ -157,7 +157,7 @@ def atomic_append_lite(*, data, fname, **kwargs):
         raise NotImplementedError(f"Unknown file extension for {fname}")
 
 
-def dict_to_json(d, f): return atomic_save_lite(data=d, fname=f, indent=4, sort_keys=True)
+def dict_to_json(d, f): return atomic_save_lite(data=d, fpath=f, indent=4, sort_keys=True)
 def json_to_dict(f): return load_file_lite(f)
 def dict_append_json(d, f): atomic_append_lite(data=d, fname=f)
 
