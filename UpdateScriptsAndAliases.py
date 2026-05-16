@@ -26,5 +26,8 @@ if __name__ == "__main__":
         twrite("-" * 80)
         twrite(f"Updating host={u}...")
         result = SSHCommunication.run_command_on_machine(machine=u,
-            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",)
+            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",
+            if_connect_error="HostInfoError",
+            if_ssh_map_error="HostInfoError",
+        )
         twrite(f"Result of updating host={u}:\n{result}")
