@@ -73,7 +73,7 @@ machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "ror
 # constraint    -- constraint to use for the scheduler if possible
 cluster2node2config = dict(
     solar={
-        "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a600a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_6000_ada", gpu_frac=1),
+        "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a6000a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_6000_ada", gpu_frac=1),
         "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
         "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
         "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
@@ -162,6 +162,7 @@ gpu2info = {
     v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0, rgu_multiplier=2.6),                       # Estimated rgu_multiplier
     a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0), # Estimated rgu_multiplier
     a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.1),                   # Estimated rgu_multiplier
+    a6000a=dict(vram=48, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                   # Estimated rgu_multiplier
     a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0, rgu_multiplier=3.2),                           # Estimated rgu_multiplier
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgu_multiplier=4.0),
     a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgu_multiplier=0.6),
