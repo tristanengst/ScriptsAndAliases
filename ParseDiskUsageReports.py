@@ -6,6 +6,7 @@ import os
 import os.path as osp
 
 import MachineInfo
+import SSHCommunication
 import UtilsBase
 from UtilsBase import twrite, tqdm
 
@@ -97,7 +98,7 @@ done"""
     ls_path2output = dict()
     for p in possible_ls_dirs:
         search_cmd = search_cmd_template.replace("LS_DIR_PATH", p)
-        output = MachineInfo.run_command_on_machine(machine=cluster, command=search_cmd)
+        output = SSHCommunication.run_command_on_machine(machine=cluster, command=search_cmd)
         if output.startswith("ls: cannot access"):
             continue
         else:
@@ -105,7 +106,7 @@ done"""
     return ls_path2output
 
 def get_diskusage_report_from_cluster(*, cluster):
-    output = MachineInfo.run_command_on_machine(machine=cluster, command="bash -lc \"diskusage_report --per_user --all_users --project\" 2>&1", ssh_args=["-tt"])
+    output = SSHCommunication.run_command_on_machine(machine=cluster, command="bash -lc \"diskusage_report --per_user --all_users --project\" 2>&1", ssh_args=["-tt"])
     return output.strip()
         
 def get_default_record_fname():

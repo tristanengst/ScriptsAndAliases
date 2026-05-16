@@ -25,6 +25,9 @@ source ~/py311IMLESSL/bin/activate
 aliases = [
     "# START USEFUL ML ALIASES",
 
+    # Nicer to not have to type all of this
+    "alias dfb=\"diskusage_report --per_user --all_users \"",
+
     # Useful on SLURM, doesn't require a Python script
     "alias sqbf=\"squeue -u $USER -O 'JobArrayID:.10,Name:.175,State:.8,TimeLeft:.10'\"",
     "alias historyb=\"history | cut -c 8-\"",

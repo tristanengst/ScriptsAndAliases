@@ -2,7 +2,7 @@ import argparse
 import os.path as osp
 import subprocess
 
-import MachineInfo
+import SSHCommunication
 import Utils
 from UtilsBase import twrite, tqdm
 
@@ -12,18 +12,19 @@ if __name__ == "__main__":
         help="Which machines to update on. If empty, interpreted as the current machine. If 'all', interpreted as every SSH-able machine. Other values are interpreted as giving the machine to update on.")
     args = P.parse_args()
 
-    args.update_on = [MachineInfo.get_current_machine()] if args.update_on is None else args.update_on
-    if "all" in args.update_on:
-        args.update_on = MachineInfo.get_all_usable_ssh_names()
+
+    if args.update_on is None:
+        args.update_on = [SSHCommunication.get_current_machine()]
+        twrite(f"[INFO] No machines specified to update on, so defaulting to current machine: {args.update_on}")
+    elif "all" in args.update_on:
+        args.update_on = get_machine_name_to_hostname_map_all.values()
         twrite(f"[INFO] will update on all SSH-able machines with SSH names: {args.update_on}")
     else:
-        update_on2ssh_name = {m: MachineInfo.to_ssh_name(m) for m in args.update_on}
-        twrite(f"[INFO] will update machines using machine-to-SSH-name mapping: {update_on2ssh_name}")
-        args.update_on = update_on2ssh_name.values()
+        pass
 
     for u in tqdm(args.update_on):
         twrite("-" * 80)
         twrite(f"Updating host={u}...")
-        result = MachineInfo.run_command_on_machine(machine=u,
-            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"")
+        result = SSHCommunication.run_command_on_machine(machine=u,
+            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",)
         twrite(f"Result of updating host={u}:\n{result}")

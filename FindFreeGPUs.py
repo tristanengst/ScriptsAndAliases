@@ -8,6 +8,7 @@ from multiprocessing import Pool
 import subprocess
 
 import MachineInfo
+import SSHCommunication
 import Utils
 from UtilsBase import twrite
 
@@ -20,8 +21,7 @@ except ImportError:
 def gpu_uid_to_index(h=None):
     """Returns a dictionary mapping GPU UIDs to their indices."""
     cmd = "nvidia-smi --query-gpu=index,gpu_uuid --format=csv,noheader"
-    # result = subprocess.getoutput(cmd)
-    result = MachineInfo.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
+    result = SSHCommunication.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
     if result is None:
         return dict()
     else:
@@ -30,8 +30,7 @@ def gpu_uid_to_index(h=None):
 
 def gpu_uid_to_procids(h=None):
     cmd = "nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv,noheader"
-    # result = subprocess.getoutput(cmd)
-    result = MachineInfo.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
+    result = SSHCommunication.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
     if result is None:
         return dict()
     else:
@@ -45,7 +44,7 @@ def procids_to_users(*procids, h=None):
     if len(procids) == 0:
         return dict()
     cmd = f"ps -o pid,user --no-headers -p {','.join([str(pid) for pid in procids])}"
-    result = MachineInfo.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
+    result = SSHCommunication.run_command_on_machine(machine=h, command=cmd, if_connect_error=None, if_ssh_map_error=None)
     if result is None:
         return dict()
     else:

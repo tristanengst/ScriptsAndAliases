@@ -24,6 +24,14 @@ except ImportError:
         def write(s): print(s)
     tqdm = tqdm_lite
 
+@functools.cache
+def torch_available():
+    """Returns whether PyTorch is available."""
+    try:
+        import torch
+        return True
+    except ImportError:
+        return False
 
 ####### File information #############################################################
 def is_tarfile(f):
@@ -108,48 +116,60 @@ def twrite(*args, time=True, verbose=1, quiet=False, offset=False, **kwargs):
     s = separated_str(meta_str, args_str, kwargs_str)
     tqdm.write(s)
 
-def load_file_lite(fpath, json_kwargs=dict(), **kwargs):
+def load_file_lite(fpath, json_kwargs=dict(), weights_only=False, map_location="cpu", **kwargs):
     """Loads a file [fpath] with [kwargs]. The kind of load function is inferred from
-    the file extension. This version does not support .pt files.
+    the file extension.
     """
-    with open(fpath, "r") as f:
-        if fpath.endswith(".pt"):
-            raise NotImplementedError("Loading .pt files is not supported")
-        elif fpath.endswith(".json"):
-            return json.load(f, **json_kwargs)
-        elif fpath.endswith(".txt") or fpath.endswith(".sh") or fpath.endswith(".py"):
-            return f.read()
-        else:
-            raise NotImplementedError(f"Unknown file extension for {fpath}")
+    txt_extensions = [".txt", ".sh", ".py", ".log", ".enc"]
+    if (fpath.endswith(".pt") or fpath.endswith(".pth")) and torch_available():
+        return torch.load(fpath, weights_only=weights_only, map_location=map_location, **kwargs)
+    elif (fpath.endswith(".pt") or fpath.endswith(".pth")) and not torch_available():
+        raise ImportError("PyTorch is not available, so .pt files cannot be loaded")
+    else:
+        with open(fpath, "r") as f:
+            if fpath.endswith(".pt"):
+                raise NotImplementedError("Loading .pt files is not supported")
+            elif fpath.endswith(".json"):
+                return json.load(f, **json_kwargs)
+            elif any([fpath.endswith(ext) for ext in txt_extensions]):
+                return f.read()
+            else:
+                twrite(f"[WARNING] load_file_lite(): unknown extension for fpath={fpath} -> assume string-like")
+                return f.read()
 
 def atomic_save_lite(*, data, fpath, **kwargs):
     """Atomically saves [data] to [fpath] with [kwargs]. The kind of save function is
-    inferred from the file extension. This version does not support .pt files.
+    inferred from the file extension.
     """
+    txt_extensions = [".txt", ".sh", ".py", ".log", ".enc"]
     _ = os.makedirs(osp.dirname(fpath), exist_ok=True) if osp.dirname(fpath) else None
     fpath_base, ext = osp.splitext(fpath)
     tmp_file = f"__tempfile__{str(uuid.uuid4()).replace('-', '')}_{osp.basename(fpath_base)}.tmp"
     tmp_file = osp.join(osp.dirname(fpath), tmp_file)
 
-    if fpath.endswith(".pt"):
-        raise NotImplementedError("Saving .pt files is not supported")
+    if fpath.endswith(".pt") and torch_available():
+        torch.save(data, tmp_file, **kwargs)
+    elif fpath.endswith(".pt") and not torch_available():
+        raise ImportError("PyTorch is not available, so .pt files cannot be saved")
     elif fpath.endswith(".json"):
         kwargs["indent"] = 4 if not "indent" in kwargs else kwargs["indent"]
         with open(tmp_file, "w+") as f:
             json.dump(data, f, **kwargs)
-    elif fpath.endswith(".txt") or fpath.endswith(".sh") or fpath.endswith(".py"):
+    elif any([fpath.endswith(ext) for ext in txt_extensions]):
         with open(tmp_file, "w+") as f:
             f.write(data)
     else:
-        raise NotImplementedError(f"Unknown file extension for {fpath}")
+        twrite(f"[WARNING] atomic_save_lite(): unknown extension for fpath={fpath} -> assume string-like")
+        with open(tmp_file, "w+") as f:
+            f.write(data)
     os.rename(tmp_file, fpath)
 
-def atomic_append_lite(*, data, fname, **kwargs):
+def atomic_append_lite(*, data, fname, weights_only=False, map_location="cpu", **kwargs):
     fname = osp.expanduser(fname)
-    if fname.endswith(".pt"):
-        raise NotImplementedError("Appending to .pt files is not supported")
+    if fname.endswith(".pt") or fname.endswith(".pth"):
+        return atomic_save_lite(data=load_file_lite(fname, weights_only=weights_only, map_location=map_location) | data, fpath=fname, **kwargs)
     elif fname.endswith(".json"):
-        return atomic_save_lite(data=load_file_lite(f) | d, fpath=f, indent=4, sort_keys=True)
+        return atomic_save_lite(data=load_file_lite(fname) | data, fpath=fname, indent=4, sort_keys=True)
     elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
         with open(fname, "a+") as f:
             f.write(data)

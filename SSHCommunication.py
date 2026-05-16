@@ -4,14 +4,7 @@ A key challege is that figuring out what other machines are actually called is
 surprisingly nontrivial given that we can't control how it's done incredibly weirdly
 sometimes.
 
-NOMENCLATURE:
-1. A "machine" is a system we want to log into. Therefore, it might be a cluster or a
-    just a single node. This is the useful thing we actually want to type.
-2. An "ssh name" is something we can SSH to, but it's not immediately clear what the
-    corresponding machine is or even hostname is.
-2. A "hostname" is the actual hostname of the machine. If we were to SSH into it, it
-    would *definitely* work providing that SSH was enabled, etc. Conversely, SSHing
-    to a machine would work only with the appropriate ~/.ssh/config file.
+Paramiko violates the non-standard-library requirement.
 """
 import argparse
 import base64
@@ -27,10 +20,12 @@ import sys
 import time
 
 import UtilsBase
+from UtilsBase import twrite
 
 ######################################################################################
-# Super basic encryption scheme for storing SSH info publically on GitHub. We only 
-# keep hostnames here; nothing super interesting.
+# Super basic encryption scheme for storing SSH info publically on GitHub. This make
+# sharing the info among machines that should have access maximally easy without
+# storing it in plaintext.
 ######################################################################################
 
 def encrypt(key, to_encrypt):
@@ -54,7 +49,9 @@ def decrypt(key, encrypted):
 
 @functools.cache
 def read_encrypted_machine_to_hostname_info(fpath=osp.join(osp.dirname(__file__), "ssh_info.enc")):
-    """Reads the encripted SSH info from [fpath] and returns it as a dict."""
+    """Returns the SSH info encryped at [fpath] and returns it as a dict. If this
+    fails, returns an empty dict.
+    """
     hostname = socket.getfqdn()
     hostname_parts = hostname.split(".", 1)
     if len(hostname_parts) == 1 or hostname_parts[1] == "local":
@@ -65,7 +62,9 @@ def read_encrypted_machine_to_hostname_info(fpath=osp.join(osp.dirname(__file__)
         key = "-".join(prefix) + hostname_parts[1]
         encrypted_info = UtilsBase.load_file_lite(fpath).strip()
         decrypted_info = decrypt(key, encrypted_info)
-        return json.loads(decrypted_info) if not decrypted_info is None else dict()
+        # Need to call json.loads() twice. asdfgh
+        result = json.loads(json.loads(decrypted_info)) if decrypted_info else dict()
+        return result
 
 def write_encrypted_machine_to_hostname_info(info, fpath=osp.join(osp.dirname(__file__), "ssh_info.enc")):
     """Writes the SSH info in [info] to [fpath] in an encrypted format."""
@@ -171,98 +170,113 @@ def machine_to_hostname(m):
     ssh_info = read_encrypted_machine_to_hostname_info()
     return ssh_info[m] if m in ssh_info else None
 
-def to_hostname(x):
-    """Converts [x], which can be a machine name, ssh name, or hostname, to a hostname."""
+@functools.cache
+def to_hostname(x, allow_if_can_ssh=True):
+    """Returns the hostname corresponding to [x], or [x] if's ssh-able and
+    [allow_if_can_ssh] is True, or None.
+    """
     if x in machine2hostname:
         return machine2hostname[x]
     decrypted_m2h = read_encrypted_machine_to_hostname_info()
     if x in decrypted_m2h:
         return decrypted_m2h[x]
-    return x # Assume it's already a hostname
+    elif allow_if_can_ssh and check_connection(x):
+        return x
+    else:
+        return None
 
+@functools.cache
 def hostname_is_current_machine(h):
-    """Returns if [hostname] corresponds to the current machine."""
-    return socket.getfqdn() == h
+    """Returns if hostname [h] corresponds to the current machine."""
+    return (socket.getfqdn() == h) or (os.uname().nodename == h)
 
+@functools.cache
 def check_connection(machine):
+    """Returns if [machine] can be SSHed to."""
     cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {machine} exit"
     result = subprocess.getoutput(cmd)
     return result == ""
 
-def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error", **ssh_kwargs):
-    """Runs [command] on machine [m] and returns the output."""
+def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error"):
+    """Runs [command] on machine [m] and returns the output.
+    
+    Args:
+    machine             -- machine or SSHable thing to run command on
+    command             -- command to run on machine
+    ssh_args            -- additional arguments passed to SSH (probably none needed)
+    if_connect_error    -- Something returned on connection error
+    if_ssh_map_error    -- Something returned if we can't find the hostname
+    """
     cwd = os.getcwd()
-    os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
+    os.chdir("/") # This fixes an issue at one point; not sure why.
     
-    target_hostname = to_hostname(machine)
-    if hostname_is_current_machine(target_hostname):
-        result = subprocess.getoutput(command)
-        os.chdir(cwd)
-        return result
-    
-
-
-    
-    
-    if os.uname().nodename == to_hostname(machine) or machine is None:
-        result = subprocess.getoutput(command)
-        os.chdir(cwd)
-        return result
-    
-    
-    ssh_name = to_ssh_name(machine)
-    if ssh_name is None:
+    target_hostname = to_hostname(machine, allow_if_can_ssh=False)
+    if target_hostname is None:
         if if_ssh_map_error == "HostInfoError":
-            raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
+            raise HostInfoError(f"SSHable name for machine={machine} unknown")
         else:
             return if_ssh_map_error() if callable(if_ssh_map_error) else if_ssh_map_error
-    else:
-        if not check_connection(ssh_name):
+    elif hostname_is_current_machine(target_hostname):
+        result = subprocess.getoutput(command)
+        os.chdir(cwd)
+        return result
+    elif not check_connection(target_hostname):
+        if if_connect_error == "HostInfoError":
+            raise HostInfoError(f"Found hostname={target_hostname} for machine={machine}, but can't SSH")
+        else:
             return if_connect_error() if callable(if_connect_error) else if_connect_error
-
+    else:
         ssh_args_str = " ".join(ssh_args)
-        command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
+        command_to_run = f"ssh {ssh_args_str} {target_hostname} '{command}'"
         result = subprocess.getoutput(command_to_run)
         os.chdir(cwd)
         return result
 
+@functools.cache
+def get_machine_name_to_hostname_map_by_ssh_conf():
+    """Returns a dict mapping machine names to hostnames by parsing the
+    ~/.ssh/config file on the current machine.
+    """
+    if not osp.exists(osp.expanduser("~/.ssh/config")):
+        return dict()
+    
+    with open(osp.expanduser("~/.ssh/config"), "r") as f:
+        lines = f.readlines()
+        lines = [l.strip().split("#", 1)[0] for l in lines] # Remove comments
+    
+    ssh_machine2hostname = dict()
+    cur_hosts = None
+    for l in lines:
+        if l.startswith("Host "):
+            cur_hosts = l.strip().split()[1:]
+            cur_hosts = [h for h in cur_hosts if not h.startswith("*")]
+        elif l.startswith("HostName ") and not cur_hosts is None:
+            for h in cur_hosts:
+                ssh_machine2hostname[h] = l.split()[1]
+            cur_hosts = None
+        else:
+            continue
+        
+    return ssh_machine2hostname
 
+@functools.cache
+def get_machine_name_to_hostname_map_all(include_cc=True):
+    """Returns a dict mapping machine names to hostnames by using the known
+    structure of hostnames in the CC domain.
+    """
+    result = get_machine_name_to_hostname_map_by_ssh_conf() | machine2hostname
+    result = result if include_cc else {m: h for m,h in result.items() if not h.endswith("alliancecan.ca")}
+    return result
 
+@functools.cache
+def get_all_usable_ssh_names(include_cc=True):
+    """Returns a list of all machine names that we can SSH to."""
+    machine2hostname = get_machine_name_to_hostname_map_all()
+    machine2hostname = machine2hostname if include_cc else {m: h for m,h in machine2hostname.items() if h.endswith("alliancecan.ca")}
+    machine2hostname = {m: h for m,h in machine2hostname.items() if check_connection(h)}
+    return machine2hostname.values()
 
 if __name__ == "__main__":
-
-    def get_machine_name_to_hostname_map_by_ssh_conf():
-        """Returns a dict mapping machine names to hostnames by parsing the
-        ~/.ssh/config file on the current machine.
-        """
-        if not osp.exists(osp.expanduser("~/.ssh/config")):
-            return dict()
-        
-        with open(osp.expanduser("~/.ssh/config"), "r") as f:
-            lines = f.readlines()
-            lines = [l.strip().split("#", 1)[0] for l in lines] # Remove comments
-        
-        ssh_machine2hostname = dict()
-        cur_hosts = None
-        for l in lines:
-            if l.startswith("Host "):
-                cur_hosts = l.strip().split()[1:]
-                cur_hosts = [h for h in cur_hosts if not h.startswith("*")]
-            elif l.startswith("HostName ") and not cur_hosts is None:
-                for h in cur_hosts:
-                    ssh_machine2hostname[h] = l.split()[1]
-                cur_hosts = None
-            else:
-                continue
-            
-        return ssh_machine2hostname
-
-    def get_machine_name_to_hostname_map_all():
-        """Returns a dict mapping machine names to hostnames by using the known
-        structure of hostnames in the CC domain.
-        """
-        return get_machine_name_to_hostname_map_by_ssh_conf() | machine2hostname
-
 
     def test_encryption():
         """Tests the encryption and decryption functions."""
@@ -271,14 +285,7 @@ if __name__ == "__main__":
         decrypted_info = read_encrypted_info()
         print(decrypted_info)
 
-
-
-
-
-
-
     print(get_machine_name_to_hostname_map_all())
-
     test_encryption()
 
 

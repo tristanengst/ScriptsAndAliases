@@ -5,6 +5,7 @@ use what's here. The only requirement is that no two hosts can share an SSH name
 """
 import argparse
 from collections import defaultdict
+import functools
 import json
 import math
 import os
@@ -12,11 +13,11 @@ import os.path as osp
 import sys
 import subprocess
 
+import SSHCommunication
 import Utils
 import UtilsBase
 from UtilsBase import twrite
 from UserConfig import cluster2accounts
-
 
 # Dictionary machine names to their information. Note that hostnames are not included,
 # and some functionality requires this. By assumption, for at least one element of
@@ -215,193 +216,6 @@ cluster2misc_reqs = dict(
     cs_apex=dict(wandb_default_mode="online",
         default_account=""))
 
-def get_ssh_config():
-    """Returns the SSH config file as a dictionary. It should be the case that each
-    key is an element of 'ssh_names' for some machine in [machine2info], and that it
-    will contain a 'HostName' entry for it.
-    """
-    ssh_config_file = osp.expanduser("~/.ssh/config")
-    if not osp.exists(ssh_config_file):
-        raise FileNotFoundError(f"Aborting: {ssh_config_file} not found. Please create it with the correct hosts.")
-
-    with open(ssh_config_file, "r") as f:
-        lines = f.readlines()
-
-    cur_host = None
-    machine2ssh_config = defaultdict(lambda: dict())
-    for line in lines:
-        line = line.strip().split()
-        if len(line) >= 2 and not line[0].startswith("#"):
-            k, v = line[:2]
-            if k == "Host" and not v == "*":
-                cur_host = v
-            elif cur_host is None:
-                pass
-            else:
-                machine2ssh_config[cur_host][k] = v
-    return machine2ssh_config
-
-class HostInfoError(Exception):
-    """Custom exception for HostInfo-related errors."""
-    pass
-
-def get_current_machine():
-    """Returns the machine name of the current machine, or None if it can't be found."""
-    return Utils.get_cluster_type() if Utils.is_slurm() else to_ssh_name(os.uname().nodename)
-
-def get_all_usable_ssh_names():
-    """Returns a list of all SSH names for all machines that could be SSHed to."""
-    if Utils.is_cc():
-        machine_names = [m for m in machine2info if m in machines_cc]
-    else:
-        machine_names = list(machine2info.keys())
-    ssh_names = [to_ssh_name(m) for m in machine_names]
-    return [s for s in ssh_names if not s is None]
-
-
-def to_ssh_name(x=None):
-    """Returns an SSH-able name corresponding to machine/hostname/SSH name [x]. If no
-    name can be determined, return None.
-
-    Args:
-    x -- thing to get SSH name for, or None for the current machine/cluster
-    """
-    ssh_config = get_ssh_config()
-    if x is None and Utils.is_slurm():
-        cluster_type = Utils.get_cluster_type()
-        if cluster_type in ssh_config:
-            return cluster_type
-    else:
-        x = os.uname().nodename if x is None else x
-
-    # CASE 1: [x] is an SSH-able name already
-    if x in ssh_config:
-        return x
-    # CASE 2: [x] is the machine name of a machine in [machine2info], and it has a recorded SSH name in the user's config file
-    if x in machine2info:
-        possible_ssh_names = machine2info[x]["ssh_names"]
-        matches = [p for p in possible_ssh_names if p in ssh_config]
-        if matches:
-            return matches[0]
-    # CASE 4: [x] is a hostname already; we can hopefully just SSH to it directly. In this case, we can query the connection quickly.
-    connection_test_command = f"ssh -o ConnectTimeout=3 {x} 'echo connected'"
-    connection_test_result = subprocess.getoutput(connection_test_command)
-    if connection_test_result == "connected":
-        return x
-    else:
-        return None
-
-
-def to_hostname(x=None):
-    """Returns the hostname corresponding to machine/hostname/SSH name [x]. If no
-    hostname can be determined, return None.
-
-    Args:
-    x -- thing to get SSH name for, or None for the current machine/cluster
-    """
-    # CASE 1: [x] is an SSH-able name, so we should be able to read the hostname
-    # directly from the ~/.ssh/config file.
-    # CASE 2: [x] is a machine name in [machine2info]. In this case, one of its
-    # [ssh_names] might be an entry in the user's ~/.ssh/config file. However, we
-    # would've already tried this route in CASE 1, so nothing to do here.
-    # CASE 3: [x] is a hostname already. In this case, it would be SSH-able, so we
-    # would've already returned it in CASE 1.
-    ssh_name = to_ssh_name(x)
-    ssh_config = get_ssh_config()
-    if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
-        return ssh_config[ssh_name]["HostName"]
-    elif not ssh_name is None:
-        return ssh_name
-    else:
-        return None
-
-def to_machine_name(x=None):
-    """Returns the machine name corresponding to machine/hostname/SSH name [x]. If no
-    machine name can be determined, return None.
-    """
-    # CASE 1: is an SSH-able name, so we should be able to read the hostname
-    # directly from the ~/.ssh/config file. From this we can determine the machine name.
-    # CASE 2: [x] is a machine name in [machine2info]. In this case, we can just return it.
-    # CASE 3: [x] is a hostname already. In this case, we can determine the machine name from it.
-    x = os.uname().nodename if x is None else x
-    if x in machine2info:
-        return x
-    
-    ssh_name = to_ssh_name(x)
-    ssh_config = get_ssh_config()
-    if ssh_name in ssh_config and not ssh_name is None and "HostName" in ssh_config[ssh_name]:
-        x = ssh_config[ssh_name]["HostName"]
-        # Try again, this might work sometimes
-        if x in machine2info:
-            return x
-        
-    # Now [x] is either a hostname or an IP address or something else. Either way,
-    # hostname_to_machine() will give us the machine name if possible.
-    return hostname_to_machine(x)
-
-        
-def hostname_to_machine(hostname):
-    """Returns the SSH name in [ssh_name2info] of [hostname]."""
-    def extract_machine_from_true_hostname_heuristic(true_hostname):
-        """Given a true hostname of form REDACTED, returns the machine name using a
-        convoluted heuristic.
-        """
-        try:
-            digits = [c for c in hostname if c.isdigit()]            
-            prefix = true_hostname[8] if true_hostname[8].isalpha() else (true_hostname[3] if true_hostname[3].isalpha() else true_hostname[0])
-            result = f"{prefix.upper()}{int(''.join(digits))}"
-            return result if result in machine2info else None
-        except:
-            return None
-
-    if hostname in cluster2node2config:
-        return hostname
-    elif all([c.isdigit() or c == "." for c in hostname]):
-        # If it's an IP address, we can SSH to it and ask for the hostname directly
-        command = f"ssh -o ConnectTimeout=3 {hostname} 'hostname'"
-        result = subprocess.getoutput(command)
-        return hostname_to_machine(result)
-    else:
-        return extract_machine_from_true_hostname_heuristic(hostname)
-        
-
-def hostname_is_current_machine(hostname):
-    """Returns True if [hostname] is the current machine. NOTE: this won't necessarily
-    work as expected on clusters, where by machine we typically are thinking of any
-    login node.
-    """
-    return os.uname().nodename == hostname
-
-
-def check_connection(machine):
-    cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {machine} exit"
-    result = subprocess.getoutput(cmd)
-    return result == ""
-
-def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error", **ssh_kwargs):
-    """Runs [command] on machine [m] and returns the output."""
-    cwd = os.getcwd()
-    os.chdir("/") # Not sure why this fixes an issue. Need to change back to the normal directory after running the command
-    if os.uname().nodename == to_hostname(machine) or machine is None:
-        result = subprocess.getoutput(command)
-        os.chdir(cwd)
-        return result
-    ssh_name = to_ssh_name(machine)
-    if ssh_name is None:
-        if if_ssh_map_error == "HostInfoError":
-            raise HostInfoError(f"Could not find SSH name for machine {machine}. Please check your ~/.ssh/config file.")
-        else:
-            return if_ssh_map_error() if callable(if_ssh_map_error) else if_ssh_map_error
-    else:
-        if not check_connection(ssh_name):
-            return if_connect_error() if callable(if_connect_error) else if_connect_error
-
-        ssh_args_str = " ".join(ssh_args)
-        command_to_run = f"ssh {ssh_args_str} {ssh_name} '{command}'"
-        result = subprocess.getoutput(command_to_run)
-        os.chdir(cwd)
-        return result
-
 def get_updated_machine_info(m, verbose=0):
     """Returns a Namespace giving the nvidia-smi output, number of GPUs, and number
     CPU cores on machine [m].
@@ -438,14 +252,14 @@ def get_updated_machine_info(m, verbose=0):
 
     if nvidia_smi_ok:
         user2gpu_ids = defaultdict(lambda: set())
-        result = run_command_on_machine(machine=m, command="nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory --format=csv,noheader")
+        result = SSHCommunication.run_command_on_machine(machine=m, command="nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory --format=csv,noheader")
 
         if len(result) == 0:
             user2gpu_ids = dict()
         else:
             for line in result.split("\n"):
                 pid = line.split()[1].replace(",", "")
-                user = run_command_on_machine(machine=m, command=f"ps -o user= -p {pid}").strip()
+                user = SSHCommunication.run_command_on_machine(machine=m, command=f"ps -o user= -p {pid}").strip()
                 if not user == "":
                     user2gpu_ids[user].add(line.split()[0])
 
@@ -474,67 +288,3 @@ def str_to_gpu_type(s):
             matched_gpu_name_alias = sorted(matched_gpu_name2alias.items(), key=lambda x: len(x[0]))
             result = matched_gpu_name_alias[-1][1]
     return None if (result is None or not result in gpu2info) else result
-
-
-######################################################################################
-# Useful for Solar
-######################################################################################
-class SlurmNodeInfo:
-    def __init__(self, s):
-        def extract_key(*, s, key, default=None):
-            """Returns the value of [key] from [s]. If it can be interpeted as an
-            integer, it is returned as one. Further, if it can be interpreted as an
-            integer number of space (ie. number ending with 'G' or 'M'), returns the
-            number in GB.
-            """
-            kv = [t for t in s.split(",") if key in t]
-            if len(kv) == 0 and default is None:
-                raise ValueError(f"Couldn't kind key={key} in s={s}")
-            elif len(kv) == 0:
-                k, v = key, default
-            elif len(kv) == 2:
-                raise ValueError(f"Found multiple matches for key={key} in s={s}: {kv}")
-            elif len(kv) == 1 and not kv[0].count("=") == 1:
-                raise ValueError(f"Computed kv={kv[0]} from s={s}, but it did not contain exactly one equals sign")
-            else:
-                k, v = key, kv[0].split("=")[-1]
-
-            if isinstance(v, str) and v.rstrip("G").isdigit():
-                result = int(v.rstrip("G"))
-            elif isinstance(v, str) and v.rstrip("M").isdigit():
-                result = int(v.rstrip("M").isdigit() * 1024)
-            elif isinstance(v, str) and  v.isdigit():
-                result = int(v)
-            else:
-                result = v
-
-            return result
-            
-        lines = s.split()
-        info = {l.split("=")[0]: "=".join(l.split("=")[1:]) for l in lines}
-        self.info = argparse.Namespace(**{k.lower(): v for k,v in info.items()})
-
-        self.gpu_alias = gpu_name2alias[self.info.gres.split(":")[1]]
-        self.gpu_vram = gpu2vram[self.gpu_alias]
-        self.alloc_gpus = extract_key(s=self.info.alloctres, key="gres/gpu", default=0)
-        self.total_gpus = extract_key(s=self.info.cfgtres, key="gres/gpu")
-        self.alloc_cpus = extract_key(s=self.info.alloctres, key="cpu", default=0) // 2
-        self.total_cpus = extract_key(s=self.info.cfgtres, key="cpu") // 2
-        self.alloc_mem = extract_key(s=self.info.alloctres, key="mem", default=0)
-        self.total_mem = extract_key(s=self.info.cfgtres, key="mem")
-        
-        self.alloc_frac = max([self.alloc_gpus / self.total_gpus, self.alloc_cpus / self.total_cpus, self.alloc_mem / self.total_mem])
-        self.alloc_gpus_eff = math.ceil(self.alloc_frac * self.total_gpus)
-        self.free_gpus_eff = self.total_gpus - self.alloc_gpus_eff
-
-    def __repr__(self): return f"{self.__class__.__name__}(nodename={self.info.nodename}, total_gpus={self.total_gpus}, free={self.free_gpus_eff} vram={self.gpu_vram})"
-
-    @staticmethod
-    def get_all_slurm_node_infos():
-        s = "scontrol show nodes" if Utils.is_solar() else f"ssh {host_to_ssh_name('solar')} 'scontrol show nodes'"
-        scontrol_show_nodes = subprocess.getoutput(s).split("\n\n")
-        node_infos = [SlurmNodeInfo(s) for s in scontrol_show_nodes]
-        return node_infos
-
-if __name__ == "__main__":
-    print(to_ssh_name())
