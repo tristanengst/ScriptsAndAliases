@@ -17,7 +17,7 @@ if __name__ == "__main__":
         args.update_on = [SSHCommunication.get_current_machine()]
         twrite(f"[INFO] No machines specified to update on, so defaulting to current machine: {args.update_on}")
     elif "all" in args.update_on:
-        args.update_on = SSHCommunication.get_machine_name_to_hostname_map_all.values()
+        args.update_on = SSHCommunication.get_machine_name_to_hostname_map_all().values()
         twrite(f"[INFO] will update on all SSH-able machines with SSH names: {args.update_on}")
     else:
         pass
