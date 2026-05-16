@@ -210,7 +210,7 @@ def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="e
     cwd = os.getcwd()
     os.chdir("/") # This fixes an issue at one point; not sure why.
     
-    target_hostname = to_hostname(machine, allow_if_can_ssh=False)
+    target_hostname = to_hostname(machine, allow_if_can_ssh=True)
     if target_hostname is None:
         if if_ssh_map_error == "HostInfoError":
             raise HostInfoError(f"SSHable name for machine={machine} unknown")

@@ -25,9 +25,13 @@ if __name__ == "__main__":
     for u in tqdm(args.update_on):
         twrite("-" * 80)
         twrite(f"Updating host={u}...")
-        result = SSHCommunication.run_command_on_machine(machine=u,
-            command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",
-            if_connect_error="HostInfoError",
-            if_ssh_map_error="HostInfoError",
-        )
+        try:
+            result = SSHCommunication.run_command_on_machine(machine=u,
+                command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",
+                if_connect_error="HostInfoError",
+                if_ssh_map_error="HostInfoError",
+            )
+        except Exception as e:
+            twrite(f"Error updating host={u}: {e}")
+            continue
         twrite(f"Result of updating host={u}:\n{result}")

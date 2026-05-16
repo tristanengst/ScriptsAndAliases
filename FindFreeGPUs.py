@@ -1,5 +1,7 @@
 """Pretty prints information on available GPUs. Heuristically, GPUs that aren't
 running a process with 'python' in the name are available.
+
+TODO: Why are the last-used GPUs in a range sometimes reported wrong?
 """
 import argparse
 from collections import defaultdict
