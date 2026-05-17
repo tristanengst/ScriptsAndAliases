@@ -61,7 +61,7 @@ def gpu_index_to_users(h=None):
 
 def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None):
     if machine2gpu_index2users is None:
-        machine2gpu_index2users = {MachineInfo.to_machine_name(): gpu_index_to_users()}
+        machine2gpu_index2users = {SSHCommunication.get_machine_name(): gpu_index_to_users()}
 
     machine2num_free_gpus = {m: sum([len(users) == 0 for users in gpu_index2users.values()]) for m, gpu_index2users in machine2gpu_index2users.items()}
     machine2gpu_index2users = sorted(machine2gpu_index2users.items(), key=lambda x: machine2num_free_gpus[x[0]], reverse=True)
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     P.add_argument("--hosts", type=str, nargs="*", default=MachineInfo.machine2info.keys(), choices=list(MachineInfo.machine2info.keys()),)
     P.add_argument("-c", "--current", action="store_true", help="Only check the current machine")
     args = P.parse_args()
-    args.hosts = [MachineInfo.to_machine_name()] if args.current else [h for h in args.hosts if h not in excluded_hosts]
+    args.hosts = [SSHCommunication.get_machine_name()] if args.current else [h for h in args.hosts if h not in excluded_hosts]
 
     with Pool(processes=min(16, len(args.hosts))) as p:
         gpuindex2users = p.map(gpu_index_to_users, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))

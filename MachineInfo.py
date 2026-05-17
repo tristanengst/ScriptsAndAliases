@@ -225,8 +225,8 @@ def get_updated_machine_info(m, verbose=0):
     m           -- machine name, which must be a key in [machine2info], or a hostname
     """
     try:
-        result = run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
-    except HostInfoError as e:
+        result = SSHCommunication.run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
+    except SSHCommunication.HostInfoError as e:
         twrite(f"Error: Could not connect to machine {m} to get updated machine info: {e}. Skipping.")
         return argparse.Namespace(nvidia_smi="",
             nvidia_smi_ok=False,
@@ -239,7 +239,7 @@ def get_updated_machine_info(m, verbose=0):
     nvidia_smi_output = "\n".join(nvidia_smi_lines)
     
     # Find the total number of GPUs and if nvidia-smi is working
-    m = to_machine_name(m)
+    m = SSHCommunication.hostname_to_machine(m)
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
         if verbose:
             print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
