@@ -147,10 +147,9 @@ aliases = [
     
     # Sadly, not an alias.
     """pythonact() {
-    output=$(python ~/.ScriptsAndAliases/PythonEnvSwitch.py --env $@)
+    output=$(python ~/.ScriptsAndAliases/PythonEnvSwitch.py $@)
     echo "$output" | grep -v '^EVAL'
     cmd=$(echo "$output" | grep '^EVAL' | sed 's/^EVAL//')
-    echo "Python activate command: $cmd"
     eval "$cmd"
     }""",
 

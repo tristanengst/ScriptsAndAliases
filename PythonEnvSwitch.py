@@ -35,7 +35,7 @@ def get_conda_envs(verbose=0):
 
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
-    P.add_argument("--env_name", default=None, type=str, help="Name of environment to activate or None to choose")
+    P.add_argument("env_name", nargs="?", default=None, type=str, help="Name of environment to activate or None to choose")
     P.add_argument("--verbose", action="count", default=0,)
     args = P.parse_args()
 
@@ -48,6 +48,10 @@ if __name__ == "__main__":
     else:
         env2activate_cmd = dict()
         for env_name, system2activate_cmd in UserConfig.env2system2activate_cmd.items():
+            
+            # Sort [system2activate_cmd] so 'default' comes first if it exists.
+            system2activate_cmd = dict(sorted(system2activate_cmd.items(), key=lambda x: 0 if x[0] == "default" else 1))
+            
             for system_name, activate_cmd in system2activate_cmd.items():
                 # Add default first so that we can overwrite it later if there's a
                 # system-specific command.
@@ -60,19 +64,30 @@ if __name__ == "__main__":
 
     # Check that path-based virtualenvs (ie. source /path/to/env/bin/activate)
     # actually have existing paths.
-    for env,cmd in env2activate_cmd.items():
-        if cmd.startswith("source "):
-            fpath = cmd[len("source "):].split()[0].strip()
-            if not osp.exists(fpath):
-                _ = twrite(f"[WARNING]: activation command for environment {env} is '{cmd}', but path {fpath} does not exist. Skipping this environment.", quiet=not args.verbose)
-                continue
-                del env2activate_cmd[env]
+    def is_conda_and_conda_avail(cmd):
+        return "conda activate " in cmd and conda_available
 
+    def is_venv_and_path_exists(cmd):
+        if " source " in cmd:
+            fpath = cmd.index("source ") + len("source ")
+            fpath = cmd[fpath:].strip().split()[0]
+            fpath = osp.expanduser(fpath) if fpath.startswith("~") else fpath
+            fpath_exists = osp.exists(fpath)
+            if not fpath_exists:
+                _ = twrite(f"Virtualenv path {fpath} does not exist for command '{cmd}' -> skip")
+            return fpath_exists
+        else:
+            return False
+
+    env2activate_cmd = {e: c for e,c in env2activate_cmd.items() if is_conda_and_conda_avail(c) or is_venv_and_path_exists(c)}
+    
     if not args.env_name:
-        _ = twrite(f"Available environments: {list(env2activate_cmd.keys())}")
+        avail_envs_str = "\n\t".join([f"{env:<30} {cmd}" for env, cmd in env2activate_cmd.items()])
+        _ = twrite(f"Available environments:\n\t{avail_envs_str}")
         sys.exit(0)
     elif args.env_name not in env2activate_cmd:
-        _ = twrite(f"Environment {args.env_name} not found. Available environments: {list(env2activate_cmd.keys())}")
+        avail_envs_str = "\n\t".join([f"{env:<30} {cmd}" for env, cmd in env2activate_cmd.items()])
+        _ = twrite(f"Environment {args.env_name} not found. Available environments:\n\t{avail_envs_str}")
         sys.exit(1)
     else:
         activate_cmd = env2activate_cmd[args.env_name]
