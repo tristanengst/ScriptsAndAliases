@@ -33,7 +33,7 @@ cluster2accounts = dict(
 # They don't necessarily need to exist
 ######################################################################################
 checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
-    "~/scratch/IMLE-SSL/models_mae",
+    "~/scratch/IMLE-SSL/models_mae", "~/scratch/IMLE-SSL/models_mmseg",
     "~/scratch/IMLE-SSL/finetunes",
     "~/scratch/IMLE-SSL/segmentation",
     "~/Development/IMLE-SSL-2/probes",
