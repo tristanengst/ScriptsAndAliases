@@ -125,3 +125,25 @@ colorize_states_cutoff_values = [1, 2, 5, 10, 20, 30, 40, 50, 60, 90]
 ######################################################################################
 
 slurm_job_data_dir = osp.join(osp.dirname(osp.abspath(__file__)), "slurm_job_data")
+
+######################################################################################
+# Configurable easy python environment activation.
+# default: matches anything, tried last
+# cc: matches any ComputeCanada system
+######################################################################################
+env2system2activate_cmd = dict(
+    py311IMLESSL=dict(
+        cc="module load python/3.11 && source ~/py311IMLESSL/bin/activate",
+        default="conda activate py311IMLESSL",
+    ),
+    py312MMSeg=dict(
+        cc="module load python/3.12 gcc opencv/4.11 && source ~/py312MMSeg/bin/activate",
+        default="conda activate py12MMSeg",
+    ),
+    py311ColorMAE=dict(
+        default="conda activate py311ColorMAE",
+    )
+)
+
+
+

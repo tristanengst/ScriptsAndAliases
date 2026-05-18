@@ -145,7 +145,16 @@ aliases = [
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
     
-    # "eval \"$(python ~/.ScriptsAndAliases/LoadLastPyEnv.py)\"",
+    # Sadly, not an alias.
+    """pythonact() {
+    output=$(python ~/.ScriptsAndAliases/PythonEnvSwitch.py --env $@)
+    echo "$output" | grep -v '^EVAL'
+    cmd=$(echo "$output" | grep '^EVAL' | sed 's/^EVAL//')
+    echo "Python activate command: $cmd"
+    eval "$cmd"
+    }""",
+
+
 
     "# END USEFUL ML ALIASES"]
 
