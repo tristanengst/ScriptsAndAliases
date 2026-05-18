@@ -15,6 +15,7 @@ from collections import defaultdict
 
 import FileFinding
 import MachineInfo
+import SSHCommunication
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
@@ -315,7 +316,7 @@ if __name__ == "__main__":
             dest2files_desc = output["dest2files_desc"]
             commands = [f"{c}/" if not c.endswith("/") else c for c in output["commands"]]
 
-            _ = twrite(f"[INFO] {cluster} -> {MachineInfo.get_current_machine()}:\n{dest2files_desc}")
+            _ = twrite(f"[INFO] {cluster} -> {SSHCommunication.get_machine_name()}:\n{dest2files_desc}")
             commands_str = "\n\t".join(commands)
             _ = twrite(f"[INFO] {'Would run' if args.dry_run else 'Running'}\n\t{commands_str}")
             
