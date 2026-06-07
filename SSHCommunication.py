@@ -52,7 +52,7 @@ def read_encrypted_machine_to_hostname_info(fpath=osp.join(osp.dirname(__file__)
     """Returns the SSH info encryped at [fpath] and returns it as a dict. If this
     fails, returns an empty dict.
     """
-    hostname = socket.getfqdn()
+    hostname = get_hostname()
     hostname_parts = hostname.split(".", 1)
     if len(hostname_parts) == 1 or hostname_parts[1] == "local":
         return dict() # Can't figure out the domain name, so just return an empty dict
@@ -129,7 +129,25 @@ class HostInfoError(Exception):
     pass
 
 @functools.cache
-def get_hostname(): return socket.getfqdn()
+def get_hostname():
+    result = socket.getfqdn()
+    if not "local" in result and "." in result:
+        return result
+
+    ##################################################################################
+    # Annoying alternative methods to get the hostname in case socket.getfqdn() fails,
+    # probably because the system isn't configured quite right in the first place. If
+    # any fail, the original result is returned and we hope for the best.
+    ##################################################################################
+    # Method 1: read IP address from terminal and pass to gethostbyaddr()
+    elif not "local" in result and not "." in result:
+        ip_address = subprocess.getoutput("ip route get 1.1.1.1 | grep -oP 'src \K[0-9.]+'")
+        socket_hostname = socket.gethostbyaddr(ip_address)[0]
+        if not "local" in socket_hostname and "." in socket_hostname:
+            return socket_hostname
+    else:
+        twrite(f"[WARNING] get_hostname() got unexpected result: {result}")
+        return result
 
 @functools.cache
 def hostname_to_machine(h):
