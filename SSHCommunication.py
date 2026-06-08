@@ -4,8 +4,13 @@ A key challege is that figuring out what other machines are actually called is
 surprisingly nontrivial given that we can't control how it's done incredibly weirdly
 sometimes.
 
-Paramiko violates the non-standard-library requirement.
+This file will look to be implemented incredibly weirdly. This is because:
+1. We can't store hostnames on a public-facing GitHub repo
+2. Paramiko would be cleaner, but violates the no non-standard-library desiderata
+
+
 """
+# H8Ob5d/AwjSufcTbF0ASK1ZeojgeAIxWISY9O+V0m4ZIwfjlycjMI/Ug3YJJFF83RFXxNB4e0UN/MCNj+yaJigeMqqDTiYRj422ImEsFSEdUTes2Xw6PD24lPjbmJ8jXSoK3pInUkXC4IIrbRQlKJCdc8yxdT59RIjQrK7M6ypcXz7m5jY7MZat7x9kGB0YmRC7lNEdN3kF8eDo+rm/XlFCS9LeQipY4vmiclARESCpGTZAjX1fcAGwmdi+7coKJVNSp+p6XkmLjfY/PSUYLJEpP81dLT8YCLTYoY6pnn9xJ0eyn05mPZrkgmtwSCwlnREPxNDxa3hgvdzg95naKwRzM6uOO1IF7vXrHyQFQRGUHTf02XyzEADV1eS24OpvUAZn35MWJzHWgfp2UFEMfKAUO8zpdT70bLW97bKhk18UUhKL5zcOROK5jmc5JVgxzSAywNFFN3kFqMTo86S3ahgeEvrWP1IF5oH6czgJGC2gHC7A4HgzeDi93NS+5YZvIRtv69pObkGCsYsfbC0kDZwgMtHUcA9JBbnd3bullldYVlLu438DCNL9hm8sSRAYoBwO9fxwDn0dsNDVgqHbYiETDrqaUlo5/uGPLgEcHHnQPA71/CADRRX8gdS+ne5PFCoK/t5yUzHWsLMWaRUMDdERV8TQbBI4Mbjk3J6p5mcEHgLT6npvAOu0sh9MFTEg8Rk2/fx8E0kNjOTIvpXSfxwWP9Lec2M4273ic1gREBCRcT/NgCAGfQ2F7OiKnfpvKB4S5tZPUgXfvIsmYDEwGagcdv3MET8YCLT4yIqd2iMoBmPS1kZaLd6NtjNkGS0RlB039Nl8GlU5jNHl06zWRzQiNu6aTn5s4rGKF0wZLCWMFDr84HgzeDi93Ly+mfpuGXsH4oJyXi3fjb4XWDkQEZQMMsHhTDp0AI3V5PaR7m9ZG2/r2nonPZblvm4hJRgd2EkGicAhDn0MteXtsmCbYnkTDuafQm5JztSOayBEVW3VIDLxmCUOPRHp7OC/pO9qGN9P47t3YgWXgb5nfHwgZdBBf42VTDpFSe3soKL45mcVGzfr2rsnALO0sislKRBpjHkKiZAtdz1EhNjY+vzmJwhHPubXfhw==
 import argparse
 import base64
 from collections import defaultdict
@@ -27,12 +32,25 @@ from UtilsBase import twrite
 # sharing the info among machines that should have access maximally easy without
 # storing it in plaintext.
 ######################################################################################
+def write_to_end_of_triple_quotes(*, data):
+    """Writes [data] to the end of the first occurence of triple`` quotes this file."""
+    content = UtilsBase.load_file_lite(__file__)
+    triple_quote_idx = content[content.find('"""') + 3:].find('"""') + 7
+    data_str = f"# {data}"
+    content = content[:triple_quote_idx] + data_str + "\n" + content[triple_quote_idx:]
+    _ = UtilsBase.atomic_save_lite(data=content, fpath=__file__)
+
+def read_from_triple_quotes():
+    """Reads the content between the first occurence of triple`` quotes in this file."""
+    content = UtilsBase.load_file_lite(__file__)
+    triple_quote_idx = content[content.find('"""') + 3:].find('"""') + 7
+    next_newline_idx = content.find("\n", triple_quote_idx)
+    return content[triple_quote_idx:next_newline_idx].strip("# ").strip()
 
 def encrypt(key, to_encrypt):
     """Encrypts a string using a key and returns a base64 string."""
     key_bytes = hashlib.sha256(key.encode().strip().lower()).digest()
     data_bytes = to_encrypt.encode()
-    # XOR each byte of data with the key hash
     processed = bytes(data_bytes[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(data_bytes)))
     return base64.b64encode(processed).decode()
 
@@ -41,14 +59,13 @@ def decrypt(key, encrypted):
     try:
         key_bytes = hashlib.sha256(key.encode().strip().lower()).digest()
         data_bytes = base64.b64decode(encrypted)
-        # XORing the encrypted data with the same key restores the original
         processed = bytes(data_bytes[i] ^ key_bytes[i % len(key_bytes)] for i in range(len(data_bytes)))
         return processed.decode()
     except Exception:
         return None
 
 @functools.cache
-def read_encrypted_machine_to_hostname_info(fpath=osp.join(osp.dirname(__file__), "ssh_info.enc")):
+def read_encrypted_machine_to_hostname_info(fpath=__file__):
     """Returns the SSH info encryped at [fpath] and returns it as a dict. If this
     fails, returns an empty dict.
     """
@@ -60,34 +77,24 @@ def read_encrypted_machine_to_hostname_info(fpath=osp.join(osp.dirname(__file__)
         prefix = hostname_parts[0].split("-")
         prefix[-1] = prefix[-1][-1] # Keep only last character
         key = "-".join(prefix) + hostname_parts[1]
-        encrypted_info = UtilsBase.load_file_lite(fpath).strip()
+        encrypted_info = read_from_triple_quotes().strip()
         decrypted_info = decrypt(key, encrypted_info)
-        # Need to call json.loads() twice. asdfgh
-        result = json.loads(json.loads(decrypted_info)) if decrypted_info else dict()
+        result = json.loads(decrypted_info) if decrypted_info else dict()
         return result
 
-def write_encrypted_machine_to_hostname_info(info, fpath=osp.join(osp.dirname(__file__), "ssh_info.enc")):
+def write_encrypted_machine_to_hostname_info(info, fpath=osp.abspath(__file__)):
     """Writes the SSH info in [info] to [fpath] in an encrypted format."""
-    hostname = socket.getfqdn()
+    hostname = get_hostname()
     hostname_parts = hostname.split(".", 1)
     if len(hostname_parts) == 1 or hostname_parts[1] == "local":
         raise ValueError("Can't figure out the domain name, so can't write encrypted info.")
     else:
-        def map_to_alphabet_modulo(text):
-            result =[(ord(char.upper()) - ord('A') + 1) % 2 for char in text if char.isalpha()][-4:]
-            return "".join([str(num) for num in result])
-            
         prefix = hostname_parts[0].split("-")
-        prefix[-2] = map_to_alphabet_modulo(prefix[-2])
         prefix[-1] = prefix[-1][-1] # Keep only last character
         key = "-".join(prefix) + hostname_parts[1]
-
         info_str = json.dumps(info)
         encrypted_info = encrypt(key, info_str)
-        _ = UtilsBase.atomic_save_lite(data=encrypted_info, fpath=fpath)
-
-        with open(fpath, "w") as f:
-            f.write(encrypted_info)
+        _ = write_to_end_of_triple_quotes(data=encrypted_info)
 
 ######################################################################################
 ######################################################################################
@@ -135,7 +142,7 @@ def get_hostname():
         return result
 
     ##################################################################################
-    # Annoying alternative methods to get the hostname in case socket.getfqdn() fails,
+    # Annoying alternative methods to get the hostname in case the code above fails,
     # probably because the system isn't configured quite right in the first place. If
     # any fail, the original result is returned and we hope for the best.
     ##################################################################################
@@ -206,7 +213,7 @@ def to_hostname(x, allow_if_can_ssh=True):
 @functools.cache
 def hostname_is_current_machine(h):
     """Returns if hostname [h] corresponds to the current machine."""
-    return (socket.getfqdn() == h) or (os.uname().nodename == h)
+    return get_hostname() == h
 
 @functools.cache
 def check_connection(machine):
@@ -295,16 +302,12 @@ def get_all_usable_ssh_names(include_cc=True):
     return machine2hostname.values()
 
 if __name__ == "__main__":
+    P = argparse.ArgumentParser()
+    P.add_argument("--write_encrypted", action="store_true")
+    args = P.parse_args()
 
-    def test_encryption():
-        """Tests the encryption and decryption functions."""
-        # to_encrypt = json.dumps(get_machine_name_to_hostname_map_all())
-        # _ = write_encrypted_info(to_encrypt)
-        decrypted_info = read_encrypted_info()
-        print(decrypted_info)
+    if args.write_encrypted:
+        _ = write_encrypted_machine_to_hostname_info(get_machine_name_to_hostname_map_all())
 
-    print(get_machine_name_to_hostname_map_all())
-    test_encryption()
-
-
-
+    decrypted_info = read_encrypted_machine_to_hostname_info()
+    twrite(decrypted_info=decrypted_info)
