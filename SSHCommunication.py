@@ -65,10 +65,7 @@ def decrypt(key, encrypted):
         return None
 
 @functools.cache
-def read_encrypted_machine_to_hostname_info(fpath=__file__):
-    """Returns the SSH info encryped at [fpath] and returns it as a dict. If this
-    fails, returns an empty dict.
-    """
+def read_encrypted_machine_to_hostname_info():
     hostname = get_hostname()
     hostname_parts = hostname.split(".", 1)
     if len(hostname_parts) == 1 or hostname_parts[1] == "local":
@@ -82,8 +79,7 @@ def read_encrypted_machine_to_hostname_info(fpath=__file__):
         result = json.loads(decrypted_info) if decrypted_info else dict()
         return result
 
-def write_encrypted_machine_to_hostname_info(info, fpath=osp.abspath(__file__)):
-    """Writes the SSH info in [info] to [fpath] in an encrypted format."""
+def write_encrypted_machine_to_hostname_info(info):
     hostname = get_hostname()
     hostname_parts = hostname.split(".", 1)
     if len(hostname_parts) == 1 or hostname_parts[1] == "local":
