@@ -92,6 +92,7 @@ cluster2node2config = dict(
         "cs-venus-16": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
         "cs-venus-17": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
         "cs-venus-18": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+        "cs-venus-19": dict(cpus_per_gpu=16, mem_per_gpu=180, gpu_alias="rtx6000", gpus_per_node=4, can_allocate=True, gpu_name="rtx_pro_6000_blackwell_se", gpu_frac=1.0),
     },
 
     cedar=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=46, gpu_alias="v100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'"), gpu_frac=1.0),
@@ -163,6 +164,7 @@ gpu2info = {
     a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0), # Estimated rgu_multiplier
     a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.1),                   # Estimated rgu_multiplier
     a6000a=dict(vram=48, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                   # Estimated rgu_multiplier
+    rtx6000=dict(vram=96, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1.0, rgu_multiplier=4),                   # Estimated rgu_multiplier
     a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0, rgu_multiplier=3.2),                           # Estimated rgu_multiplier
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgu_multiplier=4.0),
     a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgu_multiplier=0.6),
