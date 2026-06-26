@@ -86,10 +86,10 @@ def run_worker(args):
             print(f"[worker] keep {f}: in squeue")
         elif not ok:
             print(f"[worker] keep {f}: squeue unavailable -> not deleting anything")
-        elif now - osp.getmtime(f) < STALE_AGE_S:
+        elif now - osp.getmtime(f) < args.stale_age:
             age = int(now - osp.getmtime(f))
-            print(f"[worker] keep {f}: not in squeue but only {age}s old (< {STALE_AGE_S}s)")
-        elif dry_run:
+            print(f"[worker] keep {f}: not in squeue but only {age}s old (< {args.stale_age}s)")
+        elif args.dry_run:
             print(f"[worker] would remove {f}: not in squeue and stale (dry_run=True)")
         else:
             try:
