@@ -70,6 +70,8 @@ def run_worker(args):
     disk_usage_str = f"/localscratch: (free={localscratch_usage.free:.1f}GB, used by {user}={localscratch_user_usage.used:.1f}GB) /home: (free={home_usage.free:.1f}GB, used by {user}={home_user_usage.used:.1f}GB)"
     print(f"[worker] node={node} {disk_usage_str}")
 
+    print("AAAAAAAAAAAA")
+
     if not osp.isdir(tmpdir):
         print(f"[worker] {tmpdir} does not exist -> nothing to do")
         return
@@ -110,32 +112,27 @@ def get_solar_nodes():
 def run_controller(args):
     """Sruns the worker on each requested node, relaying its output."""
     user = os.environ["USER"]
-    remote = osp.join(f"/localscratch/{user}", osp.basename(__file__))
+    remote = osp.join(f"/home/{user}/scratch", osp.basename(__file__))
     nodes = args.nodes if len(args.nodes) > 0 else get_solar_nodes()
 
     # No shared filesystem is assumed, so embed this script's source as base64
     # in the srun command; the node decodes it to local scratch and runs it.
-    with open(osp.abspath(__file__), "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
-    inner = f"mkdir -p /localscratch/{user} && echo {b64} | base64 -d > {remote} && python3 {remote} --worker --stale_age={args.stale_age} {'--dry-run' if args.dry_run else ''}"
+    import UtilsBase
+    cleaning_script = UtilsBase.load_file_lite(osp.abspath(__file__))
+    shared_cleaning_script = UtilsBase.atomic_save_lite(data=cleaning_script, fpath=osp.expanduser(f"~/scratch/{osp.basename(__file__)}"))
+
+    inner = f"ls scratch && python3 {remote} --worker --stale_age={args.stale_age} {'--dry-run' if args.dry_run else ''}"
 
     for node in nodes:
         print(f"\n=== {node} ===")
         cmd = ["srun", f"--nodelist={node}", "--time=5:00",
-            "--ntasks-per-node=1", "--cpus-per-task=1", "--mem=2G",
-            f"--immediate={args.max_wait}", "bash", "-c", inner]
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                timeout=args.max_wait)
-        except subprocess.TimeoutExpired:
-            print(f"[controller] {node}: timed out")
-            continue
-        if not result.returncode == 0:
-            print(f"[controller] {node}: srun failed (rc={result.returncode}), likely could not allocate within {args.max_wait}s")
-            if result.stderr.strip():
-                print(result.stderr.strip())
-        if result.stdout.strip():
-            print(result.stdout.strip())
+            "--ntasks-per-node=1", "--cpus-per-task=1", "--mem=32G",
+            f"--immediate={args.max_wait}", f"--chdir=/home/{user}", "bash", "-lc", f"\"{inner}\""]
+        cmd = " ".join(cmd)
+        print(f"COMMAND={cmd}")
+        print("Running....")
+        result = subprocess.getoutput(cmd)
+        print(result)
 
 def get_args():
     P = argparse.ArgumentParser()
@@ -145,7 +142,7 @@ def get_args():
         help="Subset of node names to clean (default: all allocatable Solar nodes)")
     P.add_argument("--dry-run", action="store_true",
         help="Do not actually delete anything, just print what would be done")
-    P.add_argument("--max_wait", type=int, default=20,
+    P.add_argument("--max_wait", type=int, default=60,
         help="Seconds to wait for an srun allocation on a node before giving up")
     P.add_argument("--stale_age", type=int, default=300,
         help="Seconds a job folder must be old before deletion")
