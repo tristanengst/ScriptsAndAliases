@@ -153,4 +153,4 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    _ = run_worker() if args.worker else run_controller(args)
+    _ = run_worker(args) if args.worker else run_controller(args)
