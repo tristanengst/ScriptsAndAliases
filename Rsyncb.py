@@ -219,17 +219,14 @@ if __name__ == "__main__":
                     else:
                         source2prefix2files[s][f].append(osp.basename(f))
 
-
             source2prefix2filtered = {s: {p: files[:-1] for p,files in prefix2files.items()} for s,prefix2files in source2prefix2files.items()}
             source2prefix2filtered = {s: {p: files for p,files in prefix2files.items() if files} for s,prefix2files in source2prefix2filtered.items()}
 
             # These should all be unique!
             source2excluded = {s: [osp.join(s, f) for p,files in prefix2files.items() for f in files] for s,prefix2files in source2prefix2filtered.items()}
+            source2excluded = {s: [osp.basename(f) for f in files] for s,files in source2excluded.items()}
             _ = twrite(f"[INFO] Excluding files based on checkpoint filtering heuristic: {source2excluded}", quiet=not args.verbose)
             args.exclude += UtilsBase.flatten(list(source2excluded.values()))
-        
-        else:
-            assert 0
 
         # These files represent where the files will actually end up on the destination
         dests = [FileFinding.file_to_nonambiguous_path(s) for s in sources]
@@ -341,7 +338,12 @@ if __name__ == "__main__":
                 
         filter_checkpoints_str = " --filter_checkpoints " if args.filter_checkpoints else ""
         underlying_rsync_flags = format_underlying_rsync_flags_for_rsyncb_cmd(args)
-        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} --output_as_meta --terminal_size {os.get_terminal_size().columns} {filter_checkpoints_str}" for c in args.clusters}
+        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} {filter_checkpoints_str} --output_as_meta --terminal_size {os.get_terminal_size().columns} " for c in args.clusters}
+
+        twrite(cluster2send_command=cluster2send_command)
+
+
+
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
         try:
