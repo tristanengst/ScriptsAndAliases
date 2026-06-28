@@ -43,6 +43,36 @@ def filter_checkpoints_heuristic_to_exclude(checkpoint_folder, verbose=0):
     file2idx = {f: UtilsBase.remove_nonnumeric_suffix(f) for f in files}
 
 
+
+def format_underlying_rsync_flags_for_rsync(args):
+    """Returns a string with the relevant flags for the underlying rsync command."""
+    s = ""
+    s += "r" if args.r else ""
+    s += "v" if args.v else ""
+    s += "h" if args.h else ""
+    s += "a" if args.a else ""
+    s += "n" if args.n else ""
+    s = f"-{s} " if s else ""
+
+    s += f"--info={args.info} " if args.info else ""
+    s += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
+    s += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
+    return s
+
+def format_underlying_rsync_flags_for_rsyncb_cmd(args):
+    """Returns a string with the relevant flags for the underlying rsync command."""
+    s = ""
+    s += " -r " if args.r else " -no-r "
+    s += " -v " if args.v else " -no-v "
+    s += " -h " if args.h else " -no-h "
+    s += " -a " if args.a else " -no-a "
+    s += " -n " if args.n else " -no-n "
+
+    s += f" --info={args.info} " if args.info else ""
+    s += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
+    s += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
+    return s
+
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
@@ -185,9 +215,9 @@ if __name__ == "__main__":
                 for f in files:
                     if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions]) and UtilsBase.remove_nonnumeric(f):
                         prefix = UtilsBase.str_to_nonnumeric_prefix(f)
-                        source2prefix2files[s][prefix].append(f)
+                        source2prefix2files[s][prefix].append(osp.basename(f))
                     else:
-                        source2prefix2files[s][f].append(f)
+                        source2prefix2files[s][f].append(osp.basename(f))
 
 
             source2prefix2filtered = {s: {p: files[:-1] for p,files in prefix2files.items()} for s,prefix2files in source2prefix2files.items()}
@@ -310,7 +340,8 @@ if __name__ == "__main__":
             return result
                 
         filter_checkpoints_str = " --filter_checkpoints " if args.filter_checkpoints else ""
-        cluster2send_command = {c: f"{' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns} {filter_checkpoints_str}" for c in args.clusters}
+        underlying_rsync_flags = format_underlying_rsync_flags_for_rsyncb_cmd(args)
+        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} --output_as_meta --terminal_size {os.get_terminal_size().columns} {filter_checkpoints_str}" for c in args.clusters}
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
         try:
