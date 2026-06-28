@@ -215,7 +215,7 @@ if __name__ == "__main__":
 
         # Build the rsync command string with the appropriate flags and options. Note that we
         rsync_str = "rsync "
-        rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
+        rsync_str += "-" if any([args.r, args.v, args.h, args.a, args.n]) else ""
         rsync_str += "r" if args.r else ""
         rsync_str += "v" if args.v else ""
         rsync_str += "h" if args.h else ""
