@@ -19,6 +19,54 @@ import UtilsBase
 from UtilsBase import twrite
 from UserConfig import cluster2accounts
 
+# Information about GPUs. Fields are:
+# vram              -- amount of VRAM in GB
+# good              -- overall judgement on if the GPU is good or not
+# gpu_name          -- name of the GPU as per SLURM
+# ddp               -- whether the GPU can be used with DDP
+# gpu_frac          -- how many fractions of a regular GPU it takes up
+# rgu_multiplier    -- multiplier for RGUs when using this GPU type. See
+#                       docs.alliancecan.ca/wiki/Allocations_and_compute_scheduling.
+#                        Where estimated, should be read as essentially made-up. A
+#                        value over of 3.0+ generally indicates a decent GPU.
+gpu2info = {
+    "default_gpu": dict(vram=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1, rgu_multiplier=3.0),          # Placeholder values
+    "titan": dict(vram=8, good=False, gpu_name="titan_x", ddp=True, gpu_frac=1.0, rgu_multiplier=0.1),                 # Estimated rgu_multiplier
+    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),                   # Estimated rgu_multiplier
+    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0)} | dict(              # Estimated rgu_multiplier
+    t4=dict(vram=16, good=True, gpu_name="t4", ddp=True, gpu_frac=1.0, rgu_multiplier=1.6),
+    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),
+    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0, rgu_multiplier=1.1),
+    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),             # Estimated rgu_multiplier
+    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.3),            # Estimated rgu_multiplier
+    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0, rgu_multiplier=2.0),
+    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0, rgu_multiplier=2.6),                       # Estimated rgu_multiplier
+    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0), # Estimated rgu_multiplier
+    a6000=dict(vram=48, good=True, gpu_name="a6000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.1),                   # Estimated rgu_multiplier
+    a6000a=dict(vram=48, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                   # Estimated rgu_multiplier
+    rtx6000=dict(vram=96, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1.0, rgu_multiplier=4),                   # Estimated rgu_multiplier
+    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0, rgu_multiplier=3.2),                           # Estimated rgu_multiplier
+    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgu_multiplier=4.0),
+    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgu_multiplier=0.6),
+    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False, gpu_frac=0.25, rgu_multiplier=1.1),
+    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
+    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
+    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                          # Estimated rgu_multiplier
+    l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625, rgu_multiplier=0.3),          # Estimated rgu_multiplier
+    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0, rgu_multiplier=12.2),    
+    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125, rgu_multiplier=1.7),
+    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25, rgu_multiplier=3.5),
+    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5, rgu_multiplier=6.1),
+    h200=dict(vram=141, good=True, gpu_name="h200", ddp=True, gpu_frac=1.0, rgu_multiplier=20.0),                        # Estimated rgu_multiplier
+    mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),                    # Estimated rgu_multiplier
+    )
+    
+gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
+good_gpus = [k for k,v in gpu2info.items() if v["good"]]
+bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]
+gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
+gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
+
 # Dictionary machine names to their information. Note that hostnames are not included,
 # and some functionality requires this. By assumption, for at least one element of
 # [ssh_names] in each entry, you will have the corresponding Hostname or IP address in
@@ -60,6 +108,52 @@ machine2info = {
 # workstation-y machines and Solar.
 machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "rorqual", "nibi", "tamia"]
 
+
+def get_solar_node2config():
+    """Returns a dictionary describing Solar nodes as in [cluster2node2config]."""
+    node_datas = json.loads(subprocess.getoutput("scontrol show nodes --json"))["nodes"]
+    def parse_node_data(nd):
+        # print(nd)       
+        # We will find something like {"gres": "gpu:l40s:4(S:0-1)"}. So, remove the
+        # initial 'gpu:' string and the first parenthetical and everything after
+        if "gres" in nd:
+            gpu_str = UtilsBase.strip_left(nd["gres"], "gpu:")
+            gpu_str = gpu_str.split("(")[0]
+            gpu_name, gpus_per_node = gpu_str.split(":")
+            gpus_per_node = int(gpus_per_node)
+        else:
+            gpu_name, gpu = "unknown", 0
+        gpu_alias = gpu_name2alias.get(gpu_name, "unknown")
+        
+        cpus_per_gpu, mem_per_gpu = 1, 1
+        if "tres"in nd:
+            tres_resources = nd["tres"].split(",")
+            for tr_key,tr_val in [tr.split("=") for tr in tres_resources]:
+                if tr_key == "cpu":
+                    cpus_per_gpu = int(tr_val) // max(1, gpus_per_node)
+                elif tr_key == "mem":
+                    total_mem = UtilsBase.unit_conversion(tr_val, target="GiB")
+                    mem_per_gpu = total_mem // max(1, gpus_per_node)
+                else:
+                    pass
+
+        can_allocate = any([p in cluster2accounts["solar"] for p in nd["partitions"]])
+        can_allocate = can_allocate and (gpu2info[gpu_alias]["good"] if gpu_alias in gpu2info else False)
+        nodename = nd["name"]
+        return nodename, dict(
+            can_allocate=can_allocate,
+            gpu_name=gpu_name, gpu_alias=gpu_alias, gpus_per_node=gpus_per_node,
+            cpus_per_gpu=cpus_per_gpu, mem_per_gpu=mem_per_gpu,
+            gpu_frac=1.,
+        )
+    
+    nodes_configs = [parse_node_data(nd) for nd in node_datas]
+    node2config = dict(nodes_configs)
+
+    return node2config
+
+
+
 # Specifies configuration for possible nodes/types of nodes, grouped by cluster.
 # Commented out lines are for nodes not known to the scheduler.
 #
@@ -72,28 +166,29 @@ machines_cc = ["narval", "cedar", "killarney", "vulcan", "trillium", "fir", "ror
 # max_time      -- maximum time in hours that can be requested
 # constraint    -- constraint to use for the scheduler if possible
 cluster2node2config = dict(
-    solar={
-        "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a6000a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_6000_ada", gpu_frac=1),
-        "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
-        "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
-        "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
-        "cs-venus-01": dict(cpus_per_gpu=10, mem_per_gpu=84, gpu_alias="q6000", gpus_per_node=6, can_allocate=True, gpu_name="quadro_rtx_6000", gpu_frac=1.0),
-        "cs-venus-02": dict(cpus_per_gpu=8, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=8, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
-        "cs-venus-03": dict(cpus_per_gpu=12, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=4, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
-        "cs-venus-05": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_alias="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000", gpu_frac=1.0),
-        "cs-venus-06": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_alias="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000", gpu_frac=1.0),
-        "cs-venus-07": dict(cpus_per_gpu=8, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
-        "cs-venus-08": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="a100", gpus_per_node=4, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
-        "cs-venus-09": dict(cpus_per_gpu=7, mem_per_gpu=60, gpu_alias="a40", gpus_per_node=8, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
-        "cs-venus-12": dict(cpus_per_gpu=20, mem_per_gpu=128, gpu_alias="a6000", gpus_per_node=2, can_allocate=True, gpu_name="rtx_a6000", gpu_frac=1.0),
-        "cs-venus-13": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
-        "cs-venus-14": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
-        "cs-venus-15": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
-        "cs-venus-16": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
-        "cs-venus-17": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
-        "cs-venus-18": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
-        "cs-venus-19": dict(cpus_per_gpu=16, mem_per_gpu=180, gpu_alias="rtx6000", gpus_per_node=4, can_allocate=True, gpu_name="rtx_pro_6000_blackwell_se", gpu_frac=1.0),
-    },
+    # solar={
+    #     "cs-bd-01": dict(cpus_per_gpu=28, mem_per_gpu=125, gpu_alias="a6000a", gpus_per_node=4, can_allocate=True, gpu_name="rtx_6000_ada", gpu_frac=1),
+    #     "cs-gpu1": dict(cpus_per_gpu=10, mem_per_gpu=1, gpu_alias="titan", gpus_per_node=3, can_allocate=False, gpu_name="titan_xp", gpu_frac=1.0),
+    #     "cs-gpu2": dict(cpus_per_gpu=8, mem_per_gpu=1, gpu_alias="1080ti", gpus_per_node=4, can_allocate=False, gpu_name=None, gpu_frac=1.0),
+    #     "cs-gpu3": dict(cpus_per_gpu=4, mem_per_gpu=63, gpu_alias="2080", gpus_per_node=4, can_allocate=False, gpu_name="2080_ti", gpu_frac=1.0),
+    #     "cs-venus-01": dict(cpus_per_gpu=10, mem_per_gpu=84, gpu_alias="q6000", gpus_per_node=6, can_allocate=True, gpu_name="quadro_rtx_6000", gpu_frac=1.0),
+    #     "cs-venus-02": dict(cpus_per_gpu=8, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=8, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
+    #     "cs-venus-03": dict(cpus_per_gpu=12, mem_per_gpu=64, gpu_alias="2080", gpus_per_node=4, can_allocate=True, gpu_name="2080_ti", gpu_frac=1.0),
+    #     "cs-venus-05": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_alias="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000", gpu_frac=1.0),
+    #     "cs-venus-06": dict(cpus_per_gpu=16, mem_per_gpu=60, gpu_alias="a5000", gpus_per_node=8, can_allocate=True, gpu_name="rtx_a5000", gpu_frac=1.0),
+    #     "cs-venus-07": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
+    #     "cs-venus-08": dict(cpus_per_gpu=16, mem_per_gpu=128, gpu_alias="a100", gpus_per_node=4, can_allocate=True, gpu_name="a100", gpu_frac=1.0),
+    #     "cs-venus-09": dict(cpus_per_gpu=7, mem_per_gpu=60, gpu_alias="a40", gpus_per_node=8, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
+    #     "cs-venus-12": dict(cpus_per_gpu=20, mem_per_gpu=128, gpu_alias="a6000", gpus_per_node=2, can_allocate=True, gpu_name="a6000", gpu_frac=1.0),
+    #     "cs-venus-13": dict(cpus_per_gpu=32, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
+    #     "cs-venus-14": dict(cpus_per_gpu=32, mem_per_gpu=128, gpu_alias="a40", gpus_per_node=4, can_allocate=True, gpu_name="a40", gpu_frac=1.0),
+    #     "cs-venus-15": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+    #     "cs-venus-16": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+    #     "cs-venus-17": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+    #     "cs-venus-18": dict(cpus_per_gpu=32, mem_per_gpu=240, gpu_alias="l40s", gpus_per_node=4, can_allocate=True, gpu_name="l40s", gpu_frac=1.0),
+    #     "cs-venus-19": dict(cpus_per_gpu=16, mem_per_gpu=180, gpu_alias="rtx6000", gpus_per_node=4, can_allocate=True, gpu_name="rtx_pro_6000_blackwell_se", gpu_frac=1.0),
+    # },
+    solar=get_solar_node2config() if Utils.is_solar() else dict(),
 
     cedar=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=46, gpu_alias="v100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'"), gpu_frac=1.0),
         v100l=dict(cpus_per_gpu=8, mem_per_gpu=46, gpu_alias="v100l", gpus_per_node=4, can_allocate=True, extra_env_vars=dict(WANDB_DISABLE_SERVICE="'True'"), gpu_frac=1.0),
@@ -138,54 +233,6 @@ cluster2node2config = dict(
         t4=dict(cpus_per_gpu=11, mem_per_gpu=45, gpu_alias="t4", gpus_per_node=4, can_allocate=False, gpu_name="t4", gpu_frac=1.0)),
     cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True, gpu_frac=1.0))
 )
-
-# Information about GPUs. Fields are:
-# vram              -- amount of VRAM in GB
-# good              -- overall judgement on if the GPU is good or not
-# gpu_name          -- name of the GPU as per SLURM
-# ddp               -- whether the GPU can be used with DDP
-# gpu_frac          -- how many fractions of a regular GPU it takes up
-# rgu_multiplier    -- multiplier for RGUs when using this GPU type. See
-#                       docs.alliancecan.ca/wiki/Allocations_and_compute_scheduling.
-#                        Where estimated, should be read as essentially made-up. A
-#                        value over of 3.0+ generally indicates a decent GPU.
-gpu2info = {
-    "default_gpu": dict(vram=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1, rgu_multiplier=3.0),          # Placeholder values
-    "titan": dict(vram=8, good=False, gpu_name="titan_xp", ddp=True, gpu_frac=1.0, rgu_multiplier=0.1),                 # Estimated rgu_multiplier
-    "2080": dict(vram=8, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),                   # Estimated rgu_multiplier
-    "3090": dict(vram=24, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0)} | dict(              # Estimated rgu_multiplier
-    t4=dict(vram=16, good=True, gpu_name="t4", ddp=True, gpu_frac=1.0, rgu_multiplier=1.6),
-    p100=dict(vram=16, good=False, gpu_name="p100", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),
-    p100l=dict(vram=32, good=False, gpu_name="p100l", ddp=True, gpu_frac=1.0, rgu_multiplier=1.1),
-    q4000=dict(vram=8, good=False, gpu_name="quadro_rtx_4000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.2),             # Estimated rgu_multiplier
-    q6000=dict(vram=24, good=False, gpu_name="quadro_rtx_6000", ddp=True, gpu_frac=1.0, rgu_multiplier=1.3),            # Estimated rgu_multiplier
-    v100=dict(vram=16, good=True, gpu_name="v100", ddp=True, gpu_frac=1.0, rgu_multiplier=2.0),
-    v100l=dict(vram=32, good=True, gpu_name="v100l", ddp=True, gpu_frac=1.0, rgu_multiplier=2.6),                       # Estimated rgu_multiplier
-    a5000=dict(vram=24, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.0), # Estimated rgu_multiplier
-    a6000=dict(vram=48, good=True, gpu_name="rtx_a6000", ddp=True, gpu_frac=1.0, rgu_multiplier=3.1),                   # Estimated rgu_multiplier
-    a6000a=dict(vram=48, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                   # Estimated rgu_multiplier
-    rtx6000=dict(vram=96, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1.0, rgu_multiplier=4),                   # Estimated rgu_multiplier
-    a40=dict(vram=48, good=True, gpu_name="a40", ddp=True, gpu_frac=1.0, rgu_multiplier=3.2),                           # Estimated rgu_multiplier
-    a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgu_multiplier=4.0),
-    a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgu_multiplier=0.6),
-    a112=dict(vram=10, good=False, gpu_name="a100_2g.10gb", ddp=False, gpu_frac=0.25, rgu_multiplier=1.1),
-    a123=dict(vram=20, good=True, gpu_name="a100_3g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
-    a124=dict(vram=20, good=True, gpu_name="a100_4g.20gb", ddp=False, gpu_frac=0.5, rgu_multiplier=2.0),
-    l40s=dict(vram=48, good=True, gpu_name="l40s", ddp=True, gpu_frac=1.0, rgu_multiplier=3.4),                          # Estimated rgu_multiplier
-    l40s_shard=dict(vram=3, good=False, gpu_name="l40s_shard", ddp=False, gpu_frac=0.0625, rgu_multiplier=0.3),          # Estimated rgu_multiplier
-    h100=dict(vram=80, good=True, gpu_name="h100", ddp=True, gpu_frac=1.0, rgu_multiplier=12.2),    
-    h111=dict(vram=10, good=False, gpu_name="nvidia_h100_80gb_hbm3_1g.10gb", ddp=False, gpu_frac=0.125, rgu_multiplier=1.7),
-    h122=dict(vram=20, good=True, gpu_name="nvidia_h100_80gb_hbm3_2g.20gb", ddp=False, gpu_frac=0.25, rgu_multiplier=3.5),
-    h143=dict(vram=40, good=True, gpu_name="nvidia_h100_80gb_hbm3_3g.40gb", ddp=False, gpu_frac=0.5, rgu_multiplier=6.1),
-    h200=dict(vram=141, good=True, gpu_name="h200", ddp=True, gpu_frac=1.0, rgu_multiplier=20.0),                        # Estimated rgu_multiplier
-    mi300a=dict(vram=128, good=False, gpu_name="mi300a", ddp=True, gpu_frac=1.0, rgu_multiplier=1.0),                    # Estimated rgu_multiplier
-    )
-    
-gpu2vram = {k: v["vram"] for k,v in gpu2info.items()}
-good_gpus = [k for k,v in gpu2info.items() if v["good"]]
-bad_gpus = [k for k,v in gpu2info.items() if not v["good"]]
-gpu_alias2name = {k: v["gpu_name"] for k,v in gpu2info.items()}
-gpu_name2alias = {v["gpu_name"]: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
 # Maps cluster names to unique prefixes for their compute nodes
 cluster2node_prefix = dict(cs_apex="cs-apex", solar="cs-venus", # SFU-only
@@ -291,3 +338,28 @@ def str_to_gpu_type(s):
             matched_gpu_name_alias = sorted(matched_gpu_name2alias.items(), key=lambda x: len(x[0]))
             result = matched_gpu_name_alias[-1][1]
     return None if (result is None or not result in gpu2info) else result
+
+
+if __name__ == "__main__":
+    node2config_gt = cluster2node2config["solar"]
+    node2config = get_solar_node2config()
+
+    missing = {k: v for k,v in node2config_gt.items() if not k in node2config}
+    print(missing.keys())
+
+    node2diffs = dict()
+    for n,config in node2config.items():
+        if not n in node2config_gt:
+            continue
+
+        config_gt = node2config_gt[n]
+        key2diff = {k: (v1, config_gt[k], (v1 == config_gt[k])) for k,v1 in config.items()}
+        node2diffs[n] = {k: v for k,v in key2diff.items() if not v[2]}
+    
+    for node,diff in node2diffs.items():
+        print(node)
+        print(diff)
+        
+
+
+
