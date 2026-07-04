@@ -279,7 +279,11 @@ def unit_conversion(x, desc=None, source=None, target=None):
     number_multipliers = {"K", "G", "T", "KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB"}
     time_multipliers = {"seconds", "minutes", "hours", "days", "s", "h", "d", "S", "H", "D"}
     inferred_multipliers = {"M"}
-    unit2multiplier_wrt_base = dict(K=1e3, G=1e9, T=1e12,
+    all_multipliers = number_multipliers | time_multipliers | inferred_multipliers
+    all_multipliers = sorted(all_multipliers, key=lambda am: len(am), reverse=True) # longest-first, so first match is longest and thus most meaningful
+    
+    unit2multiplier_wrt_base = dict(
+        K=1e3, G=1e9, T=1e12,
         KB=1e3, MB=1e6, GB=1e9, TB=1e12,
         KiB=1024, MiB=1024**2, GiB=1024**3, TiB=1024**4,
         seconds=1, minutes=60, hours=3600, days=3600*24,
@@ -287,27 +291,66 @@ def unit_conversion(x, desc=None, source=None, target=None):
         S=1, H=3600, D=3600*24,
         none=1)
 
-    def infer_m_meaning(*, source, target):
-        if ((source == "M" and target in number_multipliers)
-            or (target == "M" and source in number_multipliers)):
-            return 1e6
-        elif ((source == "M" and target in time_multipliers)
-            or (target == "M" and source in time_multipliers)):
-            return 60
-        else:
-            raise ValueError(f"Ambiguous multiplier 'M' with source={source} and target={target}")
+    # Found source
+    if isinstance(x, str) and source is None:
+        for am in all_multipliers:
+            if x.endswith(am):
+                x, source = int(strip_right(x, am)), am
+                break
 
-    if source is None and target is None and not desc is None:
+
+    # Parse [source]
+    if not desc is None and source is None and target is None:
         source, target = [d.strip() for d in desc.split("->")] # Einops style is nice!
-    elif source is None and not target is None and desc is None:
+    elif source is None and not target is None:
         source = "none"
+    elif target is None and not source is None:
+        target = "none"
+    assert not target is None
+    assert not source is None
 
-    if source in inferred_multipliers and target in unit2multiplier_wrt_base:
-        raise ValueError(f"Cannot infer meaning of multiplier 'M' when target unit is provided: source={source}, target={target}")
+    
 
-    source_multiplier = infer_meaning(source=source, target=target) if source in inferred_multipliers else unit2multiplier_wrt_base.get(source, None)
-    target_multiplier = infer_meaning(source=target, target=source) if target in inferred_multipliers else unit2multiplier_wrt_base.get(target, None)
+    # twrite("AAA", x=x, source=source)
+        
 
+    if target in number_multipliers and source == "M":
+        source = "MB"
+    elif target in time_multipliers and source == "M":
+        source = "minutes"
+    
+    if source in number_multipliers and target == "M":
+        target = "MB"
+    elif source in time_multipliers and target == "M":
+        target = "minutes"
+
+    # twrite(x=x, source=source, target=target)
+
+    
+        
+    # def infer_m_meaning(*, source, target):
+    #     if ((source == "M" and target in number_multipliers)
+    #         or (target == "M" and source in number_multipliers)):
+    #         return 1e6
+    #     elif ((source == "M" and target in time_multipliers)
+    #         or (target == "M" and source in time_multipliers)):
+    #         return 60
+    #     else:
+    #         raise ValueError(f"Ambiguous multiplier 'M' with source={source} and target={target}")
+
+    # if source is None and target is None and not desc is None:
+    #     source, target = [d.strip() for d in desc.split("->")] # Einops style is nice!
+    # elif source is None and not target is None and desc is None:
+    #     source = "none"
+
+    # if source in inferred_multipliers and target in unit2multiplier_wrt_base:
+    #     raise ValueError(f"Cannot infer meaning of multiplier 'M' when target unit is provided: source={source}, target={target}")
+
+    # source_multiplier = infer_meaning(source=source, target=target) if source in inferred_multipliers else unit2multiplier_wrt_base.get(source, None)
+    # target_multiplier = infer_meaning(source=target, target=source) if target in inferred_multipliers else unit2multiplier_wrt_base.get(target, None)
+
+    source_multiplier = unit2multiplier_wrt_base.get(source, 1)
+    target_multiplier = unit2multiplier_wrt_base.get(target, 1)
     if source in unit2multiplier_wrt_base and target in unit2multiplier_wrt_base:
         return x * source_multiplier / target_multiplier
     else:
