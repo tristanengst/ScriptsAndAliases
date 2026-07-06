@@ -848,9 +848,9 @@ def get_usage_so_far(user=os.getlogin(), accounts=UserConfig.cluster2accounts[Ut
     job_datas = get_sacct_data(accounts=accounts, starttime=start_dt, endtime="now")
 
     lab_rgu_days_used = sum([jd.rgu_days_used for jd in job_datas])
-    lab_rgu_days_queued = sum([jd.rgu_days for jd in job_datas if jd.status == "PENDING"])
+    lab_rgu_days_queued = sum([jd.rgu_days for jd in job_datas if jd.status == "PENDING"]) + sum([jd.rgu_days_left for jd in job_datas if jd.status == "RUNNING"])
     user_rgu_days_used = sum([jd.rgu_days_used for jd in job_datas if jd.user == user])
-    user_rgu_days_queued = sum([jd.rgu_days for jd in job_datas if jd.user == user and jd.status == "PENDING"])
+    user_rgu_days_queued = sum([jd.rgu_days for jd in job_datas if jd.user == user and jd.status == "PENDING"]) + sum([jd.rgu_days_left for jd in job_datas if jd.user == user and jd.status == "RUNNING"])
 
     rgus_per_gpu = gpu2info[cluster2node2config[Utils.get_cluster_type()]["default"].gpu_alias].rgus_per_gpu
 
@@ -926,7 +926,7 @@ def get_usage_process_data_bar(user=os.getlogin(),
     period_start_str="last_tuesday", period_end_str="next_tuesday"):
     """Returns a string representing the usage progress bar for the given user and accounts."""
     usage_progress_data = get_usage_progress_data(user=user, accounts=accounts, period_start_str=period_start_str, period_end_str=period_end_str)
-    cols = max(shutil.get_terminal_size().columns - 10, 10)
+    cols = max(shutil.get_terminal_size().columns, 10)
 
     col_keys = ["user_used", "user_queued", "user_remaining_unqueued", "others_used", "others_queued", "others_remaining_unqueued"]
     bar_key2cols = {k: int(cols * (v / usage_progress_data["lab_usage_target"])) for k,v in usage_progress_data.items() if k in col_keys}
@@ -967,15 +967,16 @@ def get_usage_process_data_bar(user=os.getlogin(),
         if len(v) <= bar_key2cols[k]-3:
             remaining_chars = bar_key2cols[k] - len(v)
             left_pad = remaining_chars // 2
-            right_pad = remaining_chars - left_pad
-            right_pad, left_pad = min(right_pad, left_pad), min(right_pad, left_pad)
-            bar_key2chars[k] = char * left_pad + f"{v}" + char * right_pad
+            right_pad = max(0, remaining_chars - left_pad)
+            pad = min(right_pad, left_pad)
+            pad = int(pad * 0.9) if pad > 10 else pad
+            bar_key2chars[k] = char * pad + f"{v}" + char * pad
         elif len(v.split()[-1]) <= bar_key2cols[k]-3:
-            remaining_chars = bar_key2cols[k] - len(v.split()[-1]) - 2
+            remaining_chars = max(0, bar_key2cols[k] - len(v.split()[-1]))
             left_pad = remaining_chars // 2
             right_pad = remaining_chars - left_pad
-            right_pad, left_pad = min(right_pad, left_pad), min(right_pad, left_pad)
-            bar_key2chars[k] = char * left_pad + f"{v.split()[-1]}" + char * right_pad
+            pad = min(right_pad, left_pad)
+            bar_key2chars[k] = char * pad + f"{v.split()[-1]}" + char * pad
         else:
             bar_key2chars[k] = char * bar_key2cols[k]
 
