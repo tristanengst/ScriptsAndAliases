@@ -285,7 +285,7 @@ def unit_conversion(x, desc=None, source=None, target=None):
     unit2multiplier_wrt_base = dict(
         K=1e3, G=1e9, T=1e12,
         KB=1e3, MB=1e6, GB=1e9, TB=1e12,
-        KiB=1024, MiB=1024**2, GiB=1024**3, TiB=1024**4,
+        KiB=(2**10), MiB=(2**20), GiB=(2**30), TiB=(2**40),
         seconds=1, minutes=60, hours=3600, days=3600*24,
         s=1, h=3600, d=3600*24,
         S=1, H=3600, D=3600*24,
@@ -297,6 +297,9 @@ def unit_conversion(x, desc=None, source=None, target=None):
             if x.endswith(am):
                 x, source = int(strip_right(x, am)), am
                 break
+    # In this case, interpret the source as an override
+    elif isinstance(x, str) and source is not None:
+        x = int(remove_nonnumeric(x))
 
 
     # Parse [source]
@@ -352,6 +355,7 @@ def unit_conversion(x, desc=None, source=None, target=None):
     source_multiplier = unit2multiplier_wrt_base.get(source, 1)
     target_multiplier = unit2multiplier_wrt_base.get(target, 1)
     if source in unit2multiplier_wrt_base and target in unit2multiplier_wrt_base:
+        # twrite(f"[DEBUG] unit_conversion(): x={x}, source={source}, target={target}, source_multiplier={source_multiplier}, target_multiplier={target_multiplier}")
         return x * source_multiplier / target_multiplier
     else:
         raise ValueError(f"Unknown source or target unit for conversion: {source} -> {target}")
@@ -424,6 +428,20 @@ def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
     sublists = [l[idx * num_cols:max(len(l), (idx + 1) * num_cols)] for idx in range(num_rows)]
     sublists = [sep.join([s.ljust(chars_per_col) for s in sublist]) for sublist in sublists]
     return "\n".join(sublists)
+
+def comma_separated_list_to_list(s):
+    """Converts a comma-separated string or list thereof to a list of strings. The key
+    use case is in handling various SLURM commands where lists are represented as
+    comma-separated strings.
+    """
+    if isinstance(s, list | tuple | set):
+        return UtilsBase.flatten([comma_separated_list_to_list(x) for x in s])
+    elif isinstance(s, str):
+        return [x.strip() for x in s.split(",") if len(x.strip()) > 0]
+    elif isinstance(s, int | float):
+        return [str(s)]
+    else:
+        raise ValueError(f"Unexpected type for comma_separated_list_to_list: {type(s)}. Value: {s}")
 
 ######################################################################################
 ######################################################################################
