@@ -44,10 +44,11 @@ def find_partitions_for_job(*, time_limit, full_node, gpu_type=None, args):
 	partitions = [p for p in partitions if not "interac" in p]
 	partitions = [p for p in partitions if full_node or not "bynode" in p]
 	partitions = [p for p in partitions if gpu_type is None or gpu_type in p]
+	partitions = [p for p in partitions if not p.startswith("ood")]
 	partition2time = {p: t for t,ps in ClusterInfo2.time2partition_names().items() for p in ps if p in partitions}
 	
 	min_time = min([partition2time[p] for p in partitions], default=float("inf"))
-	partitions = [p for p in partitions if partition2time[p] == min_time]
+	partitions = [p for p in partitions if partition2time[p] == min_time] + [p for p in partition2time if "backfill" in p]
 	return partitions
 
 def expand_partitions_to_true_partitions(partitions, verbose=False):
@@ -67,7 +68,8 @@ def expand_partitions_to_true_partitions(partitions, verbose=False):
 	partition_list = partitions.split(",") if isinstance(partitions, str) else partitions
 	partition2expanded = {p: partition_to_matches(p) for p in partition_list}
 	expanded = set(UtilsBase.flatten(partition2expanded.values()))
-	return ",".join(expanded) if isinstance(partitions, str) else expanded
+	result = ",".join(expanded) if isinstance(partitions, str) else expanded
+	return result
 
 def job_info_to_time_limit_full_node(job_info):
 	"""Returns a dictionary giving the the time limit and whether a full node is
