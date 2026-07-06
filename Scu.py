@@ -91,7 +91,7 @@ def job_info_to_time_limit_full_node(job_info):
 				full_node = False
 			else:
 				node_config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
-				gpus_per_node = node_config[gpu_type]["gpus_per_node"] if gpu_type in node_config else float("inf")
+				gpus_per_node = node_config[gpu_type].gpus_per_node if gpu_type in node_config else float("inf")
 				full_node = (float(job_info.gpus) >= gpus_per_node)
 		else:
 			full_node = False
