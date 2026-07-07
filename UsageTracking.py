@@ -1,6 +1,7 @@
 import argparse
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from functools import cached_property
+from functools import cached_property, lru_cache
 import json
 import os
 import os.path as osp
@@ -61,7 +62,7 @@ DEFAULT_SACCT_FORMAT_NAME2FIELD = dict(
     exitcode="exitcode",
     failednode="failednode",
     timelimit="timelimitraw",
-    submitline="submitline",
+    # submitline="submitline",
 )
 
 def get_slurm_accounts_str(*accounts):
@@ -70,6 +71,7 @@ def get_slurm_accounts_str(*accounts):
     empty string indicating no restriction.
     """
     accounts = [] if accounts == ["all"] else accounts
+    accounts = UtilsBase.flatten(accounts) # There is a better way to sanitize
     return ("--accounts=" + ",".join(accounts)) if accounts else ""
 
 def get_slurm_user_str(*users):
@@ -78,6 +80,7 @@ def get_slurm_user_str(*users):
     indicating no restriction.
     """
     users = [] if users == ["all"] else users
+    users = UtilsBase.flatten(users) # There is a better way to sanitize
     return ("--user=" + ",".join(users)) if users else ""
 def get_slurm_jobid_str(*jobids):
     """Returns the string that is a command-line argument specifying to query only for
@@ -85,6 +88,7 @@ def get_slurm_jobid_str(*jobids):
     indicating no restriction.
     """
     jobids = [] if jobids == ["all"] else jobids
+    jobids = UtilsBase.flatten(jobids) # There is a better way to sanitize
     return ("--jobs=" + ",".join([str(j) for j in jobids])) if jobids else ""
 
 
@@ -204,6 +208,9 @@ UNCOMPUTABLE = UncomputableProperty()
 
 jobid2squeue_calls = dict()
 
+
+state2time_remainings = defaultdict(set)
+
 class JobData:
     """Generic class representing a job. Subclasses are used to construct from various
     ways of getting the data.
@@ -243,7 +250,7 @@ class JobData:
 
     def meta_str(self):
         """Returns a string representation of the job's metadata."""
-        return f"jobid={self.jobid}, uid={self.uid}, jobname={self.jobname}, state={self.state}, user={self.user}, partition={self.partition}"
+        return f"jobid={self.jobid}, account={self.account}, uid={self.uid}, jobname={self.jobname}, state={self.state}, status={self.status}, user={self.user}, partition={self.partition}, in_squeue={self.in_squeue}"
     def timestamps_str(self):
         """Returns a string representation of the job's timestamps."""
         return f"submit={self.submit}, eligible={self.eligible}, start={self.start}, end={self.end}"
@@ -261,7 +268,7 @@ class JobData:
     # Attributes surrounding the trackable resources used by the job
     ##################################################################################
     @cached_property
-    def gpus_per_node(self): return self.resources.get("gpus", 0)
+    def gpus_per_node(self): return self.resources.get("gpus_per_node", 0)
     @cached_property
     def gpus(self): return self.gpus_per_node * self.nodes
     @cached_property
@@ -300,7 +307,7 @@ class JobData:
         return self.billing / 1000
 
     @cached_property
-    def rgus(self): return self.rgus_computed
+    def rgus(self): return self.rgus_billing
 
     @property
     def rgu_days_used(self):
@@ -323,14 +330,30 @@ class JobData:
         its full allocated time.
         """
         return self.rgus * self.time_limit_seconds / (60 * 60 * 24)
+
+    @cached_property
+    def gpu_days(self): return self.gpus * self.time_limit_seconds / (60 * 60 * 24)
+    @cached_property
+    def gpu_days_used(self): return self.gpus * self.run_time / (60 * 60 * 24)
+    @cached_property
+    def gpu_days_left(self): return self.gpus * self.remaining_time / (60 * 60 * 24)
     ##################################################################################
     ##################################################################################
     ##################################################################################
 
     ##################################################################################
-    # Attributes surrounding durations of job's time whatnot. These are dynamic!
+    # Attributes surrounding durations of job's time whatnot.
     ##################################################################################
-    @property
+    @cached_property
+    def start_dt(self): return datetime.strptime(self.start, "%Y-%m-%dT%H:%M:%S") if self.start and self.start[0].isnumeric() else None
+    @cached_property
+    def end_dt(self): return datetime.strptime(self.end, "%Y-%m-%dT%H:%M:%S") if self.end and self.end[0].isnumeric() else None
+    @cached_property
+    def submit_dt(self): return datetime.strptime(self.submit, "%Y-%m-%dT%H:%M:%S") if self.submit and self.submit[0].isnumeric() else None
+    @cached_property
+    def eligible_dt(self): return datetime.strptime(self.eligible, "%Y-%m-%dT%H:%M:%S") if self.eligible and self.eligible[0].isnumeric() else None
+
+    @cached_property
     def queue_time(self):
         """Returns the queue time in seconds. Jobs that are ineligible have zero. Jobs
         that are curently queuing have their queue time so far returned.
@@ -342,42 +365,34 @@ class JobData:
             eligible = datetime.strptime(self.eligible, "%Y-%m-%dT%H:%M:%S")
             return (queue_end - eligible).total_seconds()
 
-    @property
+    @cached_property
     def run_time(self):
         """Returns the run time in seconds. Jobs that have not started have zero."""
-        if self.state in ["RUNNING", "COMPLETING"]:
-            run_end = datetime.now()
-        elif self.state in ["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"] and self.end and self.end[0].isnumeric():
-            run_end = datetime.strptime(self.end, "%Y-%m-%dT%H:%M:%S")
-        else:
-            run_end = None
-        
-        if self.start[0].isnumeric() and run_end:
-            start = datetime.strptime(self.start, "%Y-%m-%dT%H:%M:%S")
-            return (run_end - start).total_seconds()
+        if self.end_dt and self.end_dt < datetime.now() and self.start_dt:
+            return (self.end_dt - self.start_dt).total_seconds()
+        elif self.status in ["RUNNING", "COMPLETING"] and self.start_dt:
+            return (datetime.now() - self.start_dt).total_seconds()
         else:
             return 0
 
-    @property
+    @cached_property
     def remaining_time(self):
         """Returns the time left for the job in seconds. Jobs that have yet to start
         have their fill time limit remaining, while those which have ended have zero
         remaining time regardless of how much time they used.
         """
-        if self.state in ["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"]:
+        if self.end_dt and self.end_dt < datetime.now():
+            result = 0
+        elif self.status in ["RUNNING", "COMPLETING"]:
+            result = self.time_limit_seconds - self.run_time
+        elif not self.start_dt and self.status in ["PENDING", "CONFIGURING"]:
+            result = self.time_limit_seconds
+        else:
             return 0
-        else:
-            return self.time_limit_seconds - self.run_time
 
-    @cached_property
-    def eligible_time_dt(self):
-        """Returns the eligible time as a datetime object, or None if it can't be
-        parsed.
-        """
-        if self.eligible and self.eligible[0].isnumeric():
-            return datetime.strptime(self.eligible, "%Y-%m-%dT%H:%M:%S")
-        else:
-            return None
+        global state2time_remainings
+        state2time_remainings[self.status].add(result)
+        return result
 
     @property
     def status(self):
@@ -694,10 +709,9 @@ class JobDataSacct(JobData):
         I haven't verified if the heuristic is totally perfect, but it's better than
         spamming squeue.
         """
-        if self.status in ["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"]:
+        if self.end_dt and self.end_dt < datetime.now() - timedelta(minutes=5):
             return False
         else:
-            twrite(f"[INFO] jobid={self.jobid}: job think's it's in squeue with state={self.state}              status={self.status}")
             return True
 
     def __str__(self): return super(JobDataSacct, self).__str__()
@@ -728,7 +742,7 @@ class JobDataSacct(JobData):
         """Tries to return the job's comment string from the job's submitline. If the
         submitline is not a SLURM script or the comment is not set, returns None.
         """
-        submitline_parts = self.submitline.split()
+        submitline_parts = self.submitline.split() if not self.submitline is None else []
         submitline_slurm_script = [sp for sp in submitline_parts if any(sp.endswith(ext) for ext in [".sh", ".slurm", ".sbatch"])]
         submitline_slurm_script = [sp for sp in submitline_slurm_script if osp.exists(sp)]
 
@@ -818,8 +832,10 @@ def get_squeue_data(*, accounts=[], users=[], jobids=[], **squeue_kwargs):
         
     return job_datas
 
-def get_weekly_usage_target(user=os.getlogin()):
-    """Returns the weekly usage target in GPU-days for the given user."""
+
+@lru_cache(maxsize=1)
+def get_weekly_user2target_usage():
+    """Returns a dictionary mapping usernames to their weekly usage target in GPU-days."""
     if not "usage_targets_csv" in UserConfig.__dict__:
         return None
     elif not osp.exists(UserConfig.usage_targets_csv):
@@ -830,10 +846,18 @@ def get_weekly_usage_target(user=os.getlogin()):
         with open(UserConfig.usage_targets_csv, "r") as f:
             reader = csv.DictReader(f)
             username_commitments = list(reader)
-            lab_usage_target = sum([float(row["h100_per_day"]) for row in username_commitments])
-            user_usage_target =  sum([float(row["h100_per_day"]) for row in username_commitments if row["username"] == user]) # Assume one row
+            user2target_usage = {row["username"]: float(row["h100_per_day"]) for row in username_commitments}
+            return user2target_usage
 
-            return dict(lab_usage_target=lab_usage_target, user_usage_target=user_usage_target)
+@lru_cache(maxsize=1)
+def get_weekly_target_usage(user=os.getlogin()):
+    """Returns the weekly usage target in GPU-days for the given user."""
+    user2target_usage = get_weekly_user2target_usage()
+    if user2target_usage is None:
+        return None
+    lab_usage_target = sum(user2target_usage.values())
+    user_usage_target = user2target_usage.get(user, 0)
+    return dict(lab_usage_target=lab_usage_target, user_usage_target=user_usage_target)
 
 def get_usage_so_far(user=os.getlogin(), accounts=UserConfig.cluster2accounts[Utils.get_cluster_type()], start_dt="last_tuesday"):
     """Returns the usage so far in GPU-days for the given user and accounts.
@@ -861,39 +885,43 @@ def get_usage_so_far(user=os.getlogin(), accounts=UserConfig.cluster2accounts[Ut
         user_gpus_used=user_rgu_days_used / rgus_per_gpu,
         user_gpus_queued=user_rgu_days_queued / rgus_per_gpu)
 
+
+def sanitize_timestamp_to_cluster_time(p, tz="America/Vancouver"):
+    """Returns timestamp string [p] processed to ISO format. [p] can be one of a
+    harcoded value, a YYYY-MM-DD string, or a datetime object.
+    """
+    if p == "last_tuesday":
+        tz = zoneinfo.ZoneInfo(tz)
+        today = datetime.now(tz).date()
+        days_ago = max(1,(today.weekday() - 1) % 7)
+        last_tuesday_date = today - timedelta(days=days_ago)
+        last_tuesday = datetime(last_tuesday_date.year, last_tuesday_date.month, last_tuesday_date.day, 16, 30, tzinfo=tz) 
+        last_tuesday = last_tuesday.astimezone(None) # Convert to local timezone
+        return last_tuesday.isoformat(timespec="seconds")
+    elif p == "next_tuesday":
+        tz = zoneinfo.ZoneInfo(tz)
+        today = datetime.now(tz).date()
+        days_ahead = (1 - today.weekday()) % 7
+        next_tuesday_date = today + timedelta(days=days_ahead)
+        next_tuesday = datetime(next_tuesday_date.year, next_tuesday_date.month, next_tuesday_date.day, 16, 30, tzinfo=tz) 
+        next_tuesday = next_tuesday.astimezone(None) # Convert to local timezone
+        return next_tuesday.isoformat(timespec="seconds")
+    elif isinstance(p, datetime):
+        return p.isoformat(timespec="seconds")
+    elif isinstance(p, str):
+        return p
+    else:
+        raise ValueError(f"Invalid period: {p}")
+
 def get_usage_progress_data(user=os.getlogin(),
     accounts=UserConfig.cluster2accounts[Utils.get_cluster_type()],
     period_start_str="last_tuesday", period_end_str="next_tuesday"):
-    """Returns a dictionary of usage progress data for the given user and accounts."""
+    """Returns a dictionary of usage progress data for the given user and accounts."""        
 
-    def prepare_period(p):
-        if p == "last_tuesday":
-            vancouver_tz = zoneinfo.ZoneInfo("America/Vancouver")
-            today = datetime.now(vancouver_tz).date()
-            days_ago = max(1,(today.weekday() - 1) % 7)
-            last_tuesday_date = today - timedelta(days=days_ago)
-            last_tuesday = datetime(last_tuesday_date.year, last_tuesday_date.month, last_tuesday_date.day, 16, 30, tzinfo=vancouver_tz) 
-            last_tuesday = last_tuesday.astimezone(None) # Convert to local timezone
-            return last_tuesday.isoformat(timespec="seconds")
-        elif p == "next_tuesday":
-            vancouver_tz = zoneinfo.ZoneInfo("America/Vancouver")
-            today = datetime.now(vancouver_tz).date()
-            days_ahead = (1 - today.weekday()) % 7
-            next_tuesday_date = today + timedelta(days=days_ahead)
-            next_tuesday = datetime(next_tuesday_date.year, next_tuesday_date.month, next_tuesday_date.day, 16, 30, tzinfo=vancouver_tz) 
-            next_tuesday = next_tuesday.astimezone(None) # Convert to local timezone
-            return next_tuesday.isoformat(timespec="seconds")
-        elif isinstance(p, datetime):
-            return p.isoformat(timespec="seconds")
-        elif isinstance(p, str):
-            return p
-        else:
-            raise ValueError(f"Invalid period: {p}")
+    period_start_str = sanitize_timestamp_to_cluster_time(period_start_str)
+    period_end_str = sanitize_timestamp_to_cluster_time(period_end_str)
 
-    period_start_str = prepare_period(period_start_str)
-    period_end_str = prepare_period(period_end_str)
-
-    usage_targets = get_weekly_usage_target(user=user)
+    usage_targets = get_weekly_target_usage(user=user)
     usage_so_far = get_usage_so_far(user=user, accounts=accounts, start_dt=period_start_str)
     usage_so_far = {k: v / 7 for k,v in usage_so_far.items()} # Convert GPU-days to GPU-weeks
 
@@ -986,18 +1014,28 @@ def get_usage_process_data_bar(user=os.getlogin(),
     bar_key2chars_colored = {k: UtilsBase.colorize(bar_key2chars[k], bar_key2color[k]) for k in bar_key2chars.keys()}
     return "".join([bar_key2chars_colored[k] for k in col_keys]) + "\n" + ", ".join([UtilsBase.colorize(v, bar_key2color[k]) for k,v in bar_key2str.items()])
 
+def get_all_users_usage(accounts=UserConfig.cluster2accounts[Utils.get_cluster_type()],
+    period_start_str="last_tuesday", period_end_str="now"):
+    """Returns a dictionary of usage data for all users in the given accounts."""
+    from collections import defaultdict
+    starttime = sanitize_timestamp_to_cluster_time(period_start_str)
+    endtime = sanitize_timestamp_to_cluster_time(period_end_str)
+    
+    job_datas = get_sacct_data(accounts=accounts, starttime=starttime, endtime=endtime)
+    twrite(f"[INFO] Found {len(job_datas)} jobs in accounts={accounts} between {starttime} and {endtime}")
+    user2usage = defaultdict(lambda: dict(used=0, queued=0, unused=0, target=0))
+    user2target_usage = get_weekly_user2target_usage()
 
-
-
-
-
-
-
-
-
-
-
-
+    twrite(user2target_usage=user2target_usage)
+    for user,target in user2target_usage.items():
+        user2usage[user]["target"] = target
+    for jd in job_datas:
+        if jd.user.startswith("tme3"):
+            print(jd)
+        user2usage[jd.user]["used"] += jd.rgu_days_used #/ (7 * gpu2info[cluster2node2config[Utils.get_cluster_type()]["default"].gpu_alias].rgus_per_gpu)
+        user2usage[jd.user]["queued"] += jd.rgu_days_left #/ (7 * gpu2info[cluster2node2config[Utils.get_cluster_type()]["default"].gpu_alias].rgus_per_gpu)
+    user2usage = {u: usage | dict(unused=usage["target"] - usage["used"] - usage["queued"]) for u,usage in user2usage.items()}
+    return user2usage
 
 def get_args():
     P = argparse.ArgumentParser()
@@ -1010,8 +1048,8 @@ def get_args():
     P.add_argument("-a", "--accounts", nargs="+", default=UserConfig.cluster2accounts[Utils.get_cluster_type()], type=UtilsBase.comma_separated_list_to_list,
         help="List of accounts to query for the current user. If --all_users is set, queries for all users on these accounts.")
 
-    P.add_argument("--starttime", "--start", default="2026-07-01", type=str,)
-    P.add_argument("--endtime", "--end", default="now", type=str,)
+    P.add_argument("--start", default="2026-07-01", type=str,)
+    P.add_argument("--end", default="now", type=str,)
     
     args, unparsed_args = P.parse_known_args()
 
@@ -1022,6 +1060,13 @@ if __name__ == "__main__":
     args = get_args()
 
     print(get_usage_process_data_bar())
+
+
+    user2usage = get_all_users_usage(accounts=args.accounts, period_start_str=args.start, period_end_str=args.end)
+    for user, usage in user2usage.items():
+        twrite(f"[INFO] User {user}: used={usage['used']:.2f} queued={usage['queued']:.2f} unused={usage['unused']:.2f} target={usage['target']:.2f}")
+
+    print(state2time_remainings)
 
     
     # if args.squeue:

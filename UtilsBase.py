@@ -3,7 +3,7 @@ import argparse
 import copy
 from collections import defaultdict
 from datetime import datetime
-import functools
+from functools import lru_cache, wraps
 import json
 import math
 import os
@@ -24,9 +24,11 @@ except ImportError:
         def write(s): print(s)
     tqdm = tqdm_lite
 
-@functools.cache
+@lru_cache(maxsize=1)
 def torch_available():
-    """Returns whether PyTorch is available."""
+    """Returns whether PyTorch is available. Importing torch can take a bit, so better
+    to not try many times.
+    """
     try:
         import torch
         return True
@@ -256,11 +258,14 @@ def digits_after(s, substr):
             continue
     return None  # No numeric substring found
 
-def try_make_jsonable(x):
-    """Returns [x] converted to a JSONable thing as needed."""
+def try_make_jsonable(x, allow_namespace=True):
+    """Returns [x] converted to a JSONable thing as needed. If [allow_namespace] is
+    True, then argparse.Namespace objects are converted to dictionaries. Anything not
+    matched by the conversion rules here is encoded as a string.
+    """
     if isinstance(x, dict):
         return {try_make_jsonable(k): try_make_jsonable(v) for k,v in x.items()}
-    elif isinstance(x, argparse.Namespace):
+    elif isinstance(x, argparse.Namespace) and allow_namespace:
         return try_make_jsonable(vars(x))
     elif isinstance(x, list):
         return [try_make_jsonable(xi) for xi in x]
@@ -830,7 +835,56 @@ def persisted_state_clear():
 ######################################################################################
 ######################################################################################
 
+###### Caching Functions #############################################################
+def deterministic_hash(x, maxlen=32):
+    """Returns a deterministic hash of [x] as a string of length [maxlen]."""
+    import hashlib
+    x = json.dumps(x).encode("utf-8") if not isinstance(x, bytes) else x
+    return hashlib.sha256(x).hexdigest()[:maxlen]
 
+def persistent_cache(fn=None, *, update_every=3600, cache_dir=osp.join(osp.dirname(osp.abspath(__file__)), "value_cache")):
+    """Decorator that memoizes function outputs to a saved state file. If the function
+    is called again with the same arguments within [update_every] seconds, then the
+    cached value is returned. Can be used bare (@cached_value), just like
+    @functools.cache, or called with overrides (@cached_value(update_every=60)).
+
+    NOTE: since we still have to read/write the cache file, this is only useful for
+    meaningfully expensive functions. And, it's only useful if the function is
+    deterministic and its return value is JSON-serializable (or convertible via
+    try_make_jsonable()), since that's how it's persisted to disk.
+
+    Args:
+    update_every -- number of seconds after which a cached value is stale
+    cache_dir    -- directory to store cached values
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = try_make_jsonable(dict(fn=f"{fn.__module__}.{fn.__qualname__}",
+                args=list(args),
+                kwargs=dict(sorted(kwargs.items()))))
+            fpath = osp.join(cache_dir, f"{deterministic_hash(key)}.json")
+            if osp.exists(fpath) and (time.time() - osp.getmtime(fpath)) < update_every:
+                return load_file_lite(fpath)
+
+            value = fn(*args, **kwargs)
+            try:
+                _ = atomic_save_lite(data=value, fpath=fpath)
+
+            # In this case, we probably tried to serialize [value] to JSON and failed
+            # due to it being not JSONable. So, unfortunate, but we can just return it
+            except TypeError as e:
+                return value
+            # In this case we likely care deeply about the issue
+            except os.OSError as e:
+                twrite(f"[ERROR] Could not cache value for {fn.__module__}.{fn.__qualname__} with args={args} and kwargs={kwargs}: {e}")
+                return value
+            except Exception as e:
+                twrite(f"[ERROR] Could not cache value for {fn.__module__}.{fn.__qualname__} with args={args} and kwargs={kwargs}: {e}")
+                raise e
+            return value
+        return wrapper
+    return decorator(fn) if fn is not None else decorator
 
 ###### User Query Functions ##########################################################
 def query_among_list(*, prompt, options):
@@ -877,7 +931,7 @@ def warn_once(message):
     def decorator(fn):
         warned = False
 
-        @functools.wraps(fn)
+        @wraps(fn)
         def wrapper(*args, **kwargs):
             nonlocal warned
             if not warned:
@@ -887,3 +941,16 @@ def warn_once(message):
 
         return wrapper
     return decorator
+
+
+
+if __name__ == "__main__":
+    import random
+    
+    @cached_value
+    def expensive_function(x):
+        print(random.randint(1, 100))
+        return x * 2
+
+    print(expensive_function(10))
+    print(expensive_function(10))  # This should return the cached value without printing a new random number

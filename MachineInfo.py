@@ -5,7 +5,7 @@ use what's here. The only requirement is that no two hosts can share an SSH name
 """
 import argparse
 from collections import defaultdict
-import functools
+from functools import lru_cache
 import json
 import math
 import os
@@ -272,7 +272,7 @@ cluster2node2config = {k: {nk: argparse.Namespace(**nv) for nk,nv in v.items()} 
 # not listed here, where GPUs aren't partitioned into multi-instance GPUs, set
 # cores_per_rgu=(cores_per_gpu / rgus_per_gpu) and
 # mem_per_rgu=(mem_per_gpu / rgus_per_gpu) for the default GPU type.
-@functools.lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def cluster_to_resources_per_rgu(c=Utils.get_cluster_type()):
     rgus_per_default_gpu = gpu2info[cluster2node2config[c]["default"].gpu_alias].rgus_per_gpu
     return argparse.Namespace(
@@ -295,7 +295,9 @@ cluster2resources_per_rgu = defaultdict(cluster_to_resources_per_rgu)
 ######################################################################################
 # Other important information on different clusters
 ######################################################################################
-# node_prefix - might not be used anymore
+# node_prefixes - prefixes of GOOD nodes. To find these, you can do
+#                   sinfo -h -o "%N" | paste -sd, - | xargs scontrol show hostlist
+#                   and look at the result.
 # wandb_default_mode - default mode for WandB on compute nodes. Note that there's a
 #                       difference between nominally offline nodes for which there are
 #                       ways of making them be online, and nodes that I haven't
@@ -303,15 +305,15 @@ cluster2resources_per_rgu = defaultdict(cluster_to_resources_per_rgu)
 #                       curious and you're at SFU, reach out.
 # default_account - default account (or, for Solar, partition) for jobs on the cluster
 cluster2misc_info = dict(
-    nibi=dict(node_prefix="g", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["nibi"][0], "_gpu")),
-    fir=dict(node_prefix="fc", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["fir"][0], "_gpu")),
-    rorqual=dict(node_prefix="rg", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["rorqual"][0], "_gpu")),
-    narval=dict(node_prefix="ng", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["narval"][0], "_gpu")),
-    trillium=dict(node_prefix="trig", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["trillium"][0], "_gpu")),
-    vulcan=dict(node_prefix="rack", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["vulcan"][0], "_gpu")),
-    killarney=dict(node_prefix="kn", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["killarney"][0], "_gpu")),
-    tamia=dict(node_prefix="tg", wandb_default_mode="offline", default_account=UtilsBase.strip_right(cluster2accounts["tamia"][0], "_gpu")),
-    solar=dict(node_prefix="cs", wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["solar"][0], "_gpu")),
+    nibi=dict(node_prefixes=["g"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["nibi"][0], "_gpu")),
+    fir=dict(node_prefixes=["fc"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["fir"][0], "_gpu")),
+    rorqual=dict(node_prefixes=["rg"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["rorqual"][0], "_gpu")),
+    narval=dict(node_prefixes=["ng"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["narval"][0], "_gpu")),
+    trillium=dict(node_prefixes=["trig"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["trillium"][0], "_gpu")),
+    vulcan=dict(node_prefixes=["rack"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["vulcan"][0], "_gpu")),
+    killarney=dict(node_prefixes=["kn"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["killarney"][0], "_gpu")),
+    tamia=dict(node_prefixes=["tg"], wandb_default_mode="offline", default_account=UtilsBase.strip_right(cluster2accounts["tamia"][0], "_gpu")),
+    solar=dict(node_prefixes=["cs-venus", "cs-bd"], wandb_default_mode="online", default_account=UtilsBase.strip_right(cluster2accounts["solar"][0], "_gpu")),
 )
 ######################################################################################
 ######################################################################################
@@ -389,7 +391,6 @@ def str_to_gpu_type(s):
             matched_gpu_name_alias = sorted(matched_gpu_name2alias.items(), key=lambda x: len(x[0]))
             result = matched_gpu_name_alias[-1][1]
     return None if (result is None or not result in gpu2info) else result
-
 
 if __name__ == "__main__":
     node2config_gt = cluster2node2config["solar"]
