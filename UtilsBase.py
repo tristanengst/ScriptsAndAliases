@@ -213,6 +213,13 @@ def remove_nonnumeric(s):
     """Returns [s] with all non-numeric characters removed or [s] if it is numeric."""
     return s if isinstance(s, float | int) else "".join([c for c in s if c.isnumeric()])
 
+def remove_nonnumeric_suffix(s):
+    """Returns [s] with the longest suffix of non-numeric characters removed."""
+    for idx,c in enumerate(s):
+        if not c.isnumeric():
+            return s[:idx]
+    return s
+
 def str_to_nonnumeric_prefix(s):
     """Returns the longest prefix of [s] that is not numeric."""
     for idx,c in enumerate(s):
@@ -304,7 +311,7 @@ def unit_conversion(x, desc=None, source=None, target=None):
                 break
     # In this case, interpret the source as an override
     elif isinstance(x, str) and source is not None:
-        x = int(remove_nonnumeric(x))
+        x = int(remove_nonnumeric_suffix(x))
 
 
     # Parse [source]
