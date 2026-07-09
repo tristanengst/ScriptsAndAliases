@@ -121,6 +121,7 @@ def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None):
                 elif gpu_range_end == len(gpu_index2users) - 1:
                     gpu_range2users[(gpu_range_start, gpu_range_end)] = users_range_start
                     users_range_start = users_range_end
+                    gpu_range_end = len(gpu_index2users)  # Move the start to the end of the range
                     break
                 else:
                     continue
@@ -182,6 +183,6 @@ if __name__ == "__main__":
         gpuindex2users = p.map(gpu_index_to_users, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
     machine2gpu_index2users = {h: gpu_index2users for h, gpu_index2users in zip(args.hosts, gpuindex2users)}
 
-    twrite(machine2gpu_index2users=machine2gpu_index2users)
+    # twrite(machine2gpu_index2users=machine2gpu_index2users)
 
     _ = machine_gpu_usage_summary_str(machine2gpu_index2users=machine2gpu_index2users)
