@@ -77,7 +77,7 @@ def gpu_index_to_errors(h=None):
     if result is None:
         return dict()
     else:
-        return {gpu_idx: not maybe_err == "0" for gpu_idx, maybe_err in enumerate(result.split())}
+        return {gpu_idx: not maybe_err in ["0", "N/A"] for gpu_idx, maybe_err in enumerate(result.split())}
     
 
 def gpu_index_to_users(h=None):
