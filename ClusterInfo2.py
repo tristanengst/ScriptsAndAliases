@@ -182,10 +182,10 @@ def tres_to_gres_used(tres, node_name="default"):
 
             if resource.startswith("=") and node_name and Utils.is_solar():
                 count = int(resource[1:])
-                gpu_name = cluster2node2config[Utils.get_cluster_type()][node_name]["gpu_name"]
+                gpu_name = cluster2node2config[Utils.get_cluster_type()][node_name].gpu_name
             elif resource.startswith("=") and Utils.get_cluster_type() == "trillium":
                 count = int(resource[1:])
-                gpu_name = cluster2node2config[Utils.get_cluster_type()]["default"]["gpu_name"]
+                gpu_name = cluster2node2config[Utils.get_cluster_type()]["default"].gpu_name
             elif not resource.startswith("=") and not Utils.is_solar():
                 gpu_name, count = resource.split("=")
                 count = int(count)
@@ -433,7 +433,7 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
 
     all_resources = sorted(set(UtilsBase.flatten([list(resource_states.time2resource2total[time].keys()) for time in all_times])),
         key=lambda g: gpu2vram[g])
-    all_resources = [r for r in all_resources if gpu2info[r].good and cluster2node2config[Utils.get_cluster_type()][r].can_allocate]
+    all_resources = [r for r in all_resources if gpu2info[r].good]
     
     time2resource2str = defaultdict(lambda: defaultdict(str))
     time2resource2str["time"] = dict(time="\t\ttime") | {r: r for r in all_resources}

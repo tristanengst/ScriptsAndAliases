@@ -423,7 +423,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         """Returns the GPU alias for the GPU used by job data [jd]."""
         node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
         if Utils.is_solar() and jd.host in node2config:
-            gpu_name = node2config[jd.host]["gpu_name"]
+            gpu_name = node2config[jd.host].gpu_name
             return MachineInfo.gpu_name2alias[gpu_name]
         elif Utils.is_solar() and not jd.host in node2config:
             return "default_gpu"

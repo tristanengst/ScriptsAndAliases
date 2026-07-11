@@ -160,7 +160,7 @@ def get_solar_node2config():
                     pass
 
         can_allocate = any([p in cluster2accounts["solar"] for p in nd["partitions"]])
-        can_allocate = can_allocate and (gpu2info[gpu_alias]["good"] if gpu_alias in gpu2info else False)
+        can_allocate = can_allocate and (gpu2info[gpu_alias].good if gpu_alias in gpu2info else False)
         nodename = nd["name"]
         return nodename, dict(
             can_allocate=can_allocate,
