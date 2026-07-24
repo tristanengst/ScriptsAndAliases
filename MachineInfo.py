@@ -58,6 +58,7 @@ gpu2info = dict(
     a6000=dict(vram=48, gen=3, good=True, gpu_name="a6000", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.1),                   # Estimated rgus_per_gpu
     a6000a=dict(vram=48, gen=4, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.4),                   # Estimated rgus_per_gpu
     rtx6000=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1., rgus_per_gpu=4),                   # Estimated rgus_per_gpu
+    rtx6000_maxq=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_max-q", ddp=True, gpu_frac=1., rgus_per_gpu=4),     
     a40=dict(vram=48, gen=1, good=True, gpu_name="a40", ddp=True, gpu_frac=1, rgus_per_gpu=3.2),                           # Estimated rgus_per_gpu
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgus_per_gpu=4.0),
     a101=dict(vram=5, good=False, gpu_name="a100_1g.5gb", ddp=False, gpu_frac=0.125, rgus_per_gpu=0.57),
