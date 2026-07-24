@@ -25,12 +25,14 @@ if __name__ == "__main__":
     if gpus_in_args:
         gpu_idx, gpu_idx_in_args = args_with_gpus_to_gpu_idx_and_idx_in_args(args)
     else:
-        gpus_idx, gpu_idx_in_args = None, None
+        gpu_idx, gpu_idx_in_args = None, None
 
     if strip_gpus_in_args:
         strip_gpu_idx, strip_gpu_idx_in_args = args_with_strip_gpus_to_gpu_idx_and_idx_in_args(args)
     else:
         strip_gpu_idx, strip_gpu_idx_in_args = None, None
+
+    twrite(args=args, strip_gpus_in_args=strip_gpus_in_args, gpus_in_args=gpus_in_args, gpu_idx=gpu_idx, strip_gpu_idx=strip_gpu_idx)
 
     if gpus_in_args and strip_gpus_in_args and not (gpu_idx == strip_gpu_idx):
         raise ValueError("Cannot specify both --gpus and --strip_gpus with different gpu indices")
