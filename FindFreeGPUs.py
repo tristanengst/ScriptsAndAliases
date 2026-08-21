@@ -68,12 +68,26 @@ def procids_to_users(*procids, h=None):
     else:
         return {l.split()[0]: l.split()[1] for l in result.strip().splitlines()}
 
+def gpu_index_to_errors(h=None):
+    cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits"
+    result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
+        if_connect_error="HostInfoError",
+        if_ssh_map_error="HostInfoError")
+    result = result.strip() if result else None
+    if result is None:
+        return dict()
+    else:
+        return {gpu_idx: not maybe_err in ["0", "[N/A]"] for gpu_idx, maybe_err in enumerate(result.split())}
+    
+
 def gpu_index_to_users(h=None):
     try:
         gpu_uid2index = gpu_uid_to_index(h=h)
         gpu_uid2procids = gpu_uid_to_procids(h=h)
+        gpu_index2errors = gpu_index_to_errors(h=h)
         gpu_index2procids = {gpu_uid2index[gpu_uid]: gpu_uid2procids.get(gpu_uid, []) for gpu_uid in gpu_uid2index.keys()}
         gpu_index2users = {gpu_idx: sorted(procids_to_users(*procids, h=h).values()) for gpu_idx, procids in gpu_index2procids.items()}
+        gpu_index2users = {gpu_idx: users + (["error"] if gpu_index2errors.get(gpu_idx, False) else []) for gpu_idx, users in gpu_index2users.items()}
         return gpu_index2users
     except SSHCommunication.HostInfoError as e:
         return str(e)
@@ -109,20 +123,45 @@ def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None):
             free_gpu_str += f"IDs= {free_gpu_idxs_str}"
 
         gpu_range2users = dict()
-        range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
-        cur_gpu = range_start
-        cur_users = tuple(gpu_index2users[cur_gpu])
-        for gpu_idx in sorted(gpu_index2users.keys()):
-            gpu_users = tuple(gpu_index2users[gpu_idx])
-            if gpu_users == cur_users and not int(gpu_idx) == len(gpu_index2users) - 1:
-                cur_gpu = gpu_idx
-            else:
-                cur_users_str = ",".join(cur_users) if len(cur_users) > 0 else "FREE"
-                range_end = gpu_idx if gpu_idx == len(gpu_index2users) - 1 else cur_gpu
-                gpu_range2users[(range_start, range_end)] = cur_users_str
-                range_start = gpu_idx
-                cur_gpu = gpu_idx
-                cur_users = gpu_users
+        gpu_range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
+        users_range_start = tuple(gpu_index2users[gpu_range_start])
+        while gpu_range_start < len(gpu_index2users):
+            for gpu_range_end in range(gpu_range_start, len(gpu_index2users)): # Last index is len(gpu_index2users) - 1, but we want to include it in the range
+                users_range_end = tuple(gpu_index2users[gpu_range_end])
+                if not (users_range_end == users_range_start):
+                    gpu_range2users[(gpu_range_start, gpu_range_end-1)] = users_range_start
+                    users_range_start = users_range_end
+                    break
+                elif gpu_range_end == len(gpu_index2users) - 1:
+                    gpu_range2users[(gpu_range_start, gpu_range_end)] = users_range_start
+                    users_range_start = users_range_end
+                    gpu_range_end = len(gpu_index2users)  # Move the start to the end of the range
+                    break
+                else:
+                    continue
+            gpu_range_start = max(gpu_range_end, gpu_range_start + 1) # Ensure we move forward in the range
+        
+        gpu_range2users = {(s,e): ",".join(users) if len(users) > 0 else "FREE" for (s,e), users in gpu_range2users.items()}
+
+        # gpu_range2users = dict()
+        # range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
+        # cur_gpu = range_start
+        # cur_users = tuple(gpu_index2users[cur_gpu])
+        # for gpu_idx in sorted(gpu_index2users.keys()):
+        #     gpu_users = tuple(gpu_index2users[gpu_idx])
+
+        #     twrite(gpu_idx=gpu_idx, gpu_users=gpu_users, cur_gpu=cur_gpu, cur_users=cur_users, range_start=range_start)
+        #     if gpu_users == cur_users and not int(gpu_idx) == len(gpu_index2users) - 1:
+        #         cur_gpu = gpu_idx
+        #     else:
+        #         cur_users_str = ",".join(cur_users) if len(cur_users) > 0 else "FREE"
+        #         range_end = gpu_idx if gpu_idx == len(gpu_index2users) - 1 else cur_gpu
+        #         gpu_range2users[(range_start, range_end)] = cur_users_str
+        #         range_start = gpu_idx
+        #         cur_gpu = gpu_idx
+        #         cur_users = gpu_users
+
+        # twrite(gpu_range2users=gpu_range2users)
 
         gpu_range_strs = []
         for gpu_range, users in gpu_range2users.items():
@@ -157,5 +196,7 @@ if __name__ == "__main__":
     with Pool(processes=min(16, len(args.hosts))) as p:
         gpuindex2users = p.map(gpu_index_to_users, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
     machine2gpu_index2users = {h: gpu_index2users for h, gpu_index2users in zip(args.hosts, gpuindex2users)}
+
+    # twrite(machine2gpu_index2users=machine2gpu_index2users)
 
     _ = machine_gpu_usage_summary_str(machine2gpu_index2users=machine2gpu_index2users)

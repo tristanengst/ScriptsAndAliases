@@ -139,7 +139,8 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
 
     user_str = "-u $USER" if cur_user else ""
     account_str = f"-A {account}" if account else ""
-    sep = "  |_||_|||_|||||  "
+    # sep = "  |_||_|||_|||||  "
+    sep = " | "
 
     key2sq_format_o = dict(
         jobid=f"%i",
@@ -161,15 +162,15 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     )
 
     key2sq_format_O = dict(
-        jobid="JOBID:10",
-        submit_time="SubmitTime:64",
-        eligible_time="EligibleTime:64",
-        stderr="StdErr:1024",
-        stdout="StdOut:1024",
-        tres_per_task="tres-per-task:64", # Can work as a fallback for gres
-        tres_per_node="tres-per-node:64", # Can work as a fallback for gres
-        tres_per_job="tres-per-job:64", # Can work as a fallback for gres
-        num_tasks="NumTasks:64",    
+        jobid="JOBID:0",
+        submit_time="SubmitTime:0",
+        eligible_time="EligibleTime:0",
+        stderr="StdErr:0",
+        stdout="StdOut:0",
+        tres_per_task="tres-per-task:0", # Can work as a fallback for gres
+        tres_per_node="tres-per-node:0", # Can work as a fallback for gres
+        tres_per_job="tres-per-job:0", # Can work as a fallback for gres
+        num_tasks="NumTasks:0",
     )
 
     key2sq_format_o = {k: v for k,v in key2sq_format_o.items() if k in keys} | {k: v for k,v in key2sq_format.items() if not ":" in v}

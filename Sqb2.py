@@ -423,7 +423,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         """Returns the GPU alias for the GPU used by job data [jd]."""
         node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
         if Utils.is_solar() and jd.host in node2config:
-            gpu_name = node2config[jd.host]["gpu_name"]
+            gpu_name = node2config[jd.host].gpu_name
             return MachineInfo.gpu_name2alias[gpu_name]
         elif Utils.is_solar() and not jd.host in node2config:
             return "default_gpu"
@@ -490,7 +490,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}. Job data was {jd}")
         
-        num_gpus = MachineInfo.gpu2info[gpu_alias]["gpu_frac"] * num_gpus
+        num_gpus = MachineInfo.gpu2info[gpu_alias].gpu_frac * num_gpus
         gpus =  f"{num_gpus * int(multiplier)}"
 
     return UtilsBase.updated_namespace(jd, gpus=gpus)
@@ -1010,6 +1010,9 @@ if __name__ == "__main__":
 
     P.add_argument("--tz", default="America/Vancouver",
         help="Timezone to convert times to. Default is America/Vancouver.")
+
+    P.add_argument("--usage", default=False, action="store_true",
+        help="Show the cluster usage commitment string")
     args = P.parse_args()
 
 
@@ -1110,6 +1113,11 @@ if __name__ == "__main__":
         lines = "\n".join([j.to_print for j in job_datas])
         print(lines)
 
+    if Utils.get_cluster_type() == "nibi" and args.usage:
+        import UsageTracking
+        s = UsageTracking.get_usage_process_data_bar()
+        print(s)
+
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     meta_str = f"--- Overall Cluster Status ({time_str}) ---"
@@ -1152,6 +1160,8 @@ if __name__ == "__main__":
         job_datas = [jd for jd in job_datas if not jd.jobid.startswith("__")]
         record = build_record(job_datas=job_datas, account2lfs=account2lfs)
         _ = UtilsBase.atomic_save_lite(data=record, fpath=args.record)
+
+
 
    
 

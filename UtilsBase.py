@@ -3,7 +3,7 @@ import argparse
 import copy
 from collections import defaultdict
 from datetime import datetime
-import functools
+from functools import lru_cache, wraps
 import json
 import math
 import os
@@ -24,9 +24,11 @@ except ImportError:
         def write(s): print(s)
     tqdm = tqdm_lite
 
-@functools.cache
+@lru_cache(maxsize=1)
 def torch_available():
-    """Returns whether PyTorch is available."""
+    """Returns whether PyTorch is available. Importing torch can take a bit, so better
+    to not try many times.
+    """
     try:
         import torch
         return True
@@ -211,6 +213,13 @@ def remove_nonnumeric(s):
     """Returns [s] with all non-numeric characters removed or [s] if it is numeric."""
     return s if isinstance(s, float | int) else "".join([c for c in s if c.isnumeric()])
 
+def remove_nonnumeric_suffix(s):
+    """Returns [s] with the longest suffix of non-numeric characters removed."""
+    for idx,c in enumerate(s):
+        if not c.isnumeric():
+            return s[:idx]
+    return s
+
 def str_to_nonnumeric_prefix(s):
     """Returns the longest prefix of [s] that is not numeric."""
     for idx,c in enumerate(s):
@@ -256,11 +265,14 @@ def digits_after(s, substr):
             continue
     return None  # No numeric substring found
 
-def try_make_jsonable(x):
-    """Returns [x] converted to a JSONable thing as needed."""
+def try_make_jsonable(x, allow_namespace=True):
+    """Returns [x] converted to a JSONable thing as needed. If [allow_namespace] is
+    True, then argparse.Namespace objects are converted to dictionaries. Anything not
+    matched by the conversion rules here is encoded as a string.
+    """
     if isinstance(x, dict):
         return {try_make_jsonable(k): try_make_jsonable(v) for k,v in x.items()}
-    elif isinstance(x, argparse.Namespace):
+    elif isinstance(x, argparse.Namespace) and allow_namespace:
         return try_make_jsonable(vars(x))
     elif isinstance(x, list):
         return [try_make_jsonable(xi) for xi in x]
@@ -279,36 +291,83 @@ def unit_conversion(x, desc=None, source=None, target=None):
     number_multipliers = {"K", "G", "T", "KB", "MB", "GB", "TB", "KiB", "MiB", "GiB", "TiB"}
     time_multipliers = {"seconds", "minutes", "hours", "days", "s", "h", "d", "S", "H", "D"}
     inferred_multipliers = {"M"}
-    unit2multiplier_wrt_base = dict(K=1e3, G=1e9, T=1e12,
+    all_multipliers = number_multipliers | time_multipliers | inferred_multipliers
+    all_multipliers = sorted(all_multipliers, key=lambda am: len(am), reverse=True) # longest-first, so first match is longest and thus most meaningful
+    
+    unit2multiplier_wrt_base = dict(
+        K=1e3, G=1e9, T=1e12,
         KB=1e3, MB=1e6, GB=1e9, TB=1e12,
-        KiB=1024, MiB=1024**2, GiB=1024**3, TiB=1024**4,
+        KiB=(2**10), MiB=(2**20), GiB=(2**30), TiB=(2**40),
         seconds=1, minutes=60, hours=3600, days=3600*24,
         s=1, h=3600, d=3600*24,
         S=1, H=3600, D=3600*24,
         none=1)
 
-    def infer_m_meaning(*, source, target):
-        if ((source == "M" and target in number_multipliers)
-            or (target == "M" and source in number_multipliers)):
-            return 1e6
-        elif ((source == "M" and target in time_multipliers)
-            or (target == "M" and source in time_multipliers)):
-            return 60
-        else:
-            raise ValueError(f"Ambiguous multiplier 'M' with source={source} and target={target}")
+    # Found source
+    if isinstance(x, str) and source is None:
+        for am in all_multipliers:
+            if x.endswith(am):
+                x, source = int(strip_right(x, am)), am
+                break
+    # In this case, interpret the source as an override
+    elif isinstance(x, str) and source is not None:
+        x = int(remove_nonnumeric_suffix(x))
 
-    if source is None and target is None and not desc is None:
+
+    # Parse [source]
+    if not desc is None and source is None and target is None:
         source, target = [d.strip() for d in desc.split("->")] # Einops style is nice!
-    elif source is None and not target is None and desc is None:
+    elif source is None and not target is None:
         source = "none"
+    elif target is None and not source is None:
+        target = "none"
+    assert not target is None
+    assert not source is None
 
-    if source in inferred_multipliers and target in unit2multiplier_wrt_base:
-        raise ValueError(f"Cannot infer meaning of multiplier 'M' when target unit is provided: source={source}, target={target}")
+    
 
-    source_multiplier = infer_meaning(source=source, target=target) if source in inferred_multipliers else unit2multiplier_wrt_base.get(source, None)
-    target_multiplier = infer_meaning(source=target, target=source) if target in inferred_multipliers else unit2multiplier_wrt_base.get(target, None)
+    # twrite("AAA", x=x, source=source)
+        
 
+    if target in number_multipliers and source == "M":
+        source = "MB"
+    elif target in time_multipliers and source == "M":
+        source = "minutes"
+    
+    if source in number_multipliers and target == "M":
+        target = "MB"
+    elif source in time_multipliers and target == "M":
+        target = "minutes"
+
+    # twrite(x=x, source=source, target=target)
+
+    
+        
+    # def infer_m_meaning(*, source, target):
+    #     if ((source == "M" and target in number_multipliers)
+    #         or (target == "M" and source in number_multipliers)):
+    #         return 1e6
+    #     elif ((source == "M" and target in time_multipliers)
+    #         or (target == "M" and source in time_multipliers)):
+    #         return 60
+    #     else:
+    #         raise ValueError(f"Ambiguous multiplier 'M' with source={source} and target={target}")
+
+    # if source is None and target is None and not desc is None:
+    #     source, target = [d.strip() for d in desc.split("->")] # Einops style is nice!
+    # elif source is None and not target is None and desc is None:
+    #     source = "none"
+
+    # if source in inferred_multipliers and target in unit2multiplier_wrt_base:
+    #     raise ValueError(f"Cannot infer meaning of multiplier 'M' when target unit is provided: source={source}, target={target}")
+
+    # source_multiplier = infer_meaning(source=source, target=target) if source in inferred_multipliers else unit2multiplier_wrt_base.get(source, None)
+    # target_multiplier = infer_meaning(source=target, target=source) if target in inferred_multipliers else unit2multiplier_wrt_base.get(target, None)
+
+    source_multiplier = unit2multiplier_wrt_base.get(source, 1)
+    target_multiplier = unit2multiplier_wrt_base.get(target, 1)
     if source in unit2multiplier_wrt_base and target in unit2multiplier_wrt_base:
+        # twrite(f"[DEBUG] unit_conversion(): x={x}, source={source}, target={target}, source_multiplier={source_multiplier}, target_multiplier={target_multiplier}")
         return x * source_multiplier / target_multiplier
     else:
         raise ValueError(f"Unknown source or target unit for conversion: {source} -> {target}")
@@ -381,6 +440,20 @@ def list_to_pretty_str(l, one_per_line=False, sep="\t", terminal_size=None):
     sublists = [l[idx * num_cols:max(len(l), (idx + 1) * num_cols)] for idx in range(num_rows)]
     sublists = [sep.join([s.ljust(chars_per_col) for s in sublist]) for sublist in sublists]
     return "\n".join(sublists)
+
+def comma_separated_list_to_list(s):
+    """Converts a comma-separated string or list thereof to a list of strings. The key
+    use case is in handling various SLURM commands where lists are represented as
+    comma-separated strings.
+    """
+    if isinstance(s, list | tuple | set):
+        return UtilsBase.flatten([comma_separated_list_to_list(x) for x in s])
+    elif isinstance(s, str):
+        return [x.strip() for x in s.split(",") if len(x.strip()) > 0]
+    elif isinstance(s, int | float):
+        return [str(s)]
+    else:
+        raise ValueError(f"Unexpected type for comma_separated_list_to_list: {type(s)}. Value: {s}")
 
 ######################################################################################
 ######################################################################################
@@ -769,7 +842,56 @@ def persisted_state_clear():
 ######################################################################################
 ######################################################################################
 
+###### Caching Functions #############################################################
+def deterministic_hash(x, maxlen=32):
+    """Returns a deterministic hash of [x] as a string of length [maxlen]."""
+    import hashlib
+    x = json.dumps(x).encode("utf-8") if not isinstance(x, bytes) else x
+    return hashlib.sha256(x).hexdigest()[:maxlen]
 
+def persistent_cache(fn=None, *, update_every=3600, cache_dir=osp.join(osp.dirname(osp.abspath(__file__)), "value_cache")):
+    """Decorator that memoizes function outputs to a saved state file. If the function
+    is called again with the same arguments within [update_every] seconds, then the
+    cached value is returned. Can be used bare (@cached_value), just like
+    @functools.cache, or called with overrides (@cached_value(update_every=60)).
+
+    NOTE: since we still have to read/write the cache file, this is only useful for
+    meaningfully expensive functions. And, it's only useful if the function is
+    deterministic and its return value is JSON-serializable (or convertible via
+    try_make_jsonable()), since that's how it's persisted to disk.
+
+    Args:
+    update_every -- number of seconds after which a cached value is stale
+    cache_dir    -- directory to store cached values
+    """
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = try_make_jsonable(dict(fn=f"{fn.__module__}.{fn.__qualname__}",
+                args=list(args),
+                kwargs=dict(sorted(kwargs.items()))))
+            fpath = osp.join(cache_dir, f"{deterministic_hash(key)}.json")
+            if osp.exists(fpath) and (time.time() - osp.getmtime(fpath)) < update_every:
+                return load_file_lite(fpath)
+
+            value = fn(*args, **kwargs)
+            try:
+                _ = atomic_save_lite(data=value, fpath=fpath)
+
+            # In this case, we probably tried to serialize [value] to JSON and failed
+            # due to it being not JSONable. So, unfortunate, but we can just return it
+            except TypeError as e:
+                return value
+            # In this case we likely care deeply about the issue
+            except os.OSError as e:
+                twrite(f"[ERROR] Could not cache value for {fn.__module__}.{fn.__qualname__} with args={args} and kwargs={kwargs}: {e}")
+                return value
+            except Exception as e:
+                twrite(f"[ERROR] Could not cache value for {fn.__module__}.{fn.__qualname__} with args={args} and kwargs={kwargs}: {e}")
+                raise e
+            return value
+        return wrapper
+    return decorator(fn) if fn is not None else decorator
 
 ###### User Query Functions ##########################################################
 def query_among_list(*, prompt, options):
@@ -816,7 +938,7 @@ def warn_once(message):
     def decorator(fn):
         warned = False
 
-        @functools.wraps(fn)
+        @wraps(fn)
         def wrapper(*args, **kwargs):
             nonlocal warned
             if not warned:
@@ -826,3 +948,16 @@ def warn_once(message):
 
         return wrapper
     return decorator
+
+
+
+if __name__ == "__main__":
+    import random
+    
+    @cached_value
+    def expensive_function(x):
+        print(random.randint(1, 100))
+        return x * 2
+
+    print(expensive_function(10))
+    print(expensive_function(10))  # This should return the cached value without printing a new random number

@@ -43,12 +43,42 @@ def filter_checkpoints_heuristic_to_exclude(checkpoint_folder, verbose=0):
     file2idx = {f: UtilsBase.remove_nonnumeric_suffix(f) for f in files}
 
 
+
+def format_underlying_rsync_flags_for_rsync(args):
+    """Returns a string with the relevant flags for the underlying rsync command."""
+    s = ""
+    s += "r" if args.r else ""
+    s += "v" if args.v else ""
+    s += "h" if args.h else ""
+    s += "a" if args.a else ""
+    s += "n" if args.n else ""
+    s = f"-{s} " if s else ""
+
+    s += f"--info={args.info} " if args.info else ""
+    s += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
+    s += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
+    return s
+
+def format_underlying_rsync_flags_for_rsyncb_cmd(args):
+    """Returns a string with the relevant flags for the underlying rsync command."""
+    s = ""
+    s += " -r " if args.r else " -no-r "
+    s += " -v " if args.v else " -no-v "
+    s += " -h " if args.h else " -no-h "
+    s += " -a " if args.a else " -no-a "
+    s += " -n " if args.n else " -no-n "
+
+    s += f" --info={args.info} " if args.info else ""
+    s += " ".join([f"--exclude='{e}'" for e in args.exclude]) + " " if args.exclude else ""
+    s += " ".join([f"--include='{i}'" for i in args.include]) + " " if args.include else ""
+    return s
+
 def get_args(args=None):
     P = argparse.ArgumentParser(add_help=False)
     P.add_argument("--help", action="help", help="Show this help message and exit")
 
     # Flags for rsync that work exactly as in rsync
-    P.set_defaults(r=True, v=False, h=True, a=False, info="progress2")
+    P.set_defaults(r=True, v=False, h=True, a=False, info="progress2", n=False)
     P.add_argument("-r", action="store_true", dest="r",)
     P.add_argument("-no-r", action="store_false", dest="r")
     P.add_argument("-v", action="store_true", dest="v",)
@@ -59,6 +89,8 @@ def get_args(args=None):
     P.add_argument("-no-a", action="store_false", dest="a")
     P.add_argument("--info", type=str, dest="info", default="progress2")
     P.add_argument("--no-info", action="store_const", const=None, dest="info")
+    P.add_argument("-n", action="store_true", dest="n", help="Perform a dry run of the UNDERLYING rsync command")
+    P.add_argument("-no-n", action="store_false", dest="n", help="Don't perform dry run (ie. actually copy) of the UNDERLYING rsync command")
 
     # Flags for rsync whose behavior is different from rsync
     P.add_argument("--exclude", type=str, nargs="+", default=[],
@@ -183,16 +215,16 @@ if __name__ == "__main__":
                 for f in files:
                     if any([f.endswith(ext) for ext in UserConfig.checkpoint_extensions]) and UtilsBase.remove_nonnumeric(f):
                         prefix = UtilsBase.str_to_nonnumeric_prefix(f)
-                        source2prefix2files[s][prefix].append(f)
+                        source2prefix2files[s][prefix].append(osp.basename(f))
                     else:
-                        source2prefix2files[s][f].append(f)
-
+                        source2prefix2files[s][f].append(osp.basename(f))
 
             source2prefix2filtered = {s: {p: files[:-1] for p,files in prefix2files.items()} for s,prefix2files in source2prefix2files.items()}
             source2prefix2filtered = {s: {p: files for p,files in prefix2files.items() if files} for s,prefix2files in source2prefix2filtered.items()}
 
             # These should all be unique!
             source2excluded = {s: [osp.join(s, f) for p,files in prefix2files.items() for f in files] for s,prefix2files in source2prefix2filtered.items()}
+            source2excluded = {s: [osp.basename(f) for f in files] for s,files in source2excluded.items()}
             _ = twrite(f"[INFO] Excluding files based on checkpoint filtering heuristic: {source2excluded}", quiet=not args.verbose)
             args.exclude += UtilsBase.flatten(list(source2excluded.values()))
 
@@ -210,11 +242,12 @@ if __name__ == "__main__":
 
         # Build the rsync command string with the appropriate flags and options. Note that we
         rsync_str = "rsync "
-        rsync_str += "-" if any([args.r, args.v, args.h, args.a]) else ""
+        rsync_str += "-" if any([args.r, args.v, args.h, args.a, args.n]) else ""
         rsync_str += "r" if args.r else ""
         rsync_str += "v" if args.v else ""
         rsync_str += "h" if args.h else ""
         rsync_str += "a" if args.a else ""
+        rsync_str += "n" if args.n else ""
         rsync_str += (" " + " ".join([f"--exclude='{e}'" for e in args.exclude]) + " ") if args.exclude else ""
         rsync_str += (" " +  " ".join([f"--include='{i}'" for i in args.include]) + " ") if args.include else ""
         rsync_str += f" --info={args.info} " if args.info else ""
@@ -303,7 +336,9 @@ if __name__ == "__main__":
                 raise e
             return result
                 
-        cluster2send_command = {c: f"{' '.join(args.files)} {c} --output_as_meta --terminal_size {os.get_terminal_size().columns}" for c in args.clusters}
+        filter_checkpoints_str = " --filter_checkpoints " if args.filter_checkpoints else ""
+        underlying_rsync_flags = format_underlying_rsync_flags_for_rsyncb_cmd(args)
+        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} {filter_checkpoints_str} --output_as_meta --terminal_size {os.get_terminal_size().columns} " for c in args.clusters}
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
         try:

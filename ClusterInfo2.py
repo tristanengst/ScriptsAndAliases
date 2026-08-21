@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 
-import MachineInfo
+from MachineInfo import gpu2info, gpu2vram, cluster2node2config, gpu_name2alias
 import Utils
 import UtilsBase
 from UtilsBase import twrite, colorize
@@ -99,8 +99,8 @@ class Node:
         self.cpus_total = int(cpus_total)
 
         # Sort from most to least VRAM
-        self.gres_total = {k: gres_total[k] for k in sorted(gres_total.keys(), key=lambda g: MachineInfo.gpu2vram[g], reverse=True)}
-        self.gres_alloc = {k: gres_total[k] for k in sorted(gres_alloc.keys(), key=lambda g: MachineInfo.gpu2vram[g], reverse=True)}
+        self.gres_total = {k: gres_total[k] for k in sorted(gres_total.keys(), key=lambda g: gpu2vram[g], reverse=True)}
+        self.gres_alloc = {k: gres_total[k] for k in sorted(gres_alloc.keys(), key=lambda g: gpu2vram[g], reverse=True)}
         
         # If the cluster is Vulcan, count apparently free L40s GPUs as used if there
         # are also L40s_shard GPUs that could be allocated on them
@@ -130,8 +130,8 @@ class Node:
             alloc = self.gres_alloc[gpu_type] if gpu_type in self.gres_alloc else 0
             avail_gpus = total - alloc
 
-            req_cpus_per_gpu = MachineInfo.cluster2node2config[Utils.get_cluster_type()][lookup_name]["cpus_per_gpu"]
-            req_mem_per_gpu = MachineInfo.cluster2node2config[Utils.get_cluster_type()][lookup_name]["mem_per_gpu"]
+            req_cpus_per_gpu = cluster2node2config[Utils.get_cluster_type()][lookup_name].cpus_per_gpu_target
+            req_mem_per_gpu = cluster2node2config[Utils.get_cluster_type()][lookup_name].mem_per_gpu_target
 
             cpu_limited_gpus = int(avail_cpus // req_cpus_per_gpu)
             mem_limited_gpus = int(avail_memory // req_mem_per_gpu)
@@ -182,10 +182,10 @@ def tres_to_gres_used(tres, node_name="default"):
 
             if resource.startswith("=") and node_name and Utils.is_solar():
                 count = int(resource[1:])
-                gpu_name = MachineInfo.cluster2node2config[Utils.get_cluster_type()][node_name]["gpu_name"]
+                gpu_name = cluster2node2config[Utils.get_cluster_type()][node_name].gpu_name
             elif resource.startswith("=") and Utils.get_cluster_type() == "trillium":
                 count = int(resource[1:])
-                gpu_name = MachineInfo.cluster2node2config[Utils.get_cluster_type()]["default"]["gpu_name"]
+                gpu_name = cluster2node2config[Utils.get_cluster_type()]["default"].gpu_name
             elif not resource.startswith("=") and not Utils.is_solar():
                 gpu_name, count = resource.split("=")
                 count = int(count)
@@ -193,7 +193,7 @@ def tres_to_gres_used(tres, node_name="default"):
                 continue
 
             gpu_name = f"{gpu_name}_shard" if is_shard else gpu_name
-            gpu_type = MachineInfo.gpu_name2alias[gpu_name]
+            gpu_type = gpu_name2alias[gpu_name]
             gres2count[gpu_type] = count
             
     return gres2count
@@ -341,7 +341,7 @@ class Partition:
         
 
 def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2config):
-    node2config = node2config if node2config else MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+    node2config = node2config if node2config else cluster2node2config[Utils.get_cluster_type()]
     time2resource2free = defaultdict(lambda: defaultdict(float))            # Unused resources
     time2resource2full_node_free = defaultdict(lambda: defaultdict(set))  # Unused resources
     
@@ -386,7 +386,7 @@ def partitions_nodes_to_resource(*, partitions, nodes, verbose=False, node2confi
         print("\n[INFO] Resource availability by partition time:")
         for time in sorted(time2resource2total.keys()):
             print(f"Max time: {UtilsBase.time_to_pretty_str(time*3600)}")
-            for resource in sorted(time2resource2total[time].keys(), key=lambda g: MachineInfo.gpu2vram[g]):
+            for resource in sorted(time2resource2total[time].keys(), key=lambda g: gpu2vram[g]):
                 total = time2resource2total[time][resource]
                 avail = time2resource2avail[time][resource]
                 free = time2resource2free[time][resource]
@@ -423,7 +423,7 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
     There is colorization as follows:
     ...
     """
-    node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+    node2config = cluster2node2config[Utils.get_cluster_type()]
 
     if Utils.is_solar():
         all_times = [max(resource_states.time2resource2total.keys())]
@@ -432,8 +432,8 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
         all_times = sorted(resource_states.time2resource2total.keys(), key=UtilsBase.time_to_seconds)
 
     all_resources = sorted(set(UtilsBase.flatten([list(resource_states.time2resource2total[time].keys()) for time in all_times])),
-        key=lambda g: MachineInfo.gpu2vram[g])
-    all_resources = [r for r in all_resources if MachineInfo.gpu2info[r]["good"]]
+        key=lambda g: gpu2vram[g])
+    all_resources = [r for r in all_resources if gpu2info[r].good]
     
     time2resource2str = defaultdict(lambda: defaultdict(str))
     time2resource2str["time"] = dict(time="\t\ttime") | {r: r for r in all_resources}
@@ -458,7 +458,7 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
             avail_total = UtilsBase.colorize(f"{avail}/{total})", color=avail_total_color)
             entry_str = free + avail_total
 
-            if Utils.is_cc() and node2config[resource]["gpu_frac"] >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
+            if Utils.is_cc() and gpu2info[node2config[resource].gpu_alias].gpu_frac >= 1.0 and resource_states.time2resource2full_node_free[time][resource]:
                 full_node_free = list(resource_states.time2resource2full_node_free[time][resource])
                 num_free_nodes = len(full_node_free)
                 full_node_free = full_node_free[:min(len(full_node_free), printable_free_nodes)]
@@ -508,7 +508,7 @@ def format_cluster_state(resource_states, nodes=None, printable_free_nodes=4):
 def get_str(printable_free_nodes=4):
     """Returns a string representation of the cluster info."""
     args = get_args(args=[])
-    node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+    node2config = cluster2node2config[Utils.get_cluster_type()]
     nodes = get_nodes_from_scontrol_data(args)
     partitions = get_partitions_from_sinfo(nodes=nodes)
     cluster_info = Utils.cluster2info[Utils.get_cluster_type()]
@@ -542,14 +542,14 @@ def get_args(args=None):
 
     args.partitions = UtilsBase.flatten([p.split(",") for p in args.partitions]) if args.partitions else None
     if "good" in args.gpus:
-        args.gpus += [g for g in MachineInfo.gpu2info.keys() if MachineInfo.gpu2info[g]["good"]]
+        args.gpus += [g for g in gpu2info.keys() if gpu2info[g].good]
     args.gpu_counts = [int(gc) if str(gc).isnumeric() else gc for gc in args.gpu_counts]
 
     return args
 
 if __name__ == "__main__":
     args = get_args()
-    node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
+    node2config = cluster2node2config[Utils.get_cluster_type()]
     nodes = get_nodes_from_scontrol_data(args)
     for n in nodes:
         print(n)
