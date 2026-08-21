@@ -51,24 +51,42 @@ if __name__ == "__main__":
         else:
             fname = UtilsBase.query_among_list(prompt=f"Multiple possible result files found for {args.substr}, please choose:", options=possible_result_files)
     else:
-        # This functionality could be useful but isn't really needed at present
-        if args.search_dirs == "default":
+        # First, check if the substring is part of the name of a running job of the
+        # user, if it is, then we can access the result file using info from the job.
+        fname = None
+        try:
+            running_jobs = Utils.get_slurm_status(cur_user=True)
+            jobid2jobname = {j: info.name for j, info in running_jobs.items() if info.name is not None and (args.substr in info.name or args.substr in info.uid)}
+            if len(jobid2jobname) == 1:
+                jobinfo = running_jobs[list(jobid2jobname.keys())[0]]
+                fname = jobinfo.stdout if jobinfo.stdout is not None else jobinfo.stderr
+                fname = fname.replace("%A", str(jobinfo.jobid))
+                if not osp.exists(fname):
+                    fname = None
+        except Exception as e:
+            twrite(f"Error while checking for running jobs: {e}")
             pass
-        
-        search_dirs = [s for s in args.search_dirs if not s == "default"]
-        if args.result:
-            file_type = "result"
-        elif args.slurm:
-            file_type = "slurm"
-        elif args.error:
-            file_type = "error"
-        else:
-            raise ValueError("One of --result, --slurm, or --error must be specified")
+                        
+        if fname is None:
 
-        fname = FileFinding.str_to_file(args.substr,
-            search_dirs=search_dirs,
-            file_type=file_type,
-            resolve="half_then_user")
+            # This functionality could be useful but isn't really needed at present
+            if args.search_dirs == "default":
+                pass
+            
+            search_dirs = [s for s in args.search_dirs if not s == "default"]
+            if args.result:
+                file_type = "result"
+            elif args.slurm:
+                file_type = "slurm"
+            elif args.error:
+                file_type = "error"
+            else:
+                raise ValueError("One of --result, --slurm, or --error must be specified")
+
+            fname = FileFinding.str_to_file(args.substr,
+                search_dirs=search_dirs,
+                file_type=file_type,
+                resolve="half_then_user")
 
     subprocess.run(f"cat {fname}", shell=True)
     print("")
