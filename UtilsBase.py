@@ -688,7 +688,7 @@ def time_stamp_to_datetime(time_stamp):
     if isinstance(time_stamp, datetime):
         return time_stamp
     
-    time_stamp = time_stamp.strip()
+    time_stamp = time_stamp.strip().upper()
     # Common custom time stamp format to make life easier
     if time_stamp.find("-") in [1,2]:
         dt = datetime.strptime(time_stamp, "%m-%d-%H:%M")

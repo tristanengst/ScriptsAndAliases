@@ -2,6 +2,8 @@ import argparse
 import os
 import subprocess
 
+from Utils import is_jobid, expand_jobid
+
 default_get_all_jobs_cmd = "squeue -A rrg-keli_gpu -O 'JobArrayID:11,UserName:6,State:9,tres-per-node:17,TimeLeft:12,Reason:20,Name:.160'; squeue -A def-keli_gpu  -O 'JobArrayID:11,UserName:6,State:9,tres-per-node:17,TimeLeft:12,Reason:20,Name:.160'"
 
 def lindex(s, substr):
@@ -27,16 +29,20 @@ def get_all_jobs(args):
     all_jobs = [a.split() for a in all_jobs]
     return all_jobs
 
-P = argparse.ArgumentParser()
-P.add_argument("--job")
-P.add_argument("--get_all_jobs_cmd", default=default_get_all_jobs_cmd)
-args = P.parse_args()
+if __name__ == "__main__":
+    P = argparse.ArgumentParser()
+    P.add_argument("--job")
+    P.add_argument("--get_all_jobs_cmd", default=default_get_all_jobs_cmd)
+    args = P.parse_args()
 
-if args.job.isnumeric():
-    os.system(f"scontrol show job {args.job}")
-else:
-    jobs = get_all_jobs(args)
-    jobs = [j for j in jobs if args.job in j[-1]]
-    for j in jobs:
-        print(f"--- scontrol info for job {j[-1]}")
-        os.system(f"scontrol show job {j[0][:lindex(j[0], '_')]}")
+    if is_jobid(args.job):
+        # Expand bracketed array notation ("20942478_[3-5]") into individual task IDs so
+        # each `scontrol show job` reports only the task(s) that were asked for.
+        for jid in expand_jobid(args.job):
+            os.system(f"scontrol show job {jid}")
+    else:
+        jobs = get_all_jobs(args)
+        jobs = [j for j in jobs if args.job in j[-1]]
+        for j in jobs:
+            print(f"--- scontrol info for job {j[-1]}")
+            os.system(f"scontrol show job {j[0][:lindex(j[0], '_')]}")
