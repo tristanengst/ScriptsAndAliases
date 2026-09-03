@@ -124,7 +124,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
         "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid",
-        "partition", "dependency", "tres_per_task", "tres_per_node", "tres_per_job", "num_tasks"],
+        "partition", "dependency", "tres_per_task", "tres_per_node", "tres_per_job", "num_tasks", "script"],
     key2sq_format=dict()
     ):
     """Returns a dictionary describing the entire state what's running. Strings are
@@ -201,6 +201,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         exclude=f"%x",
         comment=f"%k",
         dependency=f"%E",
+        script=f"%o",
     )
 
     key2sq_format_O = dict(
@@ -306,6 +307,8 @@ def get_project_dir(def_or_rrg=None):
         
 
 
+def scontrol_query(jobid, *, key):
+    """Returns the value of [key] for [jobid]."""
 
 
 

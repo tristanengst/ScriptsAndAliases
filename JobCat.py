@@ -59,10 +59,18 @@ if __name__ == "__main__":
             jobid2jobname = {j: info.name for j, info in running_jobs.items() if info.name is not None and (args.substr in info.name or args.substr in info.uid)}
             if len(jobid2jobname) == 1:
                 jobinfo = running_jobs[list(jobid2jobname.keys())[0]]
-                fname = jobinfo.stdout if jobinfo.stdout is not None else jobinfo.stderr
-                fname = fname.replace("%A", str(jobinfo.jobid))
-                if not osp.exists(fname):
-                    fname = None
+                if args.result:
+                        fname = jobinfo.stdout if jobinfo.stdout is not None else jobinfo.stderr
+                        fname = fname.replace("%A", str(jobinfo.jobid))
+                        if not osp.exists(fname):
+                            fname = None
+                elif args.slurm:
+                    fname = jobinfo.script if jobinfo.script is not None else None
+                    if not osp.exists(fname):
+                        fname = None
+                else:
+                    pass
+                
         except Exception as e:
             twrite(f"Error while checking for running jobs: {e}")
             pass

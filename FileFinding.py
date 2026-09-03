@@ -256,7 +256,7 @@ def str_to_all_files(s, search_dirs=[], file_type="result", verbose=False):
     # globs are added. Otherwise, a glob is added to both sides. A glob in the middle
     # of [s] has no effect on those added to the ends.
     s_glob = s if s.startswith("*") or s.endswith("*") else f"*{s}*"
-
+    
     if file_type == "result":
         search_dirs = job_result_search_dirs + search_dirs
         result_is_file = True
