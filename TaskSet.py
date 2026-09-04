@@ -38,8 +38,8 @@ server_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in server_gpu2cpu.items()}
 
 def get_cpus_from_gpus(*, gpus):
     """Returns the string of CPU indices to feed to taskset for the specified GPUs."""
-    host_info = MachineInfo.get_updated_machine_info(os.uname().nodename)
-    machine_name = SSHCommunication.hostname_to_machine(os.uname().nodename)
+    host_info = MachineInfo.get_updated_machine_info(SSHCommunication.get_hostname())
+    machine_name = SSHCommunication.hostname_to_machine(SSHCommunication.get_hostname())
 
     # Servers use a specific map because we enable hyperthreading. Although it can be
     # computed, it's easier to just state it plainly for quick reference

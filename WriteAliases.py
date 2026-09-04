@@ -92,42 +92,48 @@ aliases = [
     ##################################################################################
     # Useful APEX workstations and servers: DDP and TaskSet
     ##################################################################################
-    "alias python_ddp1=\"torchrun --standalone --nnodes=1 --nproc-per-node 1\"",
-    "alias python_ddp2=\"torchrun --standalone --nnodes=1 --nproc-per-node 2\"",
-    "alias python_ddp3=\"torchrun --standalone --nnodes=1 --nproc-per-node 3\"",
-    "alias python_ddp4=\"torchrun --standalone --nnodes=1 --nproc-per-node 4\"",
-    "alias python_ddp5=\"torchrun --standalone --nnodes=1 --nproc-per-node 5\"",
-    "alias python_ddp6=\"torchrun --standalone --nnodes=1 --nproc-per-node 6\"",
-    "alias python_ddp7=\"torchrun --standalone --nnodes=1 --nproc-per-node 7\"",
-    "alias python_ddp8=\"torchrun --standalone --nnodes=1 --nproc-per-node 8\"",
-    "alias python_ddp9=\"torchrun --standalone --nnodes=1 --nproc-per-node 9\"",
-    "alias python_ddp10=\"torchrun --standalone --nnodes=1 --nproc-per-node 10\"",
-
-    "alias tpython_ddp1=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp1\"",
-    "alias tpython_ddp2=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp2\"",
-    "alias tpython_ddp3=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp3\"",
-    "alias tpython_ddp4=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp4\"",
-    "alias tpython_ddp5=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp5\"",
-    "alias tpython_ddp6=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp6\"",
-    "alias tpython_ddp7=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp7\"",
-    "alias tpython_ddp8=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp8\"",
-    "alias tpython_ddp9=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp9\"",
-    "alias tpython_ddp10=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp10\"",
-
-    "alias tpythonb=\"python ~/.ScriptsAndAliases/TaskSet.py --basic python \"",
+    "alias python_ddp=\"python ~/.ScriptsAndAliases/TorchRun.py --no-taskset \"",
+    "alias tpython_ddp=\"python ~/.ScriptsAndAliases/TorchRun.py --taskset \"",
     
-    "alias tpython=\"python ~/.ScriptsAndAliases/TaskSetBasic.py \"",
-    "alias tpython0=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 0 \"",
-    "alias tpython1=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 1 \"",
-    "alias tpython2=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 2 \"",
-    "alias tpython3=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 3 \"",
-    "alias tpython4=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 4 \"",
-    "alias tpython5=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 5 \"",
-    "alias tpython6=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 6 \"",
-    "alias tpython7=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 7 \"",
-    "alias tpython8=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 8 \"",
-    "alias tpython9=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 9 \"",
-    "alias tpython10=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 10 \""
+    # Try deprecating these, since the complexity involved became huge.
+    # "alias python_ddp1=\"torchrun --standalone --nnodes=1 --nproc-per-node 1\"",
+    # "alias python_ddp2=\"torchrun --standalone --nnodes=1 --nproc-per-node 2\"",
+    # "alias python_ddp3=\"torchrun --standalone --nnodes=1 --nproc-per-node 3\"",
+    # "alias python_ddp4=\"torchrun --standalone --nnodes=1 --nproc-per-node 4\"",
+    # "alias python_ddp5=\"torchrun --standalone --nnodes=1 --nproc-per-node 5\"",
+    # "alias python_ddp6=\"torchrun --standalone --nnodes=1 --nproc-per-node 6\"",
+    # "alias python_ddp7=\"torchrun --standalone --nnodes=1 --nproc-per-node 7\"",
+    # "alias python_ddp8=\"torchrun --standalone --nnodes=1 --nproc-per-node 8\"",
+    # "alias python_ddp9=\"torchrun --standalone --nnodes=1 --nproc-per-node 9\"",
+    # "alias python_ddp10=\"torchrun --standalone --nnodes=1 --nproc-per-node 10\"",
+
+    
+
+    
+    # "alias tpython_ddp1=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp1\"",
+    # "alias tpython_ddp2=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp2\"",
+    # "alias tpython_ddp3=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp3\"",
+    # "alias tpython_ddp4=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp4\"",
+    # "alias tpython_ddp5=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp5\"",
+    # "alias tpython_ddp6=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp6\"",
+    # "alias tpython_ddp7=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp7\"",
+    # "alias tpython_ddp8=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp8\"",
+    # "alias tpython_ddp9=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp9\"",
+    # "alias tpython_ddp10=\"python ~/.ScriptsAndAliases/TaskSet.py python_ddp10\"",
+
+    # "alias tpythonb=\"python ~/.ScriptsAndAliases/TaskSet.py --basic python \"",
+    # "alias tpython=\"python ~/.ScriptsAndAliases/TaskSetBasic.py \"",
+    # "alias tpython0=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 0 \"",
+    # "alias tpython1=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 1 \"",
+    # "alias tpython2=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 2 \"",
+    # "alias tpython3=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 3 \"",
+    # "alias tpython4=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 4 \"",
+    # "alias tpython5=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 5 \"",
+    # "alias tpython6=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 6 \"",
+    # "alias tpython7=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 7 \"",
+    # "alias tpython8=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 8 \"",
+    # "alias tpython9=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 9 \"",
+    # "alias tpython10=\"python ~/.ScriptsAndAliases/TaskSetBasic.py --strip_gpus 10 \""
     ##################################################################################
     ##################################################################################
     ##################################################################################
