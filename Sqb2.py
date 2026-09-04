@@ -712,10 +712,26 @@ def job_info_with_parition(ji):
 
 
 
+def job_info_with_workdir(jd, mode="short"):
+    """Returns job info [jd] with the 'workdir' key formatted for display.
+
+    mode == "short" -- just the basename of the working directory
+    mode == "full"  -- the path relative to $HOME
+    """
+    workdir = jd.workdir
+    if not workdir or workdir in ["N/A", "workdir"]:
+        return jd
+    if mode == "short":
+        workdir = osp.basename(workdir.rstrip("/"))
+    elif mode == "full":
+        workdir = osp.relpath(workdir, osp.expanduser("~"))
+    return UtilsBase.updated_namespace(jd, workdir=workdir)
+
+
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, time_limit=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
-    partition=False,
+    partition=False, workdir=False,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
@@ -735,6 +751,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     heartbeat   -- if True, include the heartbeat time for all jobs
     heartbeat_analysis -- if True, include heartbeat analysis info for all jobs
     partition   -- if True, include the partition name for all jobs
+    workdir     -- False, 'short', or 'full'. If not False, include the job's
+                   working directory as the far-right column ('short' shows just
+                   the basename, 'full' shows the path relative to $HOME)
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
@@ -754,6 +773,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_info_with_heartbeat(v) for j,v in job2info.items()}
     if partition:
         job2info = {j: job_info_with_parition(v) for j,v in job2info.items()}
+    if workdir:
+        job2info = {j: job_info_with_workdir(v, mode=workdir) for j,v in job2info.items()}
 
     job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_date_time(info, key="start_time", tz=args.tz) for j,info in job2info.items()}
@@ -782,7 +803,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         "start_time",
         "time_limit" if time_limit else None,
         "heartbeat" if heartbeat else None,
-        "gpus", "name", "time_left", "reason",]
+        "gpus", "name", "time_left", "reason",
+        "workdir" if workdir else None,]
     col_names = [c for c in col_names if not c is None]        
     
     # On Solar, sort all the running jobs by the node name. The node name is printed
@@ -964,6 +986,11 @@ if __name__ == "__main__":
         help="Show the partition for all jobs")
     P.add_argument("-t", "--time_limit", action="store_true", default=False,
         help="Show the time requested for all jobs")
+    P.add_argument("--workdir", nargs="?", const="short", default=False,
+        choices=["short", "full"],
+        help="Show each job's working directory as the far-right column. Bare "
+             "'--workdir' shows the basename; '--workdir full' shows the path "
+             "relative to $HOME")
 
     P.set_defaults(queue=True)
     P.add_argument("-q", "--queue", action="store_true",
@@ -1034,8 +1061,9 @@ if __name__ == "__main__":
             heartbeat_analysis=args.heartbeat_analysis,
             checkpoint=args.checkpoint,
             partition=args.partition,
+            workdir=args.workdir,
             verbose=args.verbose)
-        job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas        
+        job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
     elif Utils.is_cc():
         
         job_datas = []
@@ -1052,6 +1080,7 @@ if __name__ == "__main__":
                 heartbeat_analysis=args.heartbeat_analysis,
                 checkpoint=args.checkpoint,
                 partition=args.partition,
+                workdir=args.workdir,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = argparse.Namespace(**{c: f"__account {account}" if c == "jobid" else c for c in colnames})
