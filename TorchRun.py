@@ -19,7 +19,7 @@ import SSHCommunication
 import MachineInfo
 
 # Scripts for which --wandb=online will be added if --wandb isn't specified
-WANDB_LOGGING_SCRIPTS = ["TrainSSL2.py", "EvalLinear.py", "EvalFinetune.py", "EvalSegmentation2.py", "EvalSegmentation2.py",]
+WANDB_LOGGING_SCRIPTS = ["TrainSSL2.py", "EvalKNN.py", "EvalLinear.py", "EvalFinetune.py", "EvalSegmentation2.py", "EvalSegmentation2.py",]
 
 def get_local_hw_info():
     """Returns a dictionary of local hardware information."""
