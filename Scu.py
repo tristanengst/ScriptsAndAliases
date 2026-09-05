@@ -227,7 +227,14 @@ def update_job(*, job_info, args, verbose=True):
 
 	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit"]
 	cmd_suffix = " ".join([f"{u}={v}" for u,v in update2value.items() if u in valid_suffixs])
-	command_to_run = f"scontrol {cmd_prefix} {jobid} {cmd_suffix}"
+
+	# `scontrol hold`/`release` take a bare job ID, but `scontrol update` needs the
+	# `JobId=` form -- given a bare ID it silently ignores it and the update is a
+	# no-op (exit 0, no output).
+	if cmd_prefix == "update job":
+		command_to_run = f"scontrol update JobId={job_info.jobid} {cmd_suffix}".strip()
+	else:
+		command_to_run = f"scontrol {cmd_prefix} {job_info.jobid}"
 
 	if args.dry_run:
 		twrite(f"[DRY RUN] Would run command: {command_to_run}")

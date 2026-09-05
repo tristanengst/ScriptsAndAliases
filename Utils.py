@@ -3,6 +3,7 @@ from collections import defaultdict
 import glob
 import os
 import os.path as osp
+import re
 import subprocess
 
 import UtilsBase
@@ -78,11 +79,52 @@ cluster2info = dict(
 )
 cluster2info = {k: argparse.Namespace(**v) for k,v in cluster2info.items()}
 
+def is_jobid(s):
+    """Returns whether [s] is a SLURM job ID.
+
+    True for an all-digit string ("20942478"), an array element ("20942478_1"), and
+    the bracket notation squeue prints for not-yet-split array tasks, ranges, and
+    lists ("20942478_[3]", "20942478_[3-9]", "20942478_[3-9%2]", "20942478_[1,4,7]").
+    """
+    _JOBID_RE = re.compile(r"^\d+(_(\d+|\[\d+(-\d+)?(,\d+(-\d+)?)*(%\d+)?\]))?$")
+    return isinstance(s, str) and bool(_JOBID_RE.match(s))
+
+def expand_jobid(s):
+    """Expands a SLURM job ID into a list of concrete, per-task job IDs.
+
+    A plain ID ("20942478") or a lone array element ("20942478_1") is returned as a
+    one-element list, unchanged. The bracket notation squeue prints for not-yet-split
+    array tasks is expanded to one "JOBID_TASKID" per task, dropping any "%N"
+    simultaneous-task throttle:
+        "20942478_[3]"     -> ["20942478_3"]
+        "20942478_[3-5]"   -> ["20942478_3", "20942478_4", "20942478_5"]
+        "20942478_[1,4,7]" -> ["20942478_1", "20942478_4", "20942478_7"]
+        "20942478_[3-9%2]" -> ["20942478_3", ..., "20942478_9"]
+
+    This matters because `scontrol show job 20942478_[3]` is rejected outright, while
+    `scontrol show job 20942478` (the base ID) reports *every* task in the array, not
+    just the one that was asked for. Raises ValueError if [s] is not a job ID.
+    """
+    if not is_jobid(s):
+        raise ValueError(f"not a job ID: {s!r}")
+    if "[" not in s:
+        return [s]
+    base, spec = s.split("_[", 1)
+    spec = spec.rstrip("]").split("%", 1)[0]  # Drop the "%N" throttle, keep the tasks
+    tasks = []
+    for part in spec.split(","):
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            tasks.extend(range(int(lo), int(hi) + 1))
+        else:
+            tasks.append(int(part))
+    return [f"{base}_{t}" for t in tasks]
+
 def get_slurm_status(cur_user=False, account=None, verbose=False,
     keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
         "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid",
-        "partition", "dependency", "tres_per_task", "tres_per_node", "tres_per_job", "num_tasks"],
+        "partition", "dependency", "tres_per_task", "tres_per_node", "tres_per_job", "num_tasks", "script", "workdir"],
     key2sq_format=dict()
     ):
     """Returns a dictionary describing the entire state what's running. Strings are
@@ -143,7 +185,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     sep = " | "
 
     key2sq_format_o = dict(
-        jobid=f"%i",
+        jobid=f"%i", # On array jobs, should be like JobArrayID_TaskID, eg. "20942478_1"
         user=f"%u",
         state=f"%T",
         start_time=f"%S",
@@ -159,10 +201,18 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         exclude=f"%x",
         comment=f"%k",
         dependency=f"%E",
+        script=f"%o",
+        workdir=f"%Z", # where the job was submitted from
     )
 
     key2sq_format_O = dict(
-        jobid="JOBID:0",
+        # "JobArrayID" (not "JobID") so array tasks read as "20942478_1" here, exactly
+        # as `-o %i` prints them below -- keeping the two squeue outputs joinable on
+        # the raw jobid string. "JobID" would instead give the expanded per-task
+        # integer ("20942479"), which matches nothing from the `-o` pass. Both passes
+        # also use `-r` so every array task is its own row (never grouped as
+        # "20942478_[3-5]").
+        jobid="JobArrayID:0",
         submit_time="SubmitTime:0",
         eligible_time="EligibleTime:0",
         stderr="StdErr:0",
@@ -175,10 +225,10 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
 
     key2sq_format_o = {k: v for k,v in key2sq_format_o.items() if k in keys} | {k: v for k,v in key2sq_format.items() if not ":" in v}
     key2sq_format_O = {k: v for k,v in key2sq_format_O.items() if k in keys} | {k: v for k,v in key2sq_format.items() if ":" in v}
-    
-    
+
+
     sq_format_str = sep.join(key2sq_format_o.values())
-    sq_cmd = f"squeue {user_str} {account_str} -h -o \"{sq_format_str}\""
+    sq_cmd = f"squeue {user_str} {account_str} -h -r -o \"{sq_format_str}\""
     sq = subprocess.getoutput(sq_cmd).strip()
 
     if verbose:
@@ -202,7 +252,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     
     sep = " , " if get_cluster_type() == "solar1" else sep # TODO: Why is this needed on Solar1 but not other clusters?
     sq_key_str = f"{sep},".join(key2sq_format_O.values())
-    sq_cmd = f"squeue {user_str} {account_str} -h -O \"{sq_key_str}\""
+    sq_cmd = f"squeue {user_str} {account_str} -h -r -O \"{sq_key_str}\""
     sq = subprocess.getoutput(sq_cmd).strip()
     if verbose:
         print(f"Running command: {sq_cmd}")
@@ -258,6 +308,8 @@ def get_project_dir(def_or_rrg=None):
         
 
 
+def scontrol_query(jobid, *, key):
+    """Returns the value of [key] for [jobid]."""
 
 
 

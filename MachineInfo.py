@@ -340,9 +340,11 @@ def get_updated_machine_info(m, verbose=0):
     result = result.split("\n")
     nvidia_smi_lines = result[:-2]
     nvidia_smi_output = "\n".join(nvidia_smi_lines)
+
+    # If the machine name isn't in [machine2info] (eg. because it's a hostname),
+    # change [m] to the machine name
+    m = m if m in machine2info else SSHCommunication.hostname_to_machine(m)
     
-    # Find the total number of GPUs and if nvidia-smi is working
-    m = SSHCommunication.hostname_to_machine(m)
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
         if verbose:
             print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
