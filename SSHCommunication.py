@@ -162,6 +162,7 @@ def hostname_to_machine(h):
         if found_hostnames:
             return sorted(found_hostnames, key=lambda x: len(x))[-1]
         else:
+            twrite(f"[WARNING] hostname_to_machine() couldn't find a machine for hostname={h} in map={m2h}")
             return None
 
     machine_from_known_m2h = get_machine_from_machine_to_hostname_map(machine2hostname)
