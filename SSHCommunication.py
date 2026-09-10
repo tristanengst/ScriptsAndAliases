@@ -155,21 +155,23 @@ def get_hostname():
 @functools.cache
 def hostname_to_machine(h):
     """Returns the machine name corresponding to hostname [h]."""
-    def get_machine_from_machine_to_hostname_map(m2h):
+    def get_machine_from_machine_to_hostname_map(m2h, warn_if_not_found=True):
         found_hostnames = []
         for k,v in m2h.items():
             _ = found_hostnames.append(k) if h == v else None
         if found_hostnames:
             return sorted(found_hostnames, key=lambda x: len(x))[-1]
-        else:
+        elif warn_if_not_found:
             twrite(f"[WARNING] hostname_to_machine() couldn't find a machine for hostname={h} in map={m2h}")
             return None
+        else:
+            return None
 
-    machine_from_known_m2h = get_machine_from_machine_to_hostname_map(machine2hostname)
+    machine_from_known_m2h = get_machine_from_machine_to_hostname_map(machine2hostname, warn_if_not_found=False) # This would frequently fail in a non-issue way, so don't warn if not found
     if not machine_from_known_m2h is None:
         return machine_from_known_m2h
     decrypted_m2h = read_encrypted_machine_to_hostname_info()
-    machine_from_decrypted_m2h = get_machine_from_machine_to_hostname_map(decrypted_m2h)
+    machine_from_decrypted_m2h = get_machine_from_machine_to_hostname_map(decrypted_m2h, warn_if_not_found=True) # If this fails and the above call also failed, there is probably an issue
     return machine_from_decrypted_m2h if not machine_from_decrypted_m2h is None else None
 
 @functools.cache
