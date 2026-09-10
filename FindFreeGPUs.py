@@ -53,7 +53,10 @@ def gpu_uid_to_procids(h=None):
         lines = [l.split(",") for l in result.strip().splitlines()]
         result = defaultdict(list)
         for uid, pid in lines:
-            result[uid].append(int(pid))
+            if pid.strip().isdigit():
+                result[uid].append(int(pid)) # Needs to be integer, since it represents an actual process ID we will use to look up the user
+            else:
+                pass # Ignore non-integer PIDs; hopefully we can figure out that the GPU is weird another way
         return dict(result)
 
 def procids_to_users(*procids, h=None):
@@ -69,17 +72,27 @@ def procids_to_users(*procids, h=None):
         return {l.split()[0]: l.split()[1] for l in result.strip().splitlines()}
 
 def gpu_index_to_errors(h=None):
-    cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits"
+    # cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits"
+    cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total,utilization.gpu --format=csv,noheader,nounits"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
         if_ssh_map_error="HostInfoError")
     result = result.strip() if result else None
     if result is None:
         return dict()
-    else:
-        return {gpu_idx: not maybe_err in ["0", "[N/A]"] for gpu_idx, maybe_err in enumerate(result.split())}
-    
 
+    gpu_idx2error = dict()
+    for gpu_idx, line in enumerate(result.splitlines()):
+        split_line = [ll.strip() for ll in line.strip().split(",")]
+        if not len(split_line) == 2:
+            gpu_idx2error[gpu_idx] = True
+        else:
+            ecc_error_str, gpu_utilization_str = split_line
+            ecc_error = not ecc_error_str in ["0", "[N/A]"]
+            gpu_utilization_error = not gpu_utilization_str.isdigit() # Presently heuristic! Maybe better to just check for ['N/A']?
+            gpu_idx2error[gpu_idx] = ecc_error or gpu_utilization_error
+    return gpu_idx2error
+    
 def gpu_index_to_users(h=None):
     try:
         gpu_uid2index = gpu_uid_to_index(h=h)
@@ -88,6 +101,7 @@ def gpu_index_to_users(h=None):
         gpu_index2procids = {gpu_uid2index[gpu_uid]: gpu_uid2procids.get(gpu_uid, []) for gpu_uid in gpu_uid2index.keys()}
         gpu_index2users = {gpu_idx: sorted(procids_to_users(*procids, h=h).values()) for gpu_idx, procids in gpu_index2procids.items()}
         gpu_index2users = {gpu_idx: users + (["error"] if gpu_index2errors.get(gpu_idx, False) else []) for gpu_idx, users in gpu_index2users.items()}
+        gpu_index2users = {gpu_idx: sorted(set(users)) for gpu_idx, users in gpu_index2users.items()} # Remove duplicates and sort
         return gpu_index2users
     except SSHCommunication.HostInfoError as e:
         return str(e)
