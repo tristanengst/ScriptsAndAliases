@@ -12,7 +12,7 @@ import subprocess
 import MachineInfo
 import SSHCommunication
 import Utils
-from UtilsBase import twrite
+from UtilsBase import twrite, colorize
 
 # Sometimes this takes a bit, so tqdm is nice. But we can't assume it's installed.
 try:
@@ -111,93 +111,152 @@ def gpu_index_to_users(h=None):
         twrite(f"Unexpected error for host={h}: {e}")
         return dict()
 
-def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None):
+def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None, color=True):
     if machine2gpu_index2users is None:
         machine2gpu_index2users = {SSHCommunication.get_machine_name(): gpu_index_to_users()}
 
-    # Separate out the machines that had some issue, eg. SSH connection or nvidia-smi,
-    # and handle them later.
-    machine2error_strs = {m: gpu_index2users for m, gpu_index2users in machine2gpu_index2users.items() if isinstance(gpu_index2users, str)}
-    machine2gpu_index2users = {m: gpu_index2users for m, gpu_index2users in machine2gpu_index2users.items() if not m in machine2error_strs}
-
-    machine2num_free_gpus = {m: sum([len(users) == 0 for users in gpu_index2users.values()]) for m, gpu_index2users in machine2gpu_index2users.items()}
-    machine2gpu_index2users = sorted(machine2gpu_index2users.items(), key=lambda x: machine2num_free_gpus[x[0]], reverse=True)
-    
-    machine2usage_strs = dict()
-    for machine, gpu_index2users in machine2gpu_index2users:
-        if len(gpu_index2users) == 0:
-            machine2usage_strs[machine] = "No GPU information found -> likely SSH map or SSH connection issue"
-            continue
-        total_gpus = len(gpu_index2users)
-        free_gpus = sorted([gpu_idx for gpu_idx, users in gpu_index2users.items() if len(users) == 0])
-        free_gpu_str = f"Free GPUS: {len(free_gpus)}/{total_gpus}\t"
-
-        if free_gpus:
-            free_gpu_idxs_str = ",".join([str(gpu_idx) for gpu_idx in free_gpus])
-            free_gpu_str += f"IDs= {free_gpu_idxs_str}"
-
-        gpu_range2users = dict()
-        gpu_range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
-        users_range_start = tuple(gpu_index2users[gpu_range_start])
-        while gpu_range_start < len(gpu_index2users):
-            for gpu_range_end in range(gpu_range_start, len(gpu_index2users)): # Last index is len(gpu_index2users) - 1, but we want to include it in the range
-                users_range_end = tuple(gpu_index2users[gpu_range_end])
-                if not (users_range_end == users_range_start):
-                    gpu_range2users[(gpu_range_start, gpu_range_end-1)] = users_range_start
-                    users_range_start = users_range_end
-                    break
-                elif gpu_range_end == len(gpu_index2users) - 1:
-                    gpu_range2users[(gpu_range_start, gpu_range_end)] = users_range_start
-                    users_range_start = users_range_end
-                    gpu_range_end = len(gpu_index2users)  # Move the start to the end of the range
-                    break
-                else:
-                    continue
-            gpu_range_start = max(gpu_range_end, gpu_range_start + 1) # Ensure we move forward in the range
-        
-        gpu_range2users = {(s,e): ",".join(users) if len(users) > 0 else "FREE" for (s,e), users in gpu_range2users.items()}
-
-        # gpu_range2users = dict()
-        # range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
-        # cur_gpu = range_start
-        # cur_users = tuple(gpu_index2users[cur_gpu])
-        # for gpu_idx in sorted(gpu_index2users.keys()):
-        #     gpu_users = tuple(gpu_index2users[gpu_idx])
-
-        #     twrite(gpu_idx=gpu_idx, gpu_users=gpu_users, cur_gpu=cur_gpu, cur_users=cur_users, range_start=range_start)
-        #     if gpu_users == cur_users and not int(gpu_idx) == len(gpu_index2users) - 1:
-        #         cur_gpu = gpu_idx
-        #     else:
-        #         cur_users_str = ",".join(cur_users) if len(cur_users) > 0 else "FREE"
-        #         range_end = gpu_idx if gpu_idx == len(gpu_index2users) - 1 else cur_gpu
-        #         gpu_range2users[(range_start, range_end)] = cur_users_str
-        #         range_start = gpu_idx
-        #         cur_gpu = gpu_idx
-        #         cur_users = gpu_users
-
-        # twrite(gpu_range2users=gpu_range2users)
-
-        gpu_range_strs = []
-        for gpu_range, users in gpu_range2users.items():
-            gpu_range_str = f"{gpu_range[0]}" if gpu_range[0] == gpu_range[1] else f"{gpu_range[0]}-{gpu_range[1]}"
-            gpu_range_strs.append(f"{gpu_range_str}: {users}")
-        gpu_range_str = "\t\t\t(" + "\t|\t".join(gpu_range_strs) + ")"
-
-        machine2usage_strs[machine] = free_gpu_str + " " * 20 + gpu_range_str
-
-    machine2usage_str = "\t" + "\n\t\t\t".join([f"{machine}: {usage_str}" for machine, usage_str in machine2usage_strs.items()])
-
-    ##################################################################################
-    # Now add in the machines that hand an error
-    ##################################################################################
-    for machine, error_str in machine2error_strs.items():
-        machine_str = f"{machine}: GPU info unavailable: "
-        error_str = error_str.replace("\n", "\n\t\t\t" + " " * len(machine_str))
-        machine2usage_str += f"\n\t\t\t{machine_str}{error_str}"
-
+    machine_usage_strs = [MachineUsageStr(machine=m, gpu_index2users=gpu_index2users) for m, gpu_index2users in machine2gpu_index2users.items()]
+    machine_usage_strs = sorted(machine_usage_strs, key=lambda mus: mus.usability_score, reverse=True)
+    max_property_lens = MachineUsageStr.get_max_property_lens(machine_usage_strs)
+    usage_strs = [mus.usage_str(color=color, **max_property_lens) for mus in machine_usage_strs]
+    machine2usage_str = "\t" + "\n\t\t\t".join(usage_strs)
     twrite(machine2usage_str)
+
     return machine2usage_str
 
+
+class MachineUsageStr:
+    """Data about a machine's current GPU usage and its string representation."""
+    def __init__(self, *, machine, gpu_index2users):
+        self.machine = machine
+        self.gpu_index2users = gpu_index2users
+
+        ##############################################################################
+        # If [gpu_index2users] is a string, then it would indicate some sort of error.
+        # Otherwise if a dictionary, then it indicates a GPU index -> user map
+        ##############################################################################
+        if isinstance(gpu_index2users, dict):
+            self.total_gpus = len(gpu_index2users)
+            self.free_gpu_idxs = sorted([gpu_idx for gpu_idx, users in gpu_index2users.items() if len(users) == 0])
+            self.free_gpus = len(self.free_gpu_idxs)
+            self.free_gpu_str = f"free: {self.free_gpus}/{self.total_gpus}"
+
+            if self.free_gpu_idxs:
+                free_gpu_idxs_str = ",".join([str(gpu_idx) for gpu_idx in self.free_gpu_idxs])
+                self.free_gpu_idxs_str = f"IDs= {free_gpu_idxs_str}"
+            else:
+                self.free_gpu_idxs_str = ""
+
+            self.gpu_range2users = dict()
+            gpu_range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
+            users_range_start = tuple(gpu_index2users[gpu_range_start])
+            while gpu_range_start < len(gpu_index2users):
+                for gpu_range_end in range(gpu_range_start, len(gpu_index2users)): # Last index is len(gpu_index2users) - 1, but we want to include it in the range
+                    users_range_end = tuple(gpu_index2users[gpu_range_end])
+                    if not (users_range_end == users_range_start):
+                        self.gpu_range2users[(gpu_range_start, gpu_range_end-1)] = users_range_start
+                        users_range_start = users_range_end
+                        break
+                    elif gpu_range_end == len(gpu_index2users) - 1:
+                        self.gpu_range2users[(gpu_range_start, gpu_range_end)] = users_range_start
+                        users_range_start = users_range_end
+                        gpu_range_end = len(gpu_index2users)  # Move the start to the end of the range
+                        break
+                    else:
+                        continue
+                gpu_range_start = max(gpu_range_end, gpu_range_start + 1) # Ensure we move forward in the range
+            
+            self.gpu_range2users = {(s,e): ",".join(users) if len(users) > 0 else "free" for (s,e), users in self.gpu_range2users.items()}
+
+            self.gpu_range_strs = []
+            for gpu_range, users in self.gpu_range2users.items():
+                gpu_range_str = f"{gpu_range[0]}" if gpu_range[0] == gpu_range[1] else f"{gpu_range[0]}-{gpu_range[1]}"
+                self.gpu_range_strs.append(f"{gpu_range_str}: {users}")
+
+            self.gpu_information_avail = True
+       
+        elif isinstance(gpu_index2users, str):
+            self.gpu_information_avail = False
+            self.gpu_range2users = dict()
+            self.total_gpus = 0
+            self.free_gpus = 0
+            self.free_gpu_idxs = []
+            self.free_gpu_str = "free: N/A"
+            self.free_gpu_idxs_str = ""
+            self.gpu_range_strs = []
+            self.gpu_information_avail = False
+        else:
+            raise NotImplementedError()
+
+        # Proxy for how much we would like to use a GPU in question. Higher is better
+        self.usability_score = self.free_gpus if self.gpu_information_avail else -1
+            
+
+    def __repr__(self):
+        return self.__class__.__name__ + f"(machine={self.machine}, gpu_index2users={self.gpu_index2users})"
+    def __str__(self): return self.__repr__()
+
+    @property
+    def free_gpu_str_len(self): return len(self.free_gpu_str) if self.free_gpu_str else 0
+    @property
+    def free_gpu_idxs_str_len(self): return len(self.free_gpu_idxs_str) if self.free_gpu_idxs_str else 0
+    @property
+    def gpu_range_str_num(self): return len(self.gpu_range_strs) if self.gpu_range_strs else 0
+    @property
+    def gpu_range_str_max_len(self): return max([len(s) for s in self.gpu_range_strs]) if self.gpu_range_strs else 0
+
+    def usage_str(self, *, color=False, max_machine_name_str_len=0, max_free_gpu_str_len=0, max_free_gpu_idxs_str_len=0, max_gpu_range_str_max_len=0):
+        max_machine_name_str_len = max(max_machine_name_str_len, len(self.machine))
+        max_free_gpu_str_len = max(max_free_gpu_str_len, len(self.free_gpu_str))
+        max_free_gpu_idxs_str_len = max(max_free_gpu_idxs_str_len, len(self.free_gpu_idxs_str))
+        max_gpu_range_str_max_len = max(max_gpu_range_str_max_len, self.gpu_range_str_max_len)
+
+        machine_str = self.machine.ljust(max_machine_name_str_len)
+        free_gpu_str = self.free_gpu_str.ljust(max_free_gpu_str_len)
+        free_gpu_idxs_str = self.free_gpu_idxs_str.ljust(max_free_gpu_idxs_str_len)
+        gpu_range_strs = [s.ljust(max_gpu_range_str_max_len) for s in self.gpu_range_strs]
+
+        if self.gpu_information_avail:
+            if color:
+
+                if self.free_gpus == self.total_gpus:
+                    free_gpus_amount_color = "green"
+                elif self.free_gpus > 0:
+                    free_gpus_amount_color = "orange"
+                else:
+                    free_gpus_amount_color = "red"
+
+                machine_str = colorize(machine_str, color=free_gpus_amount_color)
+                free_gpu_str = colorize(free_gpu_str, color=free_gpus_amount_color)
+                free_gpu_idxs_str = colorize(free_gpu_idxs_str, color=free_gpus_amount_color)
+
+                gpu_range_colors = []
+                for user_str in self.gpu_range_strs:
+                    if user_str.split(" ")[-1] == "free":
+                        gpu_range_colors.append("green")
+                    elif "error" in user_str:
+                        gpu_range_colors.append("red")
+                    else:
+                        gpu_range_colors.append("orange")
+                gpu_range_strs = [colorize(s, color=c) for s, c in zip(gpu_range_strs, gpu_range_colors)]
+
+            gpu_range_str = " | ".join(gpu_range_strs)
+            return f"{machine_str}\t{free_gpu_str}\t{free_gpu_idxs_str}\t| {gpu_range_str}"
+
+        else:
+            s = f"{machine_str}\tNo GPU information found -> likely SSH map or SSH connection issue"
+            return colorize(s, color=88) if color else s
+
+    @staticmethod
+    def get_max_property_lens(machine_usage_strs):
+        max_machine_name_str_len = max([len(mus.machine) for mus in machine_usage_strs])
+        max_free_gpu_str_len = max([mus.free_gpu_str_len for mus in machine_usage_strs])
+        max_free_gpu_idxs_str_len = max([mus.free_gpu_idxs_str_len for mus in machine_usage_strs])
+        max_gpu_range_str_max_len = max([mus.gpu_range_str_max_len for mus in machine_usage_strs])
+        return dict(max_machine_name_str_len=max_machine_name_str_len,
+            max_free_gpu_str_len=max_free_gpu_str_len,
+            max_free_gpu_idxs_str_len=max_free_gpu_idxs_str_len,
+            max_gpu_range_str_max_len=max_gpu_range_str_max_len)
 
 excluded_hosts = MachineInfo.machines_cc + ["solar"]
 if __name__ == "__main__":
@@ -210,7 +269,5 @@ if __name__ == "__main__":
     with Pool(processes=min(16, len(args.hosts))) as p:
         gpuindex2users = p.map(gpu_index_to_users, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
     machine2gpu_index2users = {h: gpu_index2users for h, gpu_index2users in zip(args.hosts, gpuindex2users)}
-
-    # twrite(machine2gpu_index2users=machine2gpu_index2users)
 
     _ = machine_gpu_usage_summary_str(machine2gpu_index2users=machine2gpu_index2users)
