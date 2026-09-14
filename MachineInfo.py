@@ -112,6 +112,7 @@ machine2info = {
     "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
     "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A9"]),
     "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
+    "V21": dict(num_cpus=64, num_gpus=8, hyperthread=False, ssh_names=["V21"]),
 } | dict( # Made up info for the ComputeCanada and Solar clusters so we can run commands on them. This should probably be refactored!
     solar=dict(num_cpus=1, num_gpus=0, hyperthread=False, ssh_names=["solar"]),
     narval=dict(num_cpus=40, num_gpus=4, hyperthread=False, ssh_names=["narval"]),

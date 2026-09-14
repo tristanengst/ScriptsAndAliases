@@ -43,14 +43,29 @@ server_gpu2cpu = {
     9: list(range(56, 64)) + list(range(120, 128))} # Gets extra CPUs: 62, 63, 126, 127
 server_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in server_gpu2cpu.items()}
 
+v21_gpu2cpu = {
+    0: list(range(0, 16)) + list(range(128, 144)),
+    1: list(range(16, 32)) + list(range(144, 160)),
+    2: list(range(32, 48)) + list(range(160, 176)),
+    3: list(range(48, 64)) + list(range(176, 192)),
+    4: list(range(64, 80)) + list(range(192, 208)),
+    5: list(range(80, 96)) + list(range(208, 224)),
+    6: list(range(96, 112)) + list(range(224, 240)),
+    7: list(range(112, 128)) + list(range(240, 256))}
+v21_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in v21_gpu2cpu.items()}
+
 def get_taskset_str(*, gpus):
     """Returns the string of CPU indices to feed to taskset for the specified GPUs."""
     machine_name = SSHCommunication.hostname_to_machine(SSHCommunication.get_hostname())
+
+    twrite(machine_name=machine_name)
 
     # Servers use a specific map because we enable hyperthreading. Although it can be
     # computed, it's easier to just state it plainly for quick reference
     if machine_name in ["S1", "S2", "S3"]:
         gpu2cpu = server_gpu2cpu
+    elif machine_name == "V21":
+        gpu2cpu = v21_gpu2cpu
     else:
         host_info = get_local_hw_info()
         cpus_per_gpu =  host_info.total_cpus // host_info.total_gpus
