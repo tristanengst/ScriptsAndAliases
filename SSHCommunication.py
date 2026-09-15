@@ -212,6 +212,13 @@ def to_hostname(x, allow_if_can_ssh=True):
     """
     if x in machine2hostname:
         return machine2hostname[x]
+    
+    local_m2h = osp.join(osp.dirname(__file__), "LocalMachine2Hostname.py")
+    if osp.exists(local_m2h):
+        from LocalMachine2Hostname import local_m2h
+        if x in local_m2h:
+            return local_m2h[x]
+
     decrypted_m2h = read_encrypted_machine_to_hostname_info()
     if x in decrypted_m2h:
         return decrypted_m2h[x]
