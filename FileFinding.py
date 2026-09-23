@@ -21,7 +21,9 @@ job_error_search_dirs = UserConfig.job_error_search_dirs
 # Custom code for me; you might delete this
 if Utils.get_cluster_type() == "cedar":
     exp_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/pretrain_results"),
-        osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results")]
+        osp.expanduser("~/Development/IMLE-SSL-Cedar/finetune_results"),
+        osp.expanduser("~/Development/IMLE-SSL-Cedar/probe_results"),
+        osp.expanduser("~/Development/IMLE-SSL-Cedar/detection_results")]
     slurm_script_search_dirs += [osp.expanduser("~/Development/IMLE-SSL-Cedar/slurm")]
 
 file_search_dirs = slurm_script_search_dirs + job_result_search_dirs + job_error_search_dirs + exp_search_dirs
