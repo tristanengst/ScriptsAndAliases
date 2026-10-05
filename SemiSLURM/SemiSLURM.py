@@ -32,6 +32,7 @@ import tarfile
 import time
 import traceback
 import uuid
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, osp.dirname(osp.dirname(osp.abspath(__file__))))
 import SSHCommunication
@@ -45,6 +46,7 @@ COMPLETED = ["finished", "crashed", "cancelled"]
 BACKOFFS = [30, 60, 180]            # Seconds between asks to a rejecting machine
 SWEEP_EVERY = 60                    # Seconds between dispatcher checks of runner liveness
 LOG_SYNC_EVERY = 60                 # Seconds between runner appends to the NAS log_file
+EARLY_LOG_SYNCS = [5, 10, 20, 30, 40, 50]  # Seconds after start of extra appends, so early output shows quickly
 LAUNCH_CONFIRM_WAIT = 60            # Seconds a runner waits for its dispatcher's launch record
 UNCERTAIN_LAUNCH_WAIT = 90          # Seconds a job isn't re-offered after a failed ask; > above
 CANCEL_GRACE = 30                   # Seconds between SIGTERM and SIGKILL of a cancelled job
@@ -57,7 +59,9 @@ LAUNCH_KEYS = ["start_time", "node_name", "gpus", "conda_env", "job_dir", "runne
 # Paths, time, and processes
 ################################################################################
 def expand(p): return osp.abspath(osp.expanduser(p))
-def now_str(): return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+TZ = ZoneInfo("America/Vancouver")  # All recorded times are Pacific, whatever a machine's clock zone
+def now_str(): return datetime.now(TZ).strftime("%Y-%m-%dT%H:%M:%S")
+def str_to_datetime(s): return datetime.fromisoformat(s).replace(tzinfo=TZ)
 def new_uid(): return uuid.uuid4().hex[:12]
 def job_to_dir(job_id): return osp.join(expand(JOBS_ROOT), str(job_id))
 
@@ -249,13 +253,19 @@ def gpu_name_to_type(name):
 
 def query_gpus(override):
     """Returns a list of (idx, gpu_type, busy) tuples for this node's GPUs, using
-    nvidia-smi indexing. A GPU is busy if any process is on it or it has errors.
+    nvidia-smi indexing. As in sqb, a GPU is busy if it has errors or a compute process
+    with a visible owner; processes whose owner can't be found (eg. stale allocations
+    with no live PID here) don't count.
     """
     smi = ["nvidia-smi", "--format=csv,noheader,nounits"]
     gpus = subprocess.run(smi + ["--query-gpu=index,uuid,name,ecc.errors.uncorrected.volatile.total,utilization.gpu"],
         capture_output=True, text=True).stdout
-    apps = subprocess.run(smi + ["--query-compute-apps=gpu_uuid"], capture_output=True, text=True).stdout
-    busy_uuids = [l.strip() for l in apps.splitlines() if l.strip()]
+    apps = subprocess.run(smi + ["--query-compute-apps=gpu_uuid,pid"], capture_output=True, text=True).stdout
+    uuid_pids = [[f.strip() for f in l.split(",")] for l in apps.splitlines() if l.count(",") == 1]
+    pids = [p for _, p in uuid_pids if p.isdigit()]
+    owned = subprocess.run(["ps", "-o", "pid=,user=", "-p", ",".join(pids)], capture_output=True, text=True).stdout if pids else ""
+    owned_pids = [l.split()[0] for l in owned.splitlines() if len(l.split()) == 2]
+    busy_uuids = [u for u, p in uuid_pids if p in owned_pids]
     result = []
     for line in gpus.splitlines():
         fields = [f.strip() for f in line.split(",")]
@@ -663,7 +673,7 @@ def run(args):
                 preexec_fn=os.setpgrp)
         _ = kill_job(signal.SIGTERM) if flags["cancelled"] else None
 
-        last_sync, last_check = time.time(), 0.
+        last_sync, last_check, early_syncs = time.time(), 0., [t0 + s for s in EARLY_LOG_SYNCS]
         while rc is None:
             time.sleep(1)
             rc = flags["job"].poll()
@@ -672,7 +682,8 @@ def run(args):
                 last_check = time.time()
             if flags["cancelled"] and time.time() - flags["kill_time"] > CANCEL_GRACE:
                 _ = kill_job(signal.SIGKILL)
-            if time.time() - last_sync > LOG_SYNC_EVERY:
+            if (early_syncs and time.time() >= early_syncs[0]) or time.time() - last_sync > LOG_SYNC_EVERY:
+                early_syncs = [t for t in early_syncs if t > time.time()]
                 _ = sync_log()
                 last_sync = time.time()
     except Exception:
@@ -747,8 +758,8 @@ def elapsed_str(state):
     """Returns the runtime of a job with [state] as D-HH:MM:SS."""
     if state["start_time"] == "-":
         return "-"
-    end = datetime.now() if state["end_time"] == "-" else datetime.fromisoformat(state["end_time"])
-    s = max(0, int((end - datetime.fromisoformat(state["start_time"])).total_seconds()))
+    end = datetime.now(TZ) if state["end_time"] == "-" else str_to_datetime(state["end_time"])
+    s = max(0, int((end - str_to_datetime(state["start_time"])).total_seconds()))
     return (f"{s // 86400}-" if s >= 86400 else "") + f"{s % 86400 // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 def queue(args):
@@ -761,7 +772,7 @@ def queue(args):
             continue
     cutoff = time.time() - args.hours * 3600
     rows = [r for r in rows if args.all or not r[2]["job_state"] in COMPLETED
-        or r[2]["end_time"] == "-" or datetime.fromisoformat(r[2]["end_time"]).timestamp() > cutoff]
+        or r[2]["end_time"] == "-" or str_to_datetime(r[2]["end_time"]).timestamp() > cutoff]
 
     jid2disp = {jid: current_dispatcher(job_to_dir(jid)) for jid, _, s in rows if s["job_state"] == "queued"}
     statuses = procs_status([p for _, p in jid2disp.values() if not p is None]) if args.check else dict()
