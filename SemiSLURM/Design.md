@@ -41,7 +41,7 @@ retrying on `FileExistsError`.
     "exp_folder": "...",
     "log_file": "...",
     "priority": 0,
-    "min_disk_gb": 20,
+    "min_disk_gb": 10,
     "nodelist": [], "exclude": [],
     "gpus_per_node": {"l40s": [2, 4], "3090": [2]},
     "conda_env": ["py314BcIMLE"],
@@ -80,7 +80,8 @@ Loop:
 1. **Assign.** For each machine not in back-off, offer its highest-priority compatible queued
    job to the accepter; on yes, record the launch in `state.txt` and offer the next; on no,
    record the rejection reason as the jobs' `reason` and back off that machine: next ask after
-   at least 30 s, then 1 min, then 3 min, then 3 min onward. Back-off resets on acceptance.
+   at least 10 s, then 20 s, then 30 s onward. Back-off resets on acceptance, and when one of
+   the dispatcher's jobs on that machine completes, since that frees GPUs.
 2. **Act on config edits.** Re-read its jobs' `config.json` periodically. `cancelled` running
    jobs: kill the runner over `ssh` (its process group), verify it died; the runner records
    `cancelled`. Priority/hold changes apply immediately.

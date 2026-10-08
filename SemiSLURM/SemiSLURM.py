@@ -16,6 +16,7 @@ runner use each node's system python3.
 import argparse
 from collections import defaultdict
 from datetime import datetime
+import errno
 import fcntl
 import functools
 import getpass
@@ -43,7 +44,7 @@ SCRIPT = osp.abspath(__file__)
 JOBS_ROOT = os.environ.get("SEMISLURM_JOBS_ROOT", "~/scratch/SemiSLURM/jobs")
 REPLY_PREFIX = "SEMISLURM_REPLY "
 COMPLETED = ["finished", "crashed", "cancelled"]
-BACKOFFS = [30, 60, 180]            # Seconds between asks to a rejecting machine
+BACKOFFS = [10, 20, 30]            # Seconds between asks to a rejecting machine; short, since GPUs free up as often as short jobs end
 SWEEP_EVERY = 60                    # Seconds between dispatcher checks of runner liveness
 LOG_SYNC_EVERY = 60                 # Seconds between runner appends to the NAS log_file
 EARLY_LOG_SYNCS = [5, 10, 20, 30, 40, 50]  # Seconds after start of extra appends, so early output shows quickly
@@ -158,9 +159,26 @@ def kill_job_procs(p, *, sig="KILL"):
 ################################################################################
 # Job files
 ################################################################################
+def retry_stale(fn):
+    """Returns [fn] retried on NFS stale file handles (ESTALE), which reading a file that
+    another machine just replaced with an atomic rename can raise.
+    """
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        for idx in range(20):
+            try:
+                return fn(*args, **kwargs)
+            except OSError as e:
+                if not e.errno == errno.ESTALE or idx == 19:
+                    raise
+                time.sleep(0.5)
+    return wrapped
+
+@retry_stale
 def read_config(jdir): return UtilsBase.load_file_lite(osp.join(jdir, "config.json"))
 def write_config(jdir, cfg): UtilsBase.atomic_save_lite(data=cfg, fpath=osp.join(jdir, "config.json"))
 
+@retry_stale
 def read_state(jdir):
     """Returns the state.txt of the job at [jdir] as a dict of strings."""
     with open(osp.join(jdir, "state.txt"), "r") as f:
@@ -499,6 +517,9 @@ def dispatch(args):
 
             jid2state = {jid: read_state(job_to_dir(jid)) for jid in jid2state}
             done = [jid for jid, s in jid2state.items() if s["job_state"] in COMPLETED]
+            for m in [jid2state[jid].get("node_name") for jid in done]:  # A job ending frees its GPUs,
+                if m in machine2backoff:                                   # so ask its machine again now
+                    machine2backoff[m] = (0, 0.)
             _ = twrite(f"Jobs {done} completed; no longer tracking them") if done else None
             jid2k = {jid: k for jid, k in jid2k.items() if not jid in done}
 
@@ -819,7 +840,7 @@ def get_args():
     PS.add_argument("--code_dir", default=".",
         help="Folder whose code is put in EXP_FOLDER/code.tar and extracted into $SLURM_JOBDIR. '' to keep an existing code.tar")
     PS.add_argument("--priority", type=int, default=0)
-    PS.add_argument("--min_disk_gb", type=float, default=20,
+    PS.add_argument("--min_disk_gb", type=float, default=10,
         help="Free space needed at $TMP")
     PS.add_argument("--nodelist", nargs="*", default=[])
     PS.add_argument("--exclude", nargs="*", default=[])

@@ -156,5 +156,5 @@ if __name__ == "__main__":
         twrite("-----------------------")
         twrite(f"[INFO] Running command: {command}")
         twrite("-----------------------")
-        os.system(command)
+        sys.exit(os.waitstatus_to_exitcode(os.system(command)))  # Pass on torchrun's exit code, so callers see failures
 
