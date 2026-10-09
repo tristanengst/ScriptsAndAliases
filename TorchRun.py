@@ -54,6 +54,16 @@ v21_gpu2cpu = {
     7: list(range(112, 128)) + list(range(240, 256))}
 v21_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in v21_gpu2cpu.items()}
 
+def gpu_indices_to_cuda_devices(gpu_indices):
+    """Returns CUDA_VISIBLE_DEVICES naming GPUs [gpu_indices] (nvidia-smi indices) by UUID.
+    CUDA's own indices skip GPUs it can't use (eg. a failed one), so after such a GPU they
+    no longer match nvidia-smi's and a job would run on the wrong GPU, or on none.
+    """
+    import subprocess
+    out = subprocess.run(["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"], capture_output=True, text=True).stdout
+    idx2uuid = {int(i): u.strip() for i, u in (l.split(",", 1) for l in out.splitlines() if "," in l and l.split(",")[0].strip().isdigit())}
+    return ",".join(idx2uuid.get(g, str(g)) for g in gpu_indices)
+
 def get_taskset_str(*, gpus):
     """Returns the string of CPU indices to feed to taskset for the specified GPUs."""
     machine_name = SSHCommunication.hostname_to_machine(SSHCommunication.get_hostname())
@@ -146,7 +156,7 @@ if __name__ == "__main__":
 
     gpu_indices, new_argv = parse_gpu_indices_and_args_from_argv(tpython_ddp_args=tpython_ddp_args, argv=argv)
     taskset_str = get_taskset_str(gpus=gpu_indices) if tpython_ddp_args.taskset else ""
-    cuda_devices_str = ",".join([str(gpu_idx) for gpu_idx in gpu_indices])
+    cuda_devices_str = gpu_indices_to_cuda_devices(gpu_indices)
     torchrun_str = f"torchrun --nproc_per_node={len(gpu_indices)} --nnodes=1 --rdzv_backend=c10d --rdzv_endpoint=localhost:0"
     command = f"CUDA_VISIBLE_DEVICES={cuda_devices_str} {taskset_str} {torchrun_str} {' '.join(new_argv)}"
 
