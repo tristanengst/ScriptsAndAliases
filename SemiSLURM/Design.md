@@ -167,3 +167,29 @@ toggled mid-run; logs reaching `exp_folder` and `$SLURM_JOBDIR` being removed.
   processes left by a killed runner (including `setsid`'d ones) are killed on sweep, cancel, and runner exit.
 - A job exiting nonzero is `crashed` and not requeued; only jobs whose runner died are requeued.
 - Not done yet: the BetterCondIMLE side (UID-first submission, a `SlurmSubmit.py`-like generator).
+
+## Outcomes, node health, and job control (added 2026-10-09)
+- **Success file.** `submit --success_file F` makes the runner record a zero exit as `crashed`
+  unless `EXP_FOLDER/F` exists (eg. `finished.txt`, written by the job when it completes). A
+  job may also write `EXP_FOLDER/failed.txt`; its first line becomes the state's `fail_reason`,
+  which otherwise is `exit_code:N`, `no_F` or `runner_error:TYPE`. The runner deletes stale
+  copies of both before starting. Nothing is inferred from the job's output.
+- **Node health.** `submit --require_imports M ... --require_commands C ... --require_files P ...`
+  declares what a node needs; the accepter checks them (torch also needs CUDA; commands are
+  resolved by an interactive shell with the env activated, so aliases count) and that the
+  exp folder is writable there, rejecting with `unhealthy:WHAT`. Results are cached per
+  (env, requirements) in `$TMP/semislurm/health/` for 30 min (10 min after a failure);
+  delete that folder to recheck. Hardware (GPU type and count) and `$TMP` disk space were
+  already checked.
+- **Job-specific rejections** (`unhealthy`, `no_env`, `excluded`) skip only that job on that
+  machine for 10 min, so they don't back the machine off for every other job.
+- **hold / release / requeue.** `hold` stops queued jobs being started; `release` undoes it
+  (starting a dispatcher if none is alive). `requeue` puts jobs back in the queue with the
+  same ID, folder and UID: running ones are killed by their dispatcher and recorded as
+  queued (requeues += 1), completed ones are reset; `--code_dir` refreshes their code.tar.
+- **queue cache.** `queue` caches completed jobs' rows in `$TMP/semislurm/queue_cache.json`
+  keyed by their state file's mtime, so it reads only active jobs from JOBS_ROOT; delete it
+  to fall back to reading everything. `queue --active 1`, `--name PREFIX` and `--summary N`
+  (one line of counts by state and node, then up to N lines of crash reasons) cut output.
+- Accepter- and runner-side parts (health, success file, fail reasons) run on each node's own
+  copy of this script, so they apply only on nodes whose copy has them.

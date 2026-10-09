@@ -19,6 +19,7 @@ from datetime import datetime
 import errno
 import fcntl
 import functools
+import hashlib
 import getpass
 import json
 import os
@@ -50,10 +51,14 @@ LOG_SYNC_EVERY = 60                 # Seconds between runner appends to the NAS 
 EARLY_LOG_SYNCS = [5, 10, 20, 30, 40, 50]  # Seconds after start of extra appends, so early output shows quickly
 LAUNCH_CONFIRM_WAIT = 60            # Seconds a runner waits for its dispatcher's launch record
 UNCERTAIN_LAUNCH_WAIT = 90          # Seconds a job isn't re-offered after a failed ask; > above
+JOB_REJECT_WAIT = 600               # Seconds a job isn't re-offered to a machine that rejected it for job-specific reasons
+JOB_SPECIFIC = ("unhealthy", "no_env", "excluded")  # Rejection reasons about the job, not the machine's capacity
 CANCEL_GRACE = 30                   # Seconds between SIGTERM and SIGKILL of a cancelled job
+HEALTH_TTL = dict(ok=1800, bad=600) # Seconds a node's health check result is reused, by outcome
+FAIL_FILE = "failed.txt"            # A job may write this to its exp folder to say why it failed
 STATE_KEYS = ["job_id", "job_name", "job_state", "reason", "submit_time", "start_time",
     "end_time", "requeues", "exit_code", "node_name", "gpus", "conda_env", "job_dir", "runner",
-    "exp_folder", "log_file"]
+    "exp_folder", "log_file", "fail_reason"]
 LAUNCH_KEYS = ["start_time", "node_name", "gpus", "conda_env", "job_dir", "runner"]
 
 ################################################################################
@@ -394,12 +399,14 @@ def submit(args):
         gpus_per_node=gpus_per_node,
         conda_env=args.conda_env,
         max_requeues=args.max_requeues,
+        success_file=args.success_file,
+        require_commands=args.require_commands, require_files=args.require_files, require_imports=args.require_imports,
         state="queued")
     _ = write_config(jdir, cfg)
     _ = write_state(jdir, dict(job_id=job_id, job_name=cfg["job_name"], job_state="queued",
         reason="none", submit_time=now_str(), start_time="-", end_time="-", requeues=0,
         exit_code="-", node_name="-", gpus="-", conda_env="-", job_dir="-", runner="-",
-        exp_folder=cfg["exp_folder"], log_file=cfg["log_file"]))
+        exp_folder=cfg["exp_folder"], log_file=cfg["log_file"], fail_reason="-"))
     print(f"Submitted batch job {job_id}")
 
     if args.dispatch:
@@ -432,13 +439,22 @@ def set_reason(jdir, *, reason):
     state = read_state(jdir)
     _ = write_state(jdir, state | dict(reason=reason)) if state["job_state"] == "queued" and not state["reason"] == reason else None
 
+def requeued_state(state):
+    """Returns job [state] reset to queued, as a requeue leaves it."""
+    return state | {k: "-" for k in LAUNCH_KEYS} | dict(job_state="queued", reason="requeued", end_time="-",
+        exit_code="-", fail_reason="-", requeues=int(state["requeues"]) + 1)
+
 def handle_cancel(jid, *, state, jid2kill_time):
-    """Acts on a cancelled job [jid] with [state]. Running jobs' runners are sent
-    SIGTERM, and their sessions SIGKILL if that hasn't worked after a while. A runner
-    that died without recording its end is recorded as cancelled here.
+    """Acts on a cancelled, or requeued, running job [jid] with [state]. Running jobs'
+    runners are sent SIGTERM, and their sessions SIGKILL if that hasn't worked after a
+    while. A runner that died without recording its end is recorded as cancelled (or
+    queued again) here.
     """
     jdir = job_to_dir(jid)
-    if state["job_state"] == "queued":
+    if state["job_state"] == "queued" and read_config(jdir)["state"] == "requeue":
+        _ = write_config(jdir, read_config(jdir) | dict(state="queued"))
+        return
+    elif state["job_state"] == "queued":
         _ = write_state(jdir, state | dict(job_state="cancelled", reason="cancelled", end_time=now_str()))
         twrite(f"Job {jid}: cancelled while queued")
         return
@@ -455,7 +471,10 @@ def handle_cancel(jid, *, state, jid2kill_time):
     elif status == "dead":
         _ = kill_job_procs(state["runner"], sig="KILL")
         state = read_state(jdir)  # The runner may have recorded its end before dying
-        if state["job_state"] == "running":
+        if state["job_state"] == "running" and read_config(jdir)["state"] == "requeue":
+            _ = write_state(jdir, requeued_state(state))
+            _ = write_config(jdir, read_config(jdir) | dict(state="queued"))
+        elif state["job_state"] == "running":
             _ = write_state(jdir, state | dict(job_state="cancelled", reason="cancelled", end_time=now_str()))
         twrite(f"Job {jid}: runner {state['runner']} verifiably dead; job is {read_state(jdir)['job_state']}")
 
@@ -466,7 +485,7 @@ def sweep(jid2state, *, jid2cfg):
     running = {jid: s for jid, s in jid2state.items() if s["job_state"] == "running"}
     statuses = procs_status([s["runner"] for s in running.values()])
     for jid, s in running.items():
-        if not statuses[s["runner"]] == "dead" or jid2cfg[jid]["state"] == "cancelled":
+        if not statuses[s["runner"]] == "dead" or jid2cfg[jid]["state"] in ["cancelled", "requeue"]:
             continue
         _ = kill_job_procs(s["runner"], sig="KILL")  # Orphans of a kill -9'd runner
         s = read_state(job_to_dir(jid))  # The runner may have recorded its end before dying
@@ -488,7 +507,7 @@ def dispatch(args):
     twrite(f"Dispatcher {me} adopted jobs {sorted(jid2k)}", machines=args.machines, assign=args.assign)
 
     machine2backoff = {m: (0, 0.) for m in args.machines}   # (rejections, next ask time)
-    machine2gpu_types, jid2retry_after, jid2kill_time, last_sweep = dict(), dict(), dict(), 0.
+    machine2gpu_types, jid2retry_after, jid2kill_time, last_sweep, jm2retry_after = dict(), dict(), dict(), 0., dict()
     while jid2k:
         try:
             ##################################################################
@@ -507,8 +526,12 @@ def dispatch(args):
             # Act on config edits, and sweep for dead runners
             ##################################################################
             for jid, cfg in jid2cfg.items():
-                if cfg["state"] == "cancelled" and not jid2state[jid]["job_state"] in COMPLETED:
+                if cfg["state"] in ["cancelled", "requeue"] and not jid2state[jid]["job_state"] in COMPLETED:
                     _ = handle_cancel(jid, state=jid2state[jid], jid2kill_time=jid2kill_time)
+                elif cfg["state"] == "requeue":  # Killed by a runner that predates requeue, so recorded as ended
+                    _ = write_state(job_to_dir(jid), requeued_state(jid2state[jid]))
+                    _ = write_config(job_to_dir(jid), cfg | dict(state="queued"))
+                    twrite(f"Job {jid}: requeued")
                 elif cfg["state"] == "held" and jid2state[jid]["job_state"] == "queued":
                     _ = set_reason(job_to_dir(jid), reason="held")
             if time.time() - last_sweep > SWEEP_EVERY:
@@ -531,7 +554,8 @@ def dispatch(args):
             queued = sorted(queued, key=lambda jid: (-jid2cfg[jid]["priority"], jid))
             for m in (args.machines if args.assign else []):
                 while machine2backoff[m][1] <= time.time():
-                    cands = [jid for jid in queued if static_ok(jid2cfg[jid], machine=m, gpu_types=machine2gpu_types.get(m))]
+                    cands = [jid for jid in queued if static_ok(jid2cfg[jid], machine=m, gpu_types=machine2gpu_types.get(m))
+                        and jm2retry_after.get((jid, m), 0) <= time.time()]
                     if not cands:
                         break
                     jid = cands[0]
@@ -551,9 +575,12 @@ def dispatch(args):
                         if not reply or reason.startswith("error"):  # It may have launched
                             jid2retry_after[jid] = time.time() + UNCERTAIN_LAUNCH_WAIT
                         _ = set_reason(job_to_dir(jid), reason=f"{m}:{reason}")
+                        twrite(f"Job {jid}: rejected by {m} ({reason})")
+                        if reason.startswith(JOB_SPECIFIC):  # Only this job can't run here: try the machine's next candidate
+                            jm2retry_after[(jid, m)] = time.time() + JOB_REJECT_WAIT
+                            continue
                         n = machine2backoff[m][0]
                         machine2backoff[m] = (n + 1, time.time() + BACKOFFS[min(n, len(BACKOFFS) - 1)])
-                        twrite(f"Job {jid}: rejected by {m} ({reason})")
         except Exception:
             twrite(f"Dispatcher error:\n{traceback.format_exc()}")
         _ = time.sleep(args.loop_every) if jid2k else None
@@ -562,6 +589,35 @@ def dispatch(args):
 ################################################################################
 # Accepter
 ################################################################################
+def node_health(conda_env, cfg):
+    """Returns '' if this node has what the job with config [cfg] declares it needs in
+    [conda_env] (importable modules, with CUDA if torch is one; commands resolvable in an
+    interactive shell with the env activated, such as aliases; existing files), and
+    otherwise a short reason. Results are cached in node_dir('health') for HEALTH_TTL;
+    deleting that folder makes the next ask check again.
+    """
+    imports, cmds, files = cfg.get("require_imports") or [], cfg.get("require_commands") or [], cfg.get("require_files") or []
+    if not (imports or cmds or files):
+        return ""
+    f = node_dir("health", hashlib.md5(json.dumps([conda_env, imports, cmds, files]).encode()).hexdigest()[:12] + ".json")
+    if osp.exists(f):
+        c = UtilsBase.load_file_lite(f)
+        if time.time() - c["time"] < HEALTH_TTL["bad" if c["reason"] else "ok"]:
+            return c["reason"]
+    reason = next((f"no_file:{osp.basename(x)}" for x in files if not osp.exists(osp.expanduser(x))), "")
+    if not reason and imports:
+        code = f"import {', '.join(imports)}" + ("; assert torch.cuda.is_available()" if "torch" in imports else "")
+        r = subprocess.run([osp.join(conda_envs()[conda_env], "bin", "python"), "-c", code], capture_output=True, timeout=300)
+        reason = "" if r.returncode == 0 else "imports"
+    for c in (cmds if not reason else []):
+        r = subprocess.run(["bash", "-ic", f"conda activate {shlex.quote(conda_env)} >/dev/null 2>&1; type {shlex.quote(c)}"],
+            capture_output=True, timeout=120, stdin=subprocess.DEVNULL)
+        if r.returncode:
+            reason = f"no_command:{c}"
+            break
+    _ = UtilsBase.atomic_save_lite(data=dict(time=time.time(), reason=reason), fpath=f)
+    return reason
+
 def accept_locked(args):
     """Returns the accepter's reply dict for [args]; called under the node lock."""
     jdir = expand(args.job_dir)
@@ -582,6 +638,10 @@ def accept_locked(args):
         return no("no_env")
     elif shutil.disk_usage(get_tmp()).free / 1e9 < cfg["min_disk_gb"]:
         return no("disk")
+    elif not os.access(expand(cfg["exp_folder"]), os.W_OK):
+        return no("unhealthy:exp_folder")  # eg. the NAS isn't mounted where the job expects
+    elif (bad := node_health(conda_env, cfg)):
+        return no(f"unhealthy:{bad}")
 
     registry = live_registry()
     used = [g for r in registry for g in r["gpus"]]
@@ -670,9 +730,12 @@ def run(args):
                 twrite(f"Runner {me}: job {state['job_id']} is {state['job_state']} without this runner; stopping")
                 _ = on_term(None, None)
 
-    t0, rc = time.time(), None
+    t0, rc, error = time.time(), None, None
+    exp = expand(cfg["exp_folder"])
+    outcome_files = [osp.join(exp, x) for x in [cfg.get("success_file"), FAIL_FILE] if x]
     _ = signal.signal(signal.SIGTERM, on_term)
     try:
+        _ = [os.remove(x) for x in outcome_files if osp.exists(x)]  # Left by an earlier attempt of this job
         _ = os.makedirs(slurm_jobdir)
         code_tar = osp.join(expand(cfg["exp_folder"]), "code.tar")
         if osp.exists(code_tar):
@@ -707,8 +770,9 @@ def run(args):
                 early_syncs = [t for t in early_syncs if t > time.time()]
                 _ = sync_log()
                 last_sync = time.time()
-    except Exception:
+    except Exception as e:
         twrite(f"Runner {me} error:\n{traceback.format_exc()}")
+        error = f"runner_error:{type(e).__name__}"
         _ = kill_job(signal.SIGKILL)
     finally:
         end_time = now_str()
@@ -717,14 +781,22 @@ def run(args):
                 _ = check_recorded(force=False)
                 _ = time.sleep(1) if not flags["recorded"] else None
             _ = check_recorded(force=True) if not flags["recorded"] else None
-            job_state = "cancelled" if flags["cancelled"] else ("finished" if rc == 0 else "crashed")
+            success = rc == 0 and (not cfg.get("success_file") or osp.exists(osp.join(exp, cfg["success_file"])))
+            job_state = "cancelled" if flags["cancelled"] else ("finished" if success else "crashed")
+            fail_file = osp.join(exp, FAIL_FILE)
+            fail_reason = "-" if job_state != "crashed" else (error or (" ".join(open(fail_file).read().split())[:200] if osp.exists(fail_file)
+                else (f"exit_code:{rc}" if rc else f"no_{cfg['success_file']}")))
             if osp.isdir(slurm_jobdir):
                 with open(local_log, "ab") as f:
                     _ = f.write(f"[SemiSLURM {now_str()}] job ended: {job_state}, exit code {rc}\n".encode())
                 _ = sync_log()
             state = read_state(jdir)
-            if state["runner"] == me:
-                _ = write_state(jdir, state | dict(job_state=job_state, end_time=end_time,
+            if state["runner"] == me and flags["cancelled"] and read_config(jdir)["state"] == "requeue":
+                _ = write_state(jdir, requeued_state(state))
+                _ = write_config(jdir, read_config(jdir) | dict(state="queued"))
+                job_state = "requeued"
+            elif state["runner"] == me:
+                _ = write_state(jdir, state | dict(job_state=job_state, end_time=end_time, fail_reason=fail_reason,
                     exit_code="-" if rc is None else rc, reason="cancelled" if flags["cancelled"] else "none"))
             twrite(f"Runner {me}: job ended", job_state=job_state, exit_code=rc, recorded=state["runner"] == me)
         finally:
@@ -761,6 +833,61 @@ def cancel(args):
     _ = sys.stdout.flush()
     _ = start_dispatcher(dead, machines=[], assign=0, background=False) if dead else None
 
+def ensure_dispatchers(job_ids, *, machines):
+    """Starts one dispatcher for those of [job_ids] without a live one, so they get run."""
+    jid2disp = {jid: current_dispatcher(job_to_dir(jid)) for jid in job_ids}
+    statuses = procs_status([p for _, p in jid2disp.values() if not p is None])
+    dead = [jid for jid, (k, p) in jid2disp.items() if dispatcher_status(job_to_dir(jid), k=k, proc=p, statuses=statuses) == "dead"]
+    if dead:
+        log = start_dispatcher(dead, machines=machines or default_machines())
+        twrite(f"Started a dispatcher for jobs {dead}; log at {log}")
+
+def hold(args):
+    """Holds the queued jobs in [args.jobs], so they aren't started until released."""
+    for jid in [int(j) for j in args.jobs]:
+        jdir = job_to_dir(jid)
+        cfg, state = read_config(jdir), read_state(jdir)
+        if state["job_state"] == "queued" and cfg["state"] == "queued":
+            _ = write_config(jdir, cfg | dict(state="held"))
+        else:
+            twrite(f"Job {jid} is {state['job_state']} (config {cfg['state']}); only queued jobs can be held")
+
+def release(args):
+    """Releases the held jobs in [args.jobs], making sure they have a dispatcher."""
+    released = []
+    for jid in [int(j) for j in args.jobs]:
+        jdir = job_to_dir(jid)
+        cfg = read_config(jdir)
+        if cfg["state"] == "held":
+            _ = write_config(jdir, cfg | dict(state="queued"))
+            _ = set_reason(jdir, reason="none")
+            released.append(jid)
+        else:
+            twrite(f"Job {jid} isn't held (config {cfg['state']})")
+    _ = ensure_dispatchers(released, machines=args.machines) if released else None
+
+def requeue(args):
+    """Puts the jobs in [args.jobs] back in the queue with the same ID, folder and UID, so
+    they resume from their latest checkpoint: running ones are killed first (by their
+    dispatcher), and finished, crashed or cancelled ones are reset. With [args.code_dir],
+    their code snapshot is refreshed first.
+    """
+    requeued = []
+    for jid in [int(j) for j in args.jobs]:
+        jdir = job_to_dir(jid)
+        cfg, state = read_config(jdir), read_state(jdir)
+        _ = tar_code(expand(args.code_dir), out=osp.join(expand(cfg["exp_folder"]), "code.tar")) if args.code_dir else None
+        if state["job_state"] == "running":
+            _ = write_config(jdir, cfg | dict(state="requeue"))
+        elif state["job_state"] in COMPLETED:
+            _ = write_state(jdir, requeued_state(state))
+            _ = write_config(jdir, cfg | dict(state="queued"))
+        else:
+            _ = write_config(jdir, cfg | dict(state="queued"))  # Queued or held: just make sure it can run
+        requeued.append(jid)
+    twrite(f"Requeued {requeued}")
+    _ = ensure_dispatchers(requeued, machines=args.machines) if requeued else None
+
 def node(args):
     """Shows and edits the override file of [args.node]."""
     if not args.node == this_machine():
@@ -783,14 +910,55 @@ def elapsed_str(state):
     s = max(0, int((end - str_to_datetime(state["start_time"])).total_seconds()))
     return (f"{s // 86400}-" if s >= 86400 else "") + f"{s % 86400 // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
-def queue(args):
-    """Prints the jobs in JOBS_ROOT with derived states."""
-    rows = []
-    for jid in all_job_ids():
+def job_rows():
+    """Returns (job ID, config, state) tuples for all jobs. Completed jobs' rows are cached
+    in node_dir('queue_cache.json') with their state file's mtime, so later calls read
+    only active jobs' files from JOBS_ROOT; deleting the cache falls back to reading all.
+    """
+    cache_f = node_dir("queue_cache.json")
+    try:
+        cache = json.load(open(cache_f)) if osp.exists(cache_f) else dict()
+    except ValueError:
+        cache = dict()
+    root, rows, new_cache = expand(JOBS_ROOT), [], dict()
+    for jid in [int(d) for d in os.listdir(root) if d.isdigit()] if osp.isdir(root) else []:
+        jdir = job_to_dir(jid)
         try:
-            rows.append((jid, read_config(job_to_dir(jid)), read_state(job_to_dir(jid))))
+            mtime = os.stat(osp.join(jdir, "state.txt")).st_mtime
+            c = cache.get(str(jid))
+            if c and c["mtime"] == mtime:
+                cfg, state = c["cfg"], c["state"]
+            else:
+                cfg, state = read_config(jdir), read_state(jdir)
         except (OSError, ValueError):
             continue
+        rows.append((jid, cfg, state))
+        if state["job_state"] in COMPLETED:
+            new_cache[str(jid)] = dict(mtime=mtime, cfg=cfg, state=state)
+    try:
+        _ = UtilsBase.atomic_save_lite(data=new_cache, fpath=cache_f)
+    except OSError:
+        pass
+    return sorted(rows, key=lambda r: r[0])
+
+def queue(args):
+    """Prints the jobs in JOBS_ROOT with derived states, or with [args.summary] a short
+    count by state and node plus the failures' reasons.
+    """
+    rows = [r for r in job_rows() if not args.name or r[1]["job_name"].startswith(args.name)]
+    if args.active:
+        rows = [r for r in rows if not r[2]["job_state"] in COMPLETED]
+    if args.summary:
+        counts = defaultdict(int)
+        for _, cfg, st in rows:
+            counts[(st["job_state"] if cfg["state"] in ["queued", "requeue"] or st["job_state"] in COMPLETED else cfg["state"], st["node_name"])] += 1
+        print(" ".join(f"{k[0]}{'@' + k[1] if k[1] != '-' else ''}:{v}" for k, v in sorted(counts.items())))
+        fails = [(jid, st) for jid, _, st in rows if st["job_state"] == "crashed"]
+        reasons = defaultdict(list)
+        _ = [reasons[(st["node_name"], st.get("fail_reason", "-"))].append(jid) for jid, st in fails]
+        for (n, r), jids in sorted(reasons.items(), key=lambda x: -len(x[1]))[:args.summary]:
+            print(f"crashed@{n}: {r} x{len(jids)} (eg. {jids[-1]})")
+        return
     cutoff = time.time() - args.hours * 3600
     rows = [r for r in rows if args.all or not r[2]["job_state"] in COMPLETED
         or r[2]["end_time"] == "-" or str_to_datetime(r[2]["end_time"]).timestamp() > cutoff]
@@ -845,6 +1013,14 @@ def get_args():
     PS.add_argument("--nodelist", nargs="*", default=[])
     PS.add_argument("--exclude", nargs="*", default=[])
     PS.add_argument("--max_requeues", type=int, default=20)
+    PS.add_argument("--success_file", default=None,
+        help="File (relative to the exp folder) the job writes when it finishes successfully; without it, a zero exit counts as crashed")
+    PS.add_argument("--require_imports", nargs="*", default=[],
+        help="Modules the conda env must import (torch also needs CUDA); nodes failing this don't take the job")
+    PS.add_argument("--require_commands", nargs="*", default=[],
+        help="Commands (eg. aliases) an interactive shell with the env activated must resolve")
+    PS.add_argument("--require_files", nargs="*", default=[],
+        help="Files (eg. ~/.netrc) that must exist on the node")
     PS.add_argument("--dispatch", type=int, default=1, choices=[0, 1],
         help="Start a dispatcher for the job")
     PS.add_argument("--machines", nargs="+", default=None,
@@ -867,6 +1043,16 @@ def get_args():
     PC.add_argument("jobs", nargs="+",
         help="Job IDs, or 'all' for all jobs")
 
+    PH = S.add_parser("hold", help="Hold queued jobs, so they aren't started until released")
+    PH.add_argument("jobs", nargs="+")
+    PRL = S.add_parser("release", help="Release held jobs")
+    PRL.add_argument("jobs", nargs="+")
+    PRL.add_argument("--machines", nargs="*", default=None, help="Machines for a new dispatcher, if one is needed; defaults to all workstations")
+    PRQ = S.add_parser("requeue", help="Put jobs back in the queue with the same ID, folder and UID, killing running ones first")
+    PRQ.add_argument("jobs", nargs="+")
+    PRQ.add_argument("--machines", nargs="*", default=None, help="Machines for a new dispatcher, if one is needed; defaults to all workstations")
+    PRQ.add_argument("--code_dir", default=None, help="Refresh the jobs' code snapshot from this folder first")
+
     PQ = S.add_parser("queue", help="Show jobs")
     PQ.add_argument("--all", type=int, default=0, choices=[0, 1],
         help="Show all completed jobs, not just recent ones")
@@ -875,6 +1061,10 @@ def get_args():
     PQ.add_argument("--check", type=int, default=1, choices=[0, 1],
         help="Check dispatcher liveness over SSH (to tell pending from dead)")
     PQ.add_argument("--color", type=int, default=1, choices=[0, 1])
+    PQ.add_argument("--active", type=int, default=0, choices=[0, 1], help="Show only jobs not yet completed")
+    PQ.add_argument("--name", default=None, help="Show only jobs whose name starts with this")
+    PQ.add_argument("--summary", type=int, default=0,
+        help="Instead of the table, print one line of counts by state and node, then up to this many lines of crash reasons")
 
     PN = S.add_parser("node", help="Show or edit a node's override file")
     PN.add_argument("--node", default=None,
@@ -920,5 +1110,5 @@ if __name__ == "__main__":
         log = start_dispatcher(args.adopt, machines=args.machines, assign=args.assign)
         twrite(f"Started dispatcher; log at {log}")
     else:
-        _ = dict(submit=submit, dispatch=dispatch, cancel=cancel, queue=queue, node=node, accept=accept,
-            run=run, tmp=lambda args: print(get_tmp()))[args.cmd](args)
+        _ = dict(submit=submit, dispatch=dispatch, cancel=cancel, hold=hold, release=release, requeue=requeue, queue=queue,
+            node=node, accept=accept, run=run, tmp=lambda args: print(get_tmp()))[args.cmd](args)
