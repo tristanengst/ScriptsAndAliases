@@ -49,7 +49,8 @@ aliases = [
     "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py \"",
 
     # Common ways to run Sqb2.py.
-    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
+    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",
+    "alias lm_job_monitor=\"python3 ~/.ScriptsAndAliases/lm_job_monitor.py \"",       
     "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
     "alias sqbls=\"python ~/.ScriptsAndAliases/Sqb2.py -ls \"",
     "alias sqbas=\"python ~/.ScriptsAndAliases/Sqb2.py -as \"",
