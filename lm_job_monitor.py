@@ -10,9 +10,10 @@ status [--name PREFIX]     One line of SemiSLURM job counts by state and machine
                            --fails lines of crash reasons.
 events [--name PREFIX]     Jobs whose state changed since the last events/wait call with the
                            same --name (the cursor lives in $TMP/lm_job_monitor), one per line.
+                           The first call with a --name only sets the baseline.
 wait [--name PREFIX]       Prints nothing until --on happens or --timeout passes, then the
-                           changes; exit code 0 if no matching job is left unfinished, 1 if
-                           any crashed, 3 on another change, 2 on timeout.
+                           changes; exit code 0 if no matching job is queued or running (held
+                           ones don't count), 1 if any crashed, 3 on another change, 2 on timeout.
 nodes [--machines M ...]   One line per machine: whether it accepts jobs, its excluded GPUs,
                            its last health check, free GPUs, and this user's GPU processes
                            (SemiSLURM's and others).
@@ -58,8 +59,11 @@ def status(args):
 def changes(name):
     """Returns (new snapshot, list of 'JOB old -> new' lines) since the cursor, and saves it."""
     f = cursor_path(name)
-    old = json.load(open(f)) if osp.exists(f) else dict()
     new = job_snapshot(name)
+    if not osp.exists(f):  # The first call only sets the baseline, so old jobs don't count as changes
+        _ = S.UtilsBase.atomic_save_lite(data=new, fpath=f)
+        return new, []
+    old = json.load(open(f))
     lines = [f"{j}: {old.get(j, 'new')} -> {v}" for j, v in sorted(new.items(), key=lambda x: int(x[0])) if old.get(j) != v]
     _ = S.UtilsBase.atomic_save_lite(data=new, fpath=f)
     return new, lines
@@ -81,7 +85,7 @@ def wait(args):
         snap, lines = changes(args.name)
         seen += lines
         crashed = any("-> crashed" in l for l in lines)
-        done = bool(snap) and not any(v.split("@")[0] in ["queued", "running", "held"] for v in snap.values())
+        done = bool(snap) and not any(v.split("@")[0] in ["queued", "running"] for v in snap.values())  # Held jobs won't run
         code = 1 if "fail" in args.on and crashed else (0 if "done" in args.on and done else (3 if "change" in args.on and lines else None))
         if code is None and time.time() > end:
             code = 2
