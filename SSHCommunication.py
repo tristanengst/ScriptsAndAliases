@@ -262,12 +262,13 @@ def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="e
         result = subprocess.getoutput(command)
         os.chdir(cwd)
         return result
-    elif not check_connection(target_hostname):
+    elif not check_connection(machine) and not check_connection(target_hostname):
         if if_connect_error == "HostInfoError":
             raise HostInfoError(f"Found hostname={target_hostname} for machine={machine}, but can't SSH")
         else:
             return if_connect_error() if callable(if_connect_error) else if_connect_error
     else:
+        target_hostname = machine if check_connection(machine) else target_hostname # Prefer [machine], eg. an ~/.ssh/config alias, when it works
         ssh_args_str = " ".join(ssh_args)
         command_to_run = f"ssh {ssh_args_str} {target_hostname} '{command}'"
         result = subprocess.getoutput(command_to_run)
