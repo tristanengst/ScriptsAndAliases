@@ -166,7 +166,8 @@ toggled mid-run; logs reaching `exp_folder` and `$SLURM_JOBDIR` being removed.
   `SEMISLURM_JOB_ID`, `SEMISLURM_NODE`, and `SEMISLURM_RUNNER_UID`. The last tags every job process, so
   processes left by a killed runner (including `setsid`'d ones) are killed on sweep, cancel, and runner exit.
 - A job exiting nonzero is `crashed` and not requeued; only jobs whose runner died are requeued.
-- Not done yet: the BetterCondIMLE side (UID-first submission, a `SlurmSubmit.py`-like generator).
+- BetterCondIMLE side: `SubmitGrid.py --semislurm 1` submits UID-first (it picks the UID, then gets the experiment
+  folder from `TrainBasic.py --uid UID --exp_name_folder 1`), generating one job script per run.
 
 ## Outcomes, node health, and job control (added 2026-10-09)
 - **Success file.** `submit --success_file F` makes the runner record a zero exit as `crashed`

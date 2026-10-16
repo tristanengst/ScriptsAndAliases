@@ -233,11 +233,16 @@ def hostname_is_current_machine(h):
     return get_hostname() == h
 
 @functools.cache
-def check_connection(machine):
-    """Returns if [machine] can be SSHed to."""
-    cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {machine} exit"
-    result = subprocess.getoutput(cmd)
-    return result == ""
+def check_connection(machine, *, ssh_args=()):
+    """Returns if [machine] can be SSHed to, passing [ssh_args] to SSH. [ssh_args] is a
+    tuple because caching requires hashable function arguments.
+    """
+    cmd = f"ssh -o ConnectTimeout=1 -o BatchMode=yes {' '.join(ssh_args)} {machine} true"
+    try:
+        return subprocess.run(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
 
 def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="error", if_ssh_map_error="error"):
     """Runs [command] on machine [m] and returns the output.
@@ -262,13 +267,13 @@ def run_command_on_machine(*, machine, command, ssh_args=[], if_connect_error="e
         result = subprocess.getoutput(command)
         os.chdir(cwd)
         return result
-    elif not check_connection(machine) and not check_connection(target_hostname):
+    elif not check_connection(machine, ssh_args=tuple(ssh_args)) and not check_connection(target_hostname, ssh_args=tuple(ssh_args)):
         if if_connect_error == "HostInfoError":
             raise HostInfoError(f"Found hostname={target_hostname} for machine={machine}, but can't SSH")
         else:
             return if_connect_error() if callable(if_connect_error) else if_connect_error
     else:
-        target_hostname = machine if check_connection(machine) else target_hostname # Prefer [machine], eg. an ~/.ssh/config alias, when it works
+        target_hostname = machine if check_connection(machine, ssh_args=tuple(ssh_args)) else target_hostname # Prefer [machine], eg. an ~/.ssh/config alias, when it works
         ssh_args_str = " ".join(ssh_args)
         command_to_run = f"ssh {ssh_args_str} {target_hostname} '{command}'"
         result = subprocess.getoutput(command_to_run)
