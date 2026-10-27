@@ -33,7 +33,7 @@ def gpu_uid_to_index(h=None, ssh_args=()):
     cmd = "nvidia-smi --query-gpu=index,gpu_uuid --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError", ssh_args=ssh_args)
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()
@@ -47,7 +47,7 @@ def gpu_uid_to_procids(h=None, ssh_args=()):
     cmd = "nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError", ssh_args=ssh_args)
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()
@@ -69,7 +69,7 @@ def procids_to_users(*procids, h=None, ssh_args=()):
     cmd = f"ps -o pid,user --no-headers -p {','.join([str(pid) for pid in procids])}"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError", ssh_args=ssh_args)
+        ssh_args=ssh_args)
     if result is None:
         return dict()
     else:
@@ -80,7 +80,7 @@ def gpu_index_to_errors(h=None, ssh_args=()):
     cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total,utilization.gpu --format=csv,noheader,nounits"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError", ssh_args=ssh_args)
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()

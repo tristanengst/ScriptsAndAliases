@@ -343,9 +343,11 @@ def live_registry():
     return result
 
 def runner_job_dir(cfg, *, pid, start_time):
-    """Returns the $SLURM_JOBDIR of a runner with [pid] started at [start_time]."""
-    exp_name = osp.basename(cfg["exp_folder"].rstrip("/"))
-    return osp.join(get_tmp(), f"{exp_name}_{pid}_{start_time.replace(':', '').replace('-', '')}")
+    """Returns the $SLURM_JOBDIR of a runner with [pid] started at [start_time], named by the job's UID so it
+    stays short (experiment names can exceed the 255-character limit on file names once these are appended).
+    """
+    name = cfg.get("uid") or osp.basename(cfg["exp_folder"].rstrip("/"))  # Jobs submitted before "uid" existed
+    return osp.join(get_tmp(), f"{name}_{pid}_{start_time.replace(':', '').replace('-', '')}")
 
 ################################################################################
 # Submit
@@ -391,6 +393,7 @@ def submit(args):
     _ = shutil.copy(args.script, osp.join(jdir, "job.sh"))
     _ = tar_code(expand(args.code_dir), out=osp.join(expand(exp_folder), "code.tar")) if args.code_dir else None
     cfg = dict(job_name=args.job_name or osp.basename(args.script),
+        uid=args.uid or f"job{job_id}",
         exp_folder=exp_folder,
         log_file=to_portable(args.log_file or osp.join(expand(exp_folder), f"semislurm_{job_id}.log")),
         priority=args.priority,
@@ -1001,6 +1004,8 @@ def get_args():
         help="Acceptable conda envs; the first one present on the node is used")
     PS.add_argument("--job_name", default=None,
         help="Job name; defaults to the script's file name")
+    PS.add_argument("--uid", default=None,
+        help="Unique ID naming the job's $SLURM_JOBDIR (eg. the run's UID); defaults to jobJOBID")
     PS.add_argument("--exp_folder", default=None,
         help="Experiment folder (on the NAS); defaults to the job's folder in JOBS_ROOT")
     PS.add_argument("--log_file", default=None,
