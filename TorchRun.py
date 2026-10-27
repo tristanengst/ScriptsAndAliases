@@ -55,9 +55,10 @@ v21_gpu2cpu = {
 v21_gpu2cpu = {gpu: sorted(cpus) for gpu, cpus in v21_gpu2cpu.items()}
 
 def gpu_indices_to_cuda_devices(gpu_indices):
-    """Returns CUDA_VISIBLE_DEVICES naming GPUs [gpu_indices] (nvidia-smi indices) by UUID.
-    CUDA's own indices skip GPUs it can't use (eg. a failed one), so after such a GPU they
-    no longer match nvidia-smi's and a job would run on the wrong GPU, or on none.
+    """Returns CUDA_VISIBLE_DEVICES naming GPUs [gpu_indices] (nvidia-smi indices) by
+    UUID. CUDA's own indices skip GPUs it can't use (eg. a failed one), so after such
+    a GPU they no longer match nvidia-smi's and a job would run on the wrong GPU, or
+    on none.
     """
     import subprocess
     out = subprocess.run(["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"], capture_output=True, text=True).stdout
@@ -66,7 +67,7 @@ def gpu_indices_to_cuda_devices(gpu_indices):
 
 def get_taskset_str(*, gpus):
     """Returns the string of CPU indices to feed to taskset for the specified GPUs."""
-    machine_name = SSHCommunication.hostname_to_machine(SSHCommunication.get_hostname())
+    machine_name = SSHCommunication.get_machine_name()
 
     twrite(machine_name=machine_name)
 

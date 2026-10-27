@@ -7,7 +7,11 @@ import argparse
 from collections import defaultdict
 import math
 from multiprocessing import Pool
+import os
+import os.path as osp
 import subprocess
+import tempfile
+import uuid
 
 import MachineInfo
 import SSHCommunication
@@ -24,12 +28,12 @@ class NvidiaSMIError(Exception):
     """Error related to nvidia-smi command execution."""
     pass
 
-def gpu_uid_to_index(h=None):
+def gpu_uid_to_index(h=None, ssh_args=()):
     """Returns a dictionary mapping GPU UIDs to their indices."""
     cmd = "nvidia-smi --query-gpu=index,gpu_uuid,name --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError")
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()
@@ -43,11 +47,11 @@ def gpu_uid_to_index(h=None):
             lines = [(gpu_idx, gpu_uid, name) for gpu_idx, gpu_uid, name in lines if not "1080" in name]
         return {gpu_uid: int(gpu_idx) for gpu_idx, gpu_uid, _ in lines}
 
-def gpu_uid_to_procids(h=None):
+def gpu_uid_to_procids(h=None, ssh_args=()):
     cmd = "nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError")
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()
@@ -63,24 +67,24 @@ def gpu_uid_to_procids(h=None):
                 pass # Ignore non-integer PIDs; hopefully we can figure out that the GPU is weird another way
         return dict(result)
 
-def procids_to_users(*procids, h=None):
+def procids_to_users(*procids, h=None, ssh_args=()):
     if len(procids) == 0:
         return dict()
     cmd = f"ps -o pid,user --no-headers -p {','.join([str(pid) for pid in procids])}"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError")
+        ssh_args=ssh_args)
     if result is None:
         return dict()
     else:
         return {l.split()[0]: l.split()[1] for l in result.strip().splitlines()}
 
-def gpu_index_to_errors(h=None):
+def gpu_index_to_errors(h=None, ssh_args=()):
     # cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits"
     cmd = "nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total,utilization.gpu --format=csv,noheader,nounits"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
-        if_ssh_map_error="HostInfoError")
+        ssh_args=ssh_args)
     result = result.strip() if result else None
     if result is None:
         return dict()
@@ -98,12 +102,19 @@ def gpu_index_to_errors(h=None):
     return gpu_idx2error
     
 def gpu_index_to_users(h=None):
+    # All SSH calls for [h] share one connection over a socket private to this call, so
+    # nothing is reused from other processes (eg. a stale ~/.ssh/config ControlMaster).
+    # ControlPersist closes it 10s after its last use, even if this process is killed.
+    # LogLevel=error keeps login banners and known-hosts warnings out of command output
+    # if a call ever opens a new connection instead of reusing this one.
+    ctrl_path = osp.join(tempfile.gettempdir(), f"ffg-{os.getpid()}-{uuid.uuid4().hex[:8]}-%C")
+    ssh_args = ("-o ControlMaster=auto", f"-o ControlPath={ctrl_path}", "-o ControlPersist=10", "-o LogLevel=error")
     try:
-        gpu_uid2index = gpu_uid_to_index(h=h)
-        gpu_uid2procids = gpu_uid_to_procids(h=h)
-        gpu_index2errors = gpu_index_to_errors(h=h)
+        gpu_uid2index = gpu_uid_to_index(h=h, ssh_args=ssh_args)
+        gpu_uid2procids = gpu_uid_to_procids(h=h, ssh_args=ssh_args)
+        gpu_index2errors = gpu_index_to_errors(h=h, ssh_args=ssh_args)
         gpu_index2procids = {gpu_uid2index[gpu_uid]: gpu_uid2procids.get(gpu_uid, []) for gpu_uid in gpu_uid2index.keys()}
-        gpu_index2users = {gpu_idx: sorted(procids_to_users(*procids, h=h).values()) for gpu_idx, procids in gpu_index2procids.items()}
+        gpu_index2users = {gpu_idx: sorted(procids_to_users(*procids, h=h, ssh_args=ssh_args).values()) for gpu_idx, procids in gpu_index2procids.items()}
         gpu_index2users = {gpu_idx: users + (["error"] if gpu_index2errors.get(gpu_idx, False) else []) for gpu_idx, users in gpu_index2users.items()}
         gpu_index2users = {gpu_idx: sorted(set(users)) for gpu_idx, users in gpu_index2users.items()} # Remove duplicates and sort
         return gpu_index2users

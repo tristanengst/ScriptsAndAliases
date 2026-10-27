@@ -12,6 +12,7 @@ Useful Python scripts called from bash aliases, all for manipulating SLURM.... a
 This code is explicitly designed to work with `Python>=3.11`, and without additional dependencies. The aliases expect Python scripts to live in the `~/.ScriptsAndAliases` directory:
 ```
 git clone https://github.com/tristanengst/ScriptsAndAliases ~/.ScriptsAndAliases
+git submodule update --init --recursive # Extra content for lab members
 python ~/.ScriptsAndAliases/WriteAliases.py # Maintains a chunk of ~/.bashrc containing aliases that call Python scripts
 source ~/.bashrc
 ```

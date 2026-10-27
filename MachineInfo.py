@@ -1,7 +1,6 @@
 """Contains dictionaries of host information and methods for accessing them, all in one place.
 
-Feel free to submit a pull request to add additional SSH names for hosts if you don't
-use what's here. The only requirement is that no two hosts can share an SSH name.
+Machine names and their hostnames (and aliases) are in SSHCommunication.machine2hostname.
 """
 import argparse
 from collections import defaultdict
@@ -87,43 +86,37 @@ bad_gpus = [k for k,v in gpu2info.items() if not v.good]
 gpu_alias2name = {k: v.gpu_name for k,v in gpu2info.items()}
 gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
-# Dictionary machine names to their information. Note that hostnames are not included,
-# and some functionality requires this. By assumption, for at least one element of
-# [ssh_names] in each entry, you will have the corresponding Hostname or IP address in
-#your ~/.ssh/config file.
-#
-# Each entry is thus:
+# Dictionary machine names to their hardware information. How to SSH to each machine is
+# in SSHCommunication.machine2hostname instead. Each entry is thus:
 #   num_cpus: Number of CPU cores on the host
 #   num_gpus: Number of GPUs on the host
 #   hyperthread: Whether the host has hyperthreading enabled
-#   ssh_names: List of SSH all SSH names that anyone in our group uses to SSH into the
-#   host (DO NOT add the actual hostname or IP address here)
 machine2info = {
-    "S1": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S1"]),
-    "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S2"]),
-    "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S3"]),
-    "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A1"]),
-    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
-    "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A3"]),
-    "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A4"]),
-    "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
-    "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A6"]),
-    "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A7"]),
-    "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
-    "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A9"]),
-    "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
-    "V21": dict(num_cpus=64, num_gpus=8, hyperthread=False, ssh_names=["V21"]),
+    "S1": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False),
+    "V21": dict(num_cpus=64, num_gpus=8, hyperthread=False),
 } | dict( # Made up info for the ComputeCanada and Solar clusters so we can run commands on them. This should probably be refactored!
-    solar=dict(num_cpus=1, num_gpus=0, hyperthread=False, ssh_names=["solar"]),
-    narval=dict(num_cpus=40, num_gpus=4, hyperthread=False, ssh_names=["narval"]),
-    cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["cedar"]),
-    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["killarney", "killa"]),
-    vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["vulcan"]),
-    trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
-    fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
-    rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["rorqual"]),
-    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),
-    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["tamia"]),)
+    solar=dict(num_cpus=1, num_gpus=0, hyperthread=False),
+    narval=dict(num_cpus=40, num_gpus=4, hyperthread=False),
+    cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False),
+    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    fir=dict(num_cpus=48, num_gpus=4, hyperthread=False),
+    rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False),
+    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False),)
 
 # All ComputeCanada hosts. Filtering these out of [machine2info] is useful gives just
 # workstation-y machines and Solar.
@@ -326,7 +319,7 @@ def get_updated_machine_info(m, verbose=0):
     CPU cores on machine [m].
 
     Args:
-    m           -- machine name, which must be a key in [machine2info], or a hostname
+    m           -- machine name, which must be a key in [machine2info]
     """
     try:
         result = SSHCommunication.run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
@@ -342,10 +335,6 @@ def get_updated_machine_info(m, verbose=0):
     nvidia_smi_lines = result[:-2]
     nvidia_smi_output = "\n".join(nvidia_smi_lines)
 
-    # If the machine name isn't in [machine2info] (eg. because it's a hostname),
-    # change [m] to the machine name
-    m = m if m in machine2info else SSHCommunication.hostname_to_machine(m)
-    
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
         if verbose:
             print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")
