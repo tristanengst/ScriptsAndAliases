@@ -26,7 +26,7 @@ class NvidiaSMIError(Exception):
 
 def gpu_uid_to_index(h=None):
     """Returns a dictionary mapping GPU UIDs to their indices."""
-    cmd = "nvidia-smi --query-gpu=index,gpu_uuid --format=csv,noheader"
+    cmd = "nvidia-smi --query-gpu=index,gpu_uuid,name --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
         if_ssh_map_error="HostInfoError")
@@ -36,8 +36,12 @@ def gpu_uid_to_index(h=None):
     elif not result[0].isdigit():
         raise NvidiaSMIError(f"nvidia-smi issue for host={h}: {result}")
     else:
-        lines = [l.split(",") for l in result.strip().splitlines()]
-        return {gpu_uid.strip(): int(gpu_idx.strip()) for gpu_idx, gpu_uid in lines}
+        lines = [[x.strip() for x in l.split(",")] for l in result.strip().splitlines()]
+        # A99 has a GTX 1080 Ti alongside its RTX 2080 SUPER, but the 1080 Ti isn't
+        # worth considering, so hide it
+        if (h or SSHCommunication.get_machine_name()) == "A99":
+            lines = [(gpu_idx, gpu_uid, name) for gpu_idx, gpu_uid, name in lines if not "1080" in name]
+        return {gpu_uid: int(gpu_idx) for gpu_idx, gpu_uid, _ in lines}
 
 def gpu_uid_to_procids(h=None):
     cmd = "nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv,noheader"
@@ -147,25 +151,19 @@ class MachineUsageStr:
             else:
                 self.free_gpu_idxs_str = ""
 
+            # Group consecutive GPU indices with the same users into ranges. Indices
+            # needn't start at zero or be contiguous, eg. if a machine restricts its GPUs
             self.gpu_range2users = dict()
-            gpu_range_start = min(gpu_index2users.keys()) if len(gpu_index2users) > 0 else 0
-            users_range_start = tuple(gpu_index2users[gpu_range_start])
-            while gpu_range_start < len(gpu_index2users):
-                for gpu_range_end in range(gpu_range_start, len(gpu_index2users)): # Last index is len(gpu_index2users) - 1, but we want to include it in the range
-                    users_range_end = tuple(gpu_index2users[gpu_range_end])
-                    if not (users_range_end == users_range_start):
-                        self.gpu_range2users[(gpu_range_start, gpu_range_end-1)] = users_range_start
-                        users_range_start = users_range_end
-                        break
-                    elif gpu_range_end == len(gpu_index2users) - 1:
-                        self.gpu_range2users[(gpu_range_start, gpu_range_end)] = users_range_start
-                        users_range_start = users_range_end
-                        gpu_range_end = len(gpu_index2users)  # Move the start to the end of the range
-                        break
-                    else:
+            for gpu_idx in sorted(gpu_index2users.keys()):
+                users = tuple(gpu_index2users[gpu_idx])
+                if self.gpu_range2users:
+                    (s, e), last_users = list(self.gpu_range2users.items())[-1]
+                    if e == gpu_idx - 1 and last_users == users:
+                        del self.gpu_range2users[(s, e)]
+                        self.gpu_range2users[(s, gpu_idx)] = users
                         continue
-                gpu_range_start = max(gpu_range_end, gpu_range_start + 1) # Ensure we move forward in the range
-            
+                self.gpu_range2users[(gpu_idx, gpu_idx)] = users
+
             self.gpu_range2users = {(s,e): ",".join(users) if len(users) > 0 else "free" for (s,e), users in self.gpu_range2users.items()}
 
             self.gpu_range_strs = []

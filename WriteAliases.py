@@ -139,6 +139,10 @@ aliases = [
     ##################################################################################
     ##################################################################################
 
+    # Workstation SLURM, where it's built and no other SLURM is (SLURM/Setup.md). Must come before
+    # SemiSLURM's sbatch checks
+    "command -v sbatch > /dev/null || { [ -x ~/.local/slurm/bin/sbatch ] && . ~/.ScriptsAndAliases/SLURM/env.sh; }",
+
     # SemiSLURM: SLURM-like jobs on workstations. scancel and $TMP only where SLURM isn't
     "alias ssqb=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py queue \"",
     "alias ssbatch=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py submit \"",
