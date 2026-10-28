@@ -31,11 +31,11 @@ running "$var/run/munge/munged.pid" || munged --force
 
 ctld_host=$(sed -n 's/^SlurmctldHost=\([^( ]*\).*/\1/p' "$SLURM_HOME/etc/slurm.conf")
 
-# Tunnel (Setup.md, "Tunnels"): a machine the controller can't reach directly has tunnel_port=P in
-# its node file, and keeps one ssh connection to the controller with a reverse forward: the
-# controller's 127.0.0.1:P reaches this machine's slurmd. Its own ssh process (no connection
+# Tunnel (Setup.md, "Tunnels"): a machine the controller can't reach directly has a tunnel in its
+# node file (tunnel_port in env.sh: port P), and keeps one ssh connection to the controller with a
+# reverse forward: the controller's 127.0.0.1:P reaches this machine's slurmd. Its own ssh process (no connection
 # sharing), so it can be watched and restarted; restarted with the controller if that changes.
-tunnel_port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$SLURM_NODE_FILE" 2>/dev/null)
+tunnel_port=$(tunnel_port "$(hostname -s)" "$SLURM_NODE_FILE")
 tunnel_want=
 [ -n "$tunnel_port" ] && [ "$ctld_host" != "$(hostname -s)" ] && tunnel_want="$ctld_host $tunnel_port"
 if running "$var/run/tunnel.pid" && [ "$(cat "$var/run/tunnel.target" 2>/dev/null)" != "$tunnel_want" ]; then

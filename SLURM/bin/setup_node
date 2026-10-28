@@ -2,8 +2,9 @@
 # Sets up the workstation SLURM on this machine, or re-checks an existing setup. Safe to rerun:
 # each step only acts if something is missing or out of date.
 #
-# Usage: setup_node                     existing node (its node file is in Private/SLURM/nodes/)
-#        setup_node --gpus all|none|0,2  new node, or hardware changed: also (re)writes the node file
+# Usage: setup_node [--tunnel]                     existing node (its node file is in Private/SLURM/nodes/)
+#        setup_node --gpus all|none|0,2 [--tunnel]  new node, or hardware changed: also (re)writes the node file
+# --tunnel marks this machine as one the controller can't reach directly (Setup.md, "Tunnels").
 #
 # Steps: checks, firewall (lets the lab's machines in to SLURM's ports, with sudo ufw), build (if the installed SLURM version isn't build.sh's), node file
 # (bin/add_node), munge key (the shared one in Private/SLURM/), crontab (merged into the existing
@@ -15,10 +16,12 @@ repo=$SLURM_DIR
 priv=$SLURM_PRIVATE_DIR
 host=$(hostname -s)
 add_node_args=()
+mark_tunnel=0
 while [ $# -gt 0 ]; do
     case $1 in
         --gpus) add_node_args+=("$1" "$2"); shift 2 ;;
-        *) echo "usage: setup_node [--gpus all|none|0,2]" >&2; exit 2 ;;
+        --tunnel) mark_tunnel=1; shift ;;
+        *) echo "usage: setup_node [--gpus all|none|0,2] [--tunnel]" >&2; exit 2 ;;
     esac
 done
 warnings=0
@@ -107,6 +110,13 @@ if [ ${#add_node_args[@]} -gt 0 ]; then
     "$repo/bin/add_node" "${add_node_args[@]}" > /dev/null || fail "add_node failed (see above)"
 fi
 [ -f "$node_file" ] || fail "no $node_file; rerun with --gpus (all, none or eg. 0,2)"
+if [ $mark_tunnel = 1 ] && ! grep -qx 'tunnel=yes' "$node_file" && ! grep -q '^tunnel_port=' "$node_file"; then
+    sed -i 's/^\(home=.*\)$/\1\ntunnel=yes/' "$node_file" && ok "marked $node_file tunnel=yes"
+fi
+# Tunnel ports must be unique (Setup.md, "Tunnels").
+dups=$(for f in "$priv"/nodes/*.conf; do p=$(tunnel_port "$(basename "$f" .conf)" "$f"); [ -n "$p" ] && echo "$p $(basename "$f" .conf)"; done \
+    | sort -n | awk '$1 == prev { print prevn " and " $2 " both get " $1 } { prev = $1; prevn = $2 }')
+[ -z "$dups" ] || fail "tunnel ports collide: $dups; give one of them tunnel_port=<another port> in its node file"
 node_home=$(sed -n 's/^home=//p' "$node_file")
 [ "$node_home" = "$HOME" ] && ok "$node_file is there, home=$HOME" \
     || fail "$node_file has home=$node_home, but \$HOME is $HOME; rerun with --gpus"
@@ -152,7 +162,7 @@ if [ "$host" = "$ctld" ]; then
     running "$SLURM_HOME/var/run/slurmctld.pid" && ok "slurmctld running" || fail "slurmctld not running"
 fi
 cmp -s "$priv/munge.key" "$SLURM_HOME/etc/munge/munge.key" && ok "munge key installed" || fail "munge key not installed"
-tunnel_port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$node_file")
+tunnel_port=$(tunnel_port "$host" "$node_file")
 if [ -n "$tunnel_port" ] && [ "$host" != "$ctld" ]; then
     # Setup.md, "Tunnels"
     ssh -o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 \

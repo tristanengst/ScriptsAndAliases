@@ -14,8 +14,8 @@ every machine's config. The node feature is the GPU model's name, derived from n
 rtx_2080_super; gpu_names can rename it), and is left out if the chosen GPUs are of different
 models, since features are per node.
 
-A tunnel_port= line (set by hand for machines the controller can't reach directly; see
-SLURM/Setup.md, "Tunnels") is kept as it is.
+A tunnel=yes or tunnel_port= line (for machines the controller can't reach directly, set by
+setup_node --tunnel or by hand; see SLURM/Setup.md, "Tunnels") is kept as it is.
 
 The GPU-CPU map is a line "cpus: <GPU index> <CPUs>" for each of the machine's GPUs, including
 ones left out of SLURM; bin/task_prolog pins each job to its GPUs' CPUs. Existing cpus: lines are
@@ -152,8 +152,9 @@ if __name__ == "__main__":
     path = osp.join(NODES_DIR, f"{host}.conf")
     old = open(path).read() if osp.exists(path) else None
     old_cpus = [l for l in (old or "").splitlines(keepends=True) if l.startswith("cpus:")]
-    # Set by hand (Setup.md, "Tunnels"); kept as is.
-    text += "".join(l for l in (old or "").splitlines(keepends=True) if l.startswith("tunnel_port="))
+    # Set by setup_node --tunnel or by hand (Setup.md, "Tunnels"); kept as is.
+    text += "".join(l for l in (old or "").splitlines(keepends=True)
+                    if l.startswith("tunnel_port=") or l.strip() == "tunnel=yes")
     if old_cpus and not args.reset_cpus:
         text += "".join(old_cpus)
     else:

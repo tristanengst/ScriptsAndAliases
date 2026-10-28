@@ -11,14 +11,15 @@ etc=$SLURM_HOME/etc
 mkdir -p "$etc"
 tmp=$(mktemp -d "$etc/.render.XXXXXX")
 shopt -s nullglob
-# Every node file's slurm: line. On the controller, a machine with tunnel_port=P is reached through
-# the ssh tunnel it keeps to the controller (bin/start_daemons): NodeAddr=127.0.0.1 Port=P.
+# Every node file's slurm: line. On the controller, a machine with a tunnel (tunnel_port in env.sh)
+# is reached through the ssh tunnel it keeps to the controller (bin/start_daemons):
+# NodeAddr=127.0.0.1 Port=<its tunnel port>.
 node_lines() {
     local ctld f line port
     ctld=$(sed -n 's/^SlurmctldHost=\([^( #]*\).*/\1/p' "$priv/slurm.conf")
     for f in "$priv"/nodes/*.conf; do
         line=$(sed -n 's/^slurm: *//p' "$f")
-        port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$f")
+        port=$(tunnel_port "$(basename "$f" .conf)" "$f")
         [ -n "$port" ] && [ "$(hostname -s)" = "$ctld" ] && line="$line NodeAddr=127.0.0.1 Port=$port"
         printf '%s\n' "$line"
     done

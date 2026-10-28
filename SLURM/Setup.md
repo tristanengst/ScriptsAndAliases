@@ -66,7 +66,9 @@ the new controller's `~/.local/slurm/var/state/`.
    - `sudo` on the machine: `setup_node` uses it to open SLURM's ports automatically (what it
      does: Ports, below).
 2. **On NODE:** `~/.ScriptsAndAliases/SLURM/bin/setup_node --gpus all` (or `none`, or the
-   nvidia-smi indices SLURM gets, eg. `--gpus 0,2`; the rest stay outside SLURM). It:
+   nvidia-smi indices SLURM gets, eg. `--gpus 0,2`; the rest stay outside SLURM). Add `--tunnel`
+   if the controller can't reach NODE directly (today: S1–S3, V21; see "Tunnels"), after
+   `ssh-copy-id` from NODE to the controller. It:
    - checks the clock, crontab, that the ports are free and that the controller resolves;
    - opens SLURM's ports in `ufw` (with `sudo`) to the lab's machines (`MachineHostnames.py`);
    - builds SLURM if the installed build isn't `build.sh`'s (~5 min);
@@ -213,8 +215,11 @@ SLURM's ports in every direction. Tested on 2026-10-27:
 
 So the controller (a workstation, which everyone can reach) can't reach slurmd on S1–S3 or V21.
 
-**The fix.** A machine the controller can't reach directly has `tunnel_port=P` in its node file,
-set by hand (P: unique among the node files; 46901 and up). Then:
+**The fix.** A machine the controller can't reach directly is marked `tunnel=yes` in its node
+file (`setup_node --tunnel`). Its tunnel port P comes from its name, the same on every machine:
+46900 + (`cksum` of the name mod 1000), eg. S1 47574, S2 47287, S3 46920, V21 47847. `setup_node`
+stops if two machines' ports collide; then give one `tunnel_port=<another port>` instead, which
+overrides the rule. Then:
 - `bin/start_daemons` on that machine (cron, every minute) keeps one ssh connection to the
   controller running, with a reverse forward: the controller's `127.0.0.1:P` reaches this
   machine's slurmd. It's an ssh process of its own (no connection sharing), restarted within a
