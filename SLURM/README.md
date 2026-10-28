@@ -35,7 +35,7 @@ Relative `-o`/`-e` paths are relative to that directory, and written on the mach
 - **Nothing is enforced** (no cgroups without root): a job can use more CPUs or memory than it asked for, or GPUs it wasn't given (eg. by changing `CUDA_VISIBLE_DEVICES`). Processes that detach (`setsid`, daemons) escape `scancel`.
 - **Interactive `srun`/`salloc` only works between machines the network connects:** not from a workstation onto S1–S3 or V21 (it hangs), since the network blocks those for SLURM (`Setup.md`, "Tunnels"). Use `sbatch` for those machines; `srun` inside a batch job works everywhere.
 - **Requeued jobs** wait ~2 minutes before they can start again (SLURM's behaviour).
-- **No `sacct`** (no accounting database). Finished jobs are listed in `~/.local/slurm/var/log/jobcomp.txt` on the controller.
+- **No `sacct`** (no accounting database). Instead, on the controller, every job has a record in `~/.local/slurm/var/log/jobs/<JobID>_<JobName>`: what was submitted, its latest state (eg. `COMPLETED`, `FAILED`, `CANCELLED`; `PENDING` once requeued), how many times it ran (`runs`), and its last run's start, end, nodes and exit code. `~/.local/slurm/var/log/jobcomp.txt` has a line per finished run. Eg. `grep -l state=FAILED ~/.local/slurm/var/log/jobs/*`.
 
 ## Choosing GPUs
 

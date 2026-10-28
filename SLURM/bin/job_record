@@ -1,0 +1,45 @@
+#!/bin/bash
+# JobCompLoc (jobcomp/script): slurmctld runs this on the controller when a job is submitted
+# (EVENT=submit, from patches/job-submit-record.patch) and whenever a run of it ends (EVENT=end:
+# finished, failed, cancelled, including while pending, or requeued, which ends as PENDING), with
+# the job's fields in the environment. One at a time, off slurmctld's scheduling path.
+#
+# Keeps one record per job, var/log/jobs/<JobID>_<JobName>, as key=value lines updated in place:
+# what was submitted, its latest state, and its last run (start/end/nodes/exit codes; runs counts
+# them, so runs=1 with state=PENDING means it ran once and was requeued). Ends are also appended to
+# var/log/jobcomp.txt, one line per run as jobcomp/filetxt wrote them.
+source "$(dirname "$0")/../env.sh" --node-home || exit 0
+dir=$SLURM_HOME/var/log/jobs
+mkdir -p "$dir"
+t() { [ "${1:-0}" -gt 0 ] && date -d "@$1" '+%Y-%m-%dT%H:%M:%S'; }   # epoch -> local time; 0 -> ""
+
+file=$dir/${JOBID}_$(printf %s "$JOBNAME" | tr -c 'A-Za-z0-9._+=-' _)
+declare -A f
+keys=(jobid name user cluster partition limit workdir stdout stderr dependency constraints
+      array_job array_task submit eligible state runs start end nodes exit derived_exit)
+if [ -f "$file" ]; then
+    while IFS='=' read -r k v; do f[$k]=$v; done < "$file"
+fi
+f[jobid]=$JOBID f[name]=$JOBNAME f[user]=$USERNAME f[cluster]=$CLUSTER f[partition]=$PARTITION
+f[limit]=$LIMIT f[workdir]=$WORK_DIR f[stdout]=${STDOUT:-} f[stderr]=${STDERR:-}
+f[dependency]=$DEPENDENCY f[constraints]=$CONSTRAINTS f[eligible]=$(t "$ELIGIBLE") f[state]=$JOBSTATE
+# A requeue resets SLURM's submit time; keep the original.
+[ "$EVENT" = submit ] || [ -z "${f[submit]}" ] && f[submit]=$(t "$SUBMIT")
+[ "$ARRAYTASKID" != 4294967294 ] && f[array_job]=$ARRAYJOBID f[array_task]=$ARRAYTASKID
+: "${f[runs]:=0}"
+if [ "$EVENT" = end ] && [ -n "$NODES" ]; then   # no nodes: cancelled before it ran
+    f[runs]=$((f[runs] + 1)) f[start]=$(t "$START") f[end]=$(t "$END") f[nodes]=$NODES
+    f[exit]=$EXITCODE f[derived_exit]=$DERIVED_EC
+elif [ "$EVENT" = end ]; then
+    f[end]=$(t "$END") f[exit]=$EXITCODE f[derived_exit]=$DERIVED_EC
+fi
+for k in "${keys[@]}"; do printf '%s=%s\n' "$k" "${f[$k]}"; done > "$file.tmp" && mv "$file.tmp" "$file"
+
+if [ "$EVENT" = end ]; then
+    echo "JobId=$JOBID UserId=$USERNAME($UID) GroupId=$GROUPNAME($GID) Name=$JOBNAME" \
+        "JobState=$JOBSTATE Partition=$PARTITION TimeLimit=$LIMIT StartTime=$(t "$START")" \
+        "EndTime=$(t "$END") NodeList=$NODES NodeCnt=$NODECNT ProcCnt=$PROCS WorkDir=$WORK_DIR" \
+        "Cluster=$CLUSTER SubmitTime=$(t "$SUBMIT") EligibleTime=$(t "$ELIGIBLE")" \
+        "DerivedExitCode=$DERIVED_EC ExitCode=$EXITCODE" >> "$SLURM_HOME/var/log/jobcomp.txt"
+fi
+exit 0

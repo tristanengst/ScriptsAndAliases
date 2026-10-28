@@ -3,7 +3,7 @@
 # Template: bin/render_config writes it to ~/.local/slurm/etc/slurm.conf on each node, filling in
 # ${HOME}, ${USER} and ${SLURM_DIR} (this folder) for that node, and @PRIVATE@ (the site's lines)
 # and @NODES@ from ../Private/SLURM/. Edit this file only.
-ClusterName=lab
+ClusterName=apex
 @PRIVATE@
 SlurmUser=${USER}
 SlurmdUser=${USER}
@@ -32,8 +32,8 @@ SelectTypeParameters=CR_Core      # don't schedule memory on shared boxes
 GresTypes=gpu
 SchedulerType=sched/backfill
 AccountingStorageType=accounting_storage/none
-JobCompType=jobcomp/filetxt
-JobCompLoc=${HOME}/.local/slurm/var/log/jobcomp.txt
+JobCompType=jobcomp/script         # bin/job_record: var/log/jobs/, var/log/jobcomp.txt
+JobCompLoc=${SLURM_DIR}/bin/job_record
 JobAcctGatherType=jobacct_gather/none
 MpiDefault=none
 ReturnToService=2

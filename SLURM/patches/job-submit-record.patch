@@ -1,0 +1,132 @@
+Workstation SLURM: a record of every job, without an accounting database. SLURM's job
+completion plugins are told when each run of a job ends (finished, failed, cancelled, including
+while pending, or requeued), but not when it's submitted. This adds that: a submit event, sent
+once the job's record exists (so it has its id; the job_submit plugins run before that), and
+not for --test-only. Only jobcomp/script acts on it: it runs JobCompLoc (bin/job_record) for
+submissions too, with EVENT=submit or EVENT=end in its environment. CLUSTER falls back to
+ClusterName (it otherwise comes from accounting). Applied by build.sh; see SLURM/Setup.md.
+
+The other plugins that implement record_job_start (elasticsearch, kafka, lua, mysql) would take
+a submit event for a start; none of them is built here.
+
+diff -ru a/src/interfaces/jobcomp.c b/src/interfaces/jobcomp.c
+--- a/src/interfaces/jobcomp.c
++++ b/src/interfaces/jobcomp.c
+@@ -226,3 +226,21 @@
+ 	slurm_mutex_unlock(&context_lock);
+ 	return retval;
+ }
++
++extern int jobcomp_g_record_job_submit(job_record_t *job_ptr)
++{
++	int retval = SLURM_SUCCESS;
++
++	xassert(plugin_inited != PLUGIN_NOT_INITED);
++
++	if (plugin_inited == PLUGIN_NOOP)
++		return SLURM_SUCCESS;
++
++	slurm_mutex_lock(&context_lock);
++
++	xassert(g_context);
++	retval = (*(ops.record_job_start))(job_ptr, JOBCOMP_EVENT_JOB_SUBMIT);
++
++	slurm_mutex_unlock(&context_lock);
++	return retval;
++}
+diff -ru a/src/interfaces/jobcomp.h b/src/interfaces/jobcomp.h
+--- a/src/interfaces/jobcomp.h
++++ b/src/interfaces/jobcomp.h
+@@ -56,6 +56,7 @@
+ 	JOBCOMP_EVENT_INVALID = 0,
+ 	JOBCOMP_EVENT_JOB_FINISH,
+ 	JOBCOMP_EVENT_JOB_START,
++	JOBCOMP_EVENT_JOB_SUBMIT,	/* Workstation SLURM: job record created */
+ } jobcomp_event_t;
+ 
+ typedef struct {
+@@ -118,4 +119,11 @@
+ /* write record of a job's start */
+ extern int jobcomp_g_record_job_start(job_record_t *job_ptr);
+ 
++/*
++ * Workstation SLURM: record a job once it's submitted (its record exists, with its id).
++ * Passed to the plugins' record_job_start with JOBCOMP_EVENT_JOB_SUBMIT; only jobcomp/script
++ * acts on it.
++ */
++extern int jobcomp_g_record_job_submit(job_record_t *job_ptr);
++
+ #endif
+diff -ru a/src/plugins/jobcomp/script/jobcomp_script.c b/src/plugins/jobcomp/script/jobcomp_script.c
+--- a/src/plugins/jobcomp/script/jobcomp_script.c
++++ b/src/plugins/jobcomp/script/jobcomp_script.c
+@@ -149,6 +149,7 @@
+  *   use by script;
+  */
+ struct jobcomp_info {
++	const char *event;	/* Workstation SLURM: "submit" or "end" */
+ 	uint32_t jobid;
+ 	uint32_t array_job_id;
+ 	uint32_t array_task_id;
+@@ -209,8 +210,8 @@
+ 	if (job->assoc_ptr && job->assoc_ptr->cluster &&
+ 	    job->assoc_ptr->cluster[0])
+ 		j->cluster = xstrdup(job->assoc_ptr->cluster);
+-	else
+-		j->cluster = NULL;
++	else	/* Workstation SLURM: no accounting, so no association */
++		j->cluster = xstrdup(slurm_conf.cluster_name);
+ 	if (job->details && (job->details->orig_dependency &&
+ 	    job->details->orig_dependency[0]))
+ 		j->orig_dependency = xstrdup(job->details->orig_dependency);
+@@ -396,6 +397,7 @@
+ 	env = xmalloc (1 * sizeof (*env));
+ 	env[0] = NULL;
+ 
++	_env_append (&env, "EVENT", job->event);
+ 	_env_append_fmt (&env, "JOBID", "%u",  job->jobid);
+ 	if (job->exit_code != NO_VAL) {
+ 		if (WIFSIGNALED(job->exit_code))
+@@ -641,6 +643,7 @@
+ 
+ 	if (!(job = _jobcomp_info_create (record)))
+ 		return error ("jobcomp/script: Failed to create job info!");
++	job->event = "end";
+ 
+ 	slurm_mutex_lock(&comp_list_mutex);
+ 	list_append(comp_list, job);
+@@ -681,7 +684,21 @@
+ 	return NULL;
+ }
+ 
++/* Workstation SLURM: submissions run the script too (EVENT=submit); starts don't. */
+ extern int jobcomp_p_record_job_start(job_record_t *job_ptr, uint32_t event)
+ {
++	struct jobcomp_info *job;
++
++	if (event != JOBCOMP_EVENT_JOB_SUBMIT)
++		return SLURM_SUCCESS;
++	if (!(job = _jobcomp_info_create(job_ptr)))
++		return error("jobcomp/script: Failed to create job info!");
++	job->event = "submit";
++
++	slurm_mutex_lock(&comp_list_mutex);
++	list_append(comp_list, job);
++	slurm_cond_broadcast(&comp_list_cond);
++	slurm_mutex_unlock(&comp_list_mutex);
++
+ 	return SLURM_SUCCESS;
+ }
+diff -ru a/src/slurmctld/job_mgr.c b/src/slurmctld/job_mgr.c
+--- a/src/slurmctld/job_mgr.c
++++ b/src/slurmctld/job_mgr.c
+@@ -4216,6 +4216,9 @@
+ 		return error_code;
+ 	}
+ 	xassert(job_ptr);
++	/* Workstation SLURM: record the submission (not --test-only's job) */
++	if (!will_run)
++		jobcomp_g_record_job_submit(job_ptr);
+ 	if (job_desc->array_bitmap)
+ 		independent = false;
+ 	else

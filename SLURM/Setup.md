@@ -300,6 +300,8 @@ What's normally `/etc/slurm/`, the same for every machine.
   machines only need the same build (`build.sh --version`: the SLURM version and a hash of the
   patches, recorded in `~/.local/slurm/.slurm_build`).
 - `patches/user-by-name.patch`: makes SLURM match users by name, not uid (above).
+- `patches/job-submit-record.patch`: tells the job completion plugin when a job is submitted, as
+  well as when each run ends, so `bin/job_record` sees every job (below).
 - `crontab`: the SLURM crontab lines, merged into the user's crontab by `setup_node`.
 - `env.sh`: puts SLURM on PATH. Sourced by `~/.bashrc` and everything in `bin/`; scripts SLURM
   runs (no `HOME`, or the submitting machine's) pass `--node-home` to take it from the node file.
@@ -319,6 +321,16 @@ Set in `slurm.conf.in`; SLURM runs them on the machine running the job.
   directory doesn't exist here (SLURM would run it in `/tmp`), and requeues it (batch) or cancels
   it (srun/salloc) if one of its GPUs is busy outside SLURM.
 - `bin/epilog`: once per job, after it ends. Removes its `SLURM_TMPDIR`.
+
+### Run by the controller
+
+- `bin/job_record` (`JobCompLoc`, for `jobcomp/script`): slurmctld runs it when a job is
+  submitted and whenever a run of it ends (finished, failed, cancelled, including while pending,
+  or requeued: ends as `PENDING`), one at a time, off the scheduling path. Keeps one record per
+  job, `var/log/jobs/<JobID>_<JobName>`, as `key=value` lines updated in place: what was
+  submitted, its latest state, and its last run (`start`, `end`, `nodes`, exit codes; `runs`
+  counts them). Ends are also appended to `var/log/jobcomp.txt`, one line per run. Not recorded:
+  holds, releases and other `scontrol` changes, and runs still going (those are in `squeue`).
 
 ### Managing SLURM on each machine
 
