@@ -1,0 +1,32 @@
+#!/bin/bash
+# Run by cron on each node. bin/epilog deletes each job's SLURM_TMPDIR when it ends; this deletes
+# any it missed (eg. the machine crashed or was rebooted mid-job).
+#
+# A dir job_<id> is deleted only if both authorities say job <id> isn't running here:
+#  - the controller: <id> isn't among the jobs it has on this node in a state that holds the node
+#    (running, suspended, completing, ...). A finished, pending, requeued or unknown (purged) job
+#    doesn't count.
+#  - this node's slurmstepds (scontrol listpids): no processes of <id> here.
+# If either can't be asked, nothing is deleted. The check and the delete happen under a lock that
+# bin/prolog also takes to create the dir, so a job that starts here meanwhile either made its dir
+# before the check (and the controller then already has it running here, since the prolog only
+# runs once it's allocated) or makes it after the delete.
+set -uo pipefail
+source "$(dirname "$0")/../env.sh"
+dirs=("$SLURM_TMPDIR_ROOT"/job_*)
+[ -d "${dirs[0]}" ] || exit 0
+exec 9> "$SLURM_TMPDIR_ROOT/.lock"
+flock 9
+on_node=$(squeue -h -w "$(hostname -s)" -t running,suspended,completing,configuring,resizing,signaling,stage_out,stopped -o %A) \
+    || { echo "sweep_tmpdirs: can't ask the controller; deleting nothing" >&2; exit 1; }
+# listpids also exits 1 when there are no job steps here, which is an answer, not a failure.
+listpids=$(scontrol listpids 2>&1) || [ "$listpids" = "No job steps exist on this node." ] \
+    || { echo "sweep_tmpdirs: can't list local job processes ($listpids); deleting nothing" >&2; exit 1; }
+local_pids=$(awk 'NR > 1 {print $2}' <<< "$listpids")
+for d in "${dirs[@]}"; do
+    id=${d##*/job_}
+    [ -d "$d" ] && [[ $id =~ ^[0-9]+$ ]] || continue
+    grep -qx "$id" <<< "$on_node" && continue
+    grep -qx "$id" <<< "$local_pids" && continue
+    rm -rf "$d" && echo "$(date '+%F %T') removed leftover $d" >> "$HOME/.local/slurm/var/log/sweep_tmpdirs.log"
+done

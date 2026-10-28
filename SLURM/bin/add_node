@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Writes this machine's node file, ../Private/SLURM/nodes/<host>.conf (private: hostnames), from
+$HOME, `slurmd -C`, nvidia-smi and the CPU topology. Run on the machine itself, after build.sh
+(bin/setup_node runs it); then commit the file in the Private repo. Rerun after hardware changes.
+
+Usage: add_node --gpus all|none|0,2 [--reset-cpus]
+
+--gpus picks which GPUs (nvidia-smi indices) SLURM gets; the rest are left out entirely.
+--reset-cpus rewrites the GPU-CPU map (cpus: lines) even if the node file has one.
+
+The node file has this machine's home (home=, for scripts that SLURM runs without a HOME), its
+slurm.conf node line (slurm:) and its gres.conf lines (gres:), which bin/render_config puts into
+every machine's config. The node feature is the GPU model's name, derived from nvidia-smi's (eg.
+rtx_2080_super; gpu_names can rename it), and is left out if the chosen GPUs are of different
+models, since features are per node.
+
+The GPU-CPU map is a line "cpus: <GPU index> <CPUs>" for each of the machine's GPUs, including
+ones left out of SLURM; bin/task_prolog pins each job to its GPUs' CPUs. Existing cpus: lines are
+kept as they are (unless --reset-cpus), so they can be edited by hand. As written, each NUMA node's cores are
+split evenly over the GPUs attached to it, the last getting any left over, with both hyperthreads
+of a core kept together. (On S1-S3 and V21 that's the same split as TorchRun.py's hand-written
+maps.)
+"""
+import argparse
+import os
+import os.path as osp
+import re
+import socket
+import subprocess
+import sys
+
+SLURM_DIR = osp.dirname(osp.dirname(osp.abspath(__file__)))
+NODES_DIR = osp.join(osp.dirname(SLURM_DIR), "Private", "SLURM", "nodes")
+HOME = os.environ["HOME"]
+MEM_SPARE_MB = 2000                         # RealMemory: slurmd -C's, rounded down to 1000 MB, minus this
+
+def run(cmd):
+    return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+
+def cpu_layout():
+    """Returns slurmd -C's CPU layout and RealMemory for this machine."""
+    out = run([osp.join(HOME, ".local", "slurm", "sbin", "slurmd"), "-C"]).splitlines()[0]
+    f = dict(kv.split("=", 1) for kv in out.split())
+    sockets = int(f.get("Boards", 1)) * int(f["SocketsPerBoard"])
+    mem = int(f["RealMemory"]) // 1000 * 1000 - MEM_SPARE_MB
+    return (f"CPUs={f['CPUs']} Sockets={sockets} CoresPerSocket={f['CoresPerSocket']} "
+            f"ThreadsPerCore={f['ThreadsPerCore']} RealMemory={mem}")
+
+def gpus():
+    """Returns [(index, name, NUMA node)] for this machine's GPUs, checking that each GPU's
+    nvidia-smi index is its device minor (/dev/nvidiaN), which bin/task_prolog and
+    bin/gpu_busy_outside rely on."""
+    try:
+        out = run(["nvidia-smi", "--query-gpu=index,name,pci.bus_id", "--format=csv,noheader"])
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return []
+    result = []
+    for line in out.strip().splitlines():
+        idx, name, bus = [x.strip() for x in line.split(",")]
+        domain, rest = bus.split(":", 1)
+        pci = f"{domain[-4:]}:{rest}".lower()
+        minor = re.search(r"Device Minor:\s*(\d+)", open(f"/proc/driver/nvidia/gpus/{pci}/information").read()).group(1)
+        if minor != idx:
+            sys.exit(f"add_node: GPU {idx} ({bus}) is /dev/nvidia{minor}; index and device minor must agree")
+        result.append((int(idx), name, int(open(f"/sys/bus/pci/devices/{pci}/numa_node").read())))
+    return result
+
+def cores(cpus):
+    """Returns [cpus] grouped into cores, [(cpus of core)], in order of their lowest CPU."""
+    result = set()
+    for cpu in cpus:
+        siblings = open(f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list").read()
+        result.add(tuple(sorted(c for c in parse_cpu_list(siblings) if c in cpus)))
+    return sorted(result)
+
+def parse_cpu_list(text):
+    """Returns the CPUs in a list like '0-3,8'."""
+    cpus = []
+    for part in text.strip().split(","):
+        a, _, b = part.partition("-")
+        cpus += range(int(a), int(b or a) + 1)
+    return cpus
+
+def cpu_list(cpus):
+    """Returns sorted CPUs [cpus] as a list like '0-3,8'."""
+    ranges = []
+    for c in sorted(cpus):
+        if ranges and c == ranges[-1][1] + 1:
+            ranges[-1][1] = c
+        else:
+            ranges.append([c, c])
+    return ",".join(f"{a}-{b}" if a != b else f"{a}" for a, b in ranges)
+
+def gpu_cpus(gpu_numa):
+    """Returns {GPU index: [CPUs]} for GPUs {index: NUMA node} [gpu_numa]: each NUMA node's cores
+    are split evenly over its GPUs (in index order), the last getting any left over. If some GPU's
+    node isn't known (-1, eg. machines with one node), all cores are split over all GPUs."""
+    if any(n < 0 for n in gpu_numa.values()):
+        gpu_numa = {g: -1 for g in gpu_numa}
+    result = {}
+    for node in sorted(set(gpu_numa.values())):
+        path = f"/sys/devices/system/node/node{node}/cpulist" if node >= 0 else "/sys/devices/system/cpu/online"
+        node_cores = cores(parse_cpu_list(open(path).read()))
+        gpus = sorted(g for g, n in gpu_numa.items() if n == node)
+        share = len(node_cores) // len(gpus)
+        for k, g in enumerate(gpus):
+            mine = node_cores[k * share:] if k == len(gpus) - 1 else node_cores[k * share:(k + 1) * share]
+            result[g] = sorted(c for core in mine for c in core)
+    return result
+
+def model_name(name):
+    """Returns the feature name derived from GPU model [name], eg. 'NVIDIA GeForce RTX 2080 SUPER'
+    -> 'rtx_2080_super'."""
+    name = re.sub(r"\b(nvidia|geforce)\b", "", name.lower())
+    return re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+
+if __name__ == "__main__":
+    P = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    P.add_argument("--gpus", required=True, help="all, none, or comma-separated nvidia-smi indices")
+    P.add_argument("--reset-cpus", action="store_true", help="rewrite the GPU-CPU map (cpus: lines) even if there is one")
+    args = P.parse_args()
+
+    if not osp.isdir(osp.dirname(NODES_DIR)):
+        sys.exit(f"add_node: {osp.dirname(NODES_DIR)} missing (Private submodule not checked out?)")
+    host = socket.gethostname().split(".")[0]
+    all_gpus = gpus()
+    if args.gpus == "all":
+        chosen = all_gpus
+    elif args.gpus == "none":
+        chosen = []
+    else:
+        want = {int(i) for i in args.gpus.split(",")}
+        chosen = [g for g in all_gpus if g[0] in want]
+        if missing := want - {g[0] for g in chosen}:
+            sys.exit(f"add_node: no GPU with index {sorted(missing)}; have {[g[0] for g in all_gpus]}")
+
+    models = {model_name(name) for _, name, _ in chosen}
+    if len(models) > 1:
+        print(f"add_node: chosen GPUs are of different models {sorted(models)}; no Feature set")
+    node_line = f"NodeName={host} {cpu_layout()}"
+    node_line += f" Feature={models.pop()}" if len(models) == 1 else ""
+    node_line += (" Gres=" + ",".join(f"gpu:g{i}:1" for i, _, _ in chosen)) if chosen else ""
+    left_out = [f"{g[0]} ({g[1]})" for g in all_gpus if g not in chosen]
+    text = (f"# Written by bin/add_node --gpus {args.gpus}\n"
+        + (f"# GPUs left out: {', '.join(left_out)}\n" if left_out else "")
+        + f"home={HOME}\n"
+        + f"slurm: {node_line}\n"
+        + "".join(f"gres: NodeName={host} Name=gpu Type=g{i} File=/dev/nvidia{i}  # {name}\n" for i, name, _ in chosen))
+    path = osp.join(NODES_DIR, f"{host}.conf")
+    old = open(path).read() if osp.exists(path) else None
+    old_cpus = [l for l in (old or "").splitlines(keepends=True) if l.startswith("cpus:")]
+    if old_cpus and not args.reset_cpus:
+        text += "".join(old_cpus)
+    else:
+        text += "".join(f"cpus: {i} {cpu_list(c)}\n" for i, c in gpu_cpus({i: n for i, _, n in all_gpus}).items())
+    if old == text:
+        print(f"{path} is up to date")
+    else:
+        os.makedirs(NODES_DIR, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+        print(f"{'Updated' if old else 'Wrote'} {path}:\n{text}")
+    if old_cpus and not args.reset_cpus:
+        print("Kept the existing cpus: lines (--reset-cpus rewrites them)")

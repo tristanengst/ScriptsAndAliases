@@ -1,0 +1,44 @@
+#!/bin/bash
+# Makes this machine's SLURM match the repo: renders the config, installs the shared munge key
+# (../Private/SLURM/munge.key), and runs munged, slurmd, and slurmctld if this is SlurmctldHost
+# (stopping it if it no longer is). Daemons already running are told to reread the config if it
+# changed since they last read it (SIGHUP; running jobs are unaffected), and munged is restarted if the key changed. Run
+# by cron every minute, so a pulled change takes effect by itself, and crashed daemons restart.
+source "$(dirname "$0")/../env.sh"
+var=$SLURM_HOME/var
+mkdir -p "$var"/{run,log,state,spool} && chmod 700 "$var"/{run,log,state,spool}
+mkdir -p "$var"/run/munge "$var"/log/munge "$var"/lib/munge && chmod 700 "$var"/{run,log,lib}/munge
+running() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+stop() { running "$1" && kill "$(cat "$1")" && while running "$1"; do sleep 0.2; done; }
+
+render_config > /dev/null || exit 1
+chmod go-w "$SLURM_HOME" "$SLURM_HOME/etc"   # munged rejects a group-writable key dir
+
+# The munge key is shared by every machine; there's one, in the Private repo.
+key=$SLURM_HOME/etc/munge/munge.key
+src=$SLURM_PRIVATE_DIR/munge.key
+[ -f "$src" ] || { echo "start_daemons: $src missing (Private submodule not checked out?)" >&2; exit 1; }
+if ! cmp -s "$src" "$key"; then
+    mkdir -p "$(dirname "$key")" && chmod 700 "$(dirname "$key")"
+    install -m 400 "$src" "$key"
+    stop "$var/run/munge/munged.pid"
+    echo "$(date '+%F %T') installed the munge key from $src"
+fi
+# munged's defaults are all under ~/.local/slurm (key: etc/munge/munge.key), and libmunge (so
+# SLURM) defaults to the same socket. --force: munged wants every ancestor of the socket to be
+# world-executable, and ~ isn't.
+running "$var/run/munge/munged.pid" || munged --force
+
+ctld_host=$(sed -n 's/^SlurmctldHost=\([^( ]*\).*/\1/p' "$SLURM_HOME/etc/slurm.conf")
+for d in slurmctld slurmd; do
+    pidf=$var/run/$d.pid
+    if [ $d = slurmctld ] && [ "$ctld_host" != "$(hostname -s)" ]; then
+        running "$pidf" && stop "$pidf" && echo "$(date '+%F %T') stopped slurmctld: the controller is now $ctld_host"
+    elif ! running "$pidf"; then
+        $d && echo "$(date '+%F %T') started $d"
+    elif [ -n "$(find "$SLURM_HOME/etc" -maxdepth 1 -name '*.conf' -newer "$pidf")" ]; then
+        # Config newer than the daemon's last (re)read; the pid file's time marks that.
+        kill -HUP "$(cat "$pidf")" && touch "$pidf" && echo "$(date '+%F %T') config changed: told $d to reread it"
+    fi
+done
+exit 0

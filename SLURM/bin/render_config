@@ -1,0 +1,38 @@
+#!/bin/bash
+# Writes this node's config to ~/.local/slurm/etc/: slurm.conf from slurm.conf.in (${HOME},
+# ${USER}, ${SLURM_DIR} filled in; @PRIVATE@ -> ../Private/SLURM/slurm.conf; @NODES@ -> every node
+# file's slurm: line, features renamed per gpu_names), gres.conf from gres.conf.in plus every node
+# file's gres: lines, and cgroup.conf as is. SLURM looks for gres.conf and cgroup.conf next to
+# slurm.conf. Prints "changed" if anything changed. Run by cron every minute.
+source "$(dirname "$0")/../env.sh"
+priv=$SLURM_PRIVATE_DIR
+[ -f "$priv/slurm.conf" ] || { echo "render_config: $priv/slurm.conf missing (Private submodule not checked out?)" >&2; exit 1; }
+etc=$SLURM_HOME/etc
+mkdir -p "$etc"
+tmp=$(mktemp -d "$etc/.render.XXXXXX")
+shopt -s nullglob
+# Renames each Feature= value listed in gpu_names ("derived = feature" lines).
+rename_features() {
+    awk 'NR == FNR { sub(/#.*/, ""); gsub(/ /, ""); if (split($0, kv, "=") == 2) name[kv[1]] = kv[2]; next }
+         { for (i = 1; i <= NF; i++) if ($i ~ /^Feature=/) {
+               n = split(substr($i, 9), f, ","); s = "Feature="
+               for (j = 1; j <= n; j++) s = s (j > 1 ? "," : "") (f[j] in name ? name[f[j]] : f[j])
+               $i = s }
+           print }' "$SLURM_DIR/gpu_names" -
+}
+while IFS= read -r line; do
+    case $line in
+        @PRIVATE@) grep -v '^#' "$priv/slurm.conf" ;;
+        @NODES@) cat /dev/null "$priv"/nodes/*.conf | sed -n 's/^slurm: *//p' | rename_features ;;
+        *) printf '%s\n' "$line" ;;
+    esac
+done < "$SLURM_DIR/slurm.conf.in" | sed "s|\${HOME}|$HOME|g; s|\${USER}|$(id -un)|g; s|\${SLURM_DIR}|$SLURM_DIR|g" > "$tmp/slurm.conf"
+{ cat "$SLURM_DIR/gres.conf.in"; cat /dev/null "$priv"/nodes/*.conf | sed -n 's/^gres: *//p'; } > "$tmp/gres.conf"
+cp "$SLURM_DIR/cgroup.conf" "$tmp/"
+changed=0
+for f in slurm.conf gres.conf cgroup.conf; do
+    if ! cmp -s "$tmp/$f" "$etc/$f"; then mv "$tmp/$f" "$etc/$f"; changed=1; fi
+done
+rm -rf "$tmp"
+[ $changed = 1 ] && echo changed
+exit 0

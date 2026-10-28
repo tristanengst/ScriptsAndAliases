@@ -1,0 +1,6 @@
+# Node feature names for GPU models (jobs pick models with --constraint=NAME). bin/add_node
+# derives a name from nvidia-smi's, eg. "NVIDIA GeForce RTX 2080 SUPER" -> rtx_2080_super; a line
+# here renames it everywhere: <derived name> = <feature>, eg.
+#   rtx_2080_super = 2080s
+# Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
+# scontrol reconfigure on the controller.

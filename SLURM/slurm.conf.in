@@ -1,0 +1,47 @@
+# Non-root SLURM on the lab workstations. See README.md and Setup.md.
+# Daemons and jobs all run as the user who set it up; nothing here needs root.
+# Template: bin/render_config writes it to ~/.local/slurm/etc/slurm.conf on each node, filling in
+# ${HOME}, ${USER} and ${SLURM_DIR} (this folder) for that node, and @PRIVATE@ (the site's lines)
+# and @NODES@ from ../Private/SLURM/. Edit this file only.
+ClusterName=lab
+@PRIVATE@
+SlurmUser=${USER}
+SlurmdUser=${USER}
+# Ports (SlurmctldPort, SlurmdPort, SrunPortRange): in ../Private/SLURM/slurm.conf.
+
+AuthType=auth/munge
+# munged runs with its default paths (under ~/.local/slurm), which libmunge also defaults to.
+CredType=cred/munge
+
+StateSaveLocation=${HOME}/.local/slurm/var/state
+SlurmdSpoolDir=${HOME}/.local/slurm/var/spool
+SlurmctldLogFile=${HOME}/.local/slurm/var/log/slurmctld.log
+SlurmdLogFile=${HOME}/.local/slurm/var/log/slurmd.log
+SlurmctldPidFile=${HOME}/.local/slurm/var/run/slurmctld.pid
+SlurmdPidFile=${HOME}/.local/slurm/var/run/slurmd.pid
+
+ProctrackType=proctrack/pgid      # cgroups need root
+# TaskPlugin unset (= none); task/cgroup needs root
+TaskProlog=${SLURM_DIR}/bin/task_prolog
+Prolog=${SLURM_DIR}/bin/prolog
+Epilog=${SLURM_DIR}/bin/epilog
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core      # don't schedule memory on shared boxes
+GresTypes=gpu
+SchedulerType=sched/backfill
+AccountingStorageType=accounting_storage/none
+JobCompType=jobcomp/filetxt
+JobCompLoc=${HOME}/.local/slurm/var/log/jobcomp.txt
+JobAcctGatherType=jobacct_gather/none
+MpiDefault=none
+ReturnToService=2
+MailProg=/bin/true                # no mail on the workstations
+DebugFlags=NO_CONF_HASH           # rendered configs differ per node (paths)
+
+# Nodes: render_config inserts the slurm: lines of ../Private/SLURM/nodes/*.conf here (written
+# per machine by bin/add_node), with features renamed per gpu_names.
+# One GRES type per GPU (gN = nvidia-smi index N = /dev/nvidiaN), so blockers can pin one GPU.
+@NODES@
+
+PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE
+PartitionName=block Nodes=ALL PriorityTier=1000 Hidden=YES MaxTime=INFINITE

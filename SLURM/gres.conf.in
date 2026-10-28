@@ -1,0 +1,3 @@
+# One line per GPU SLURM gets. Type gN = nvidia-smi index N = /dev/nvidiaN.
+# render_config appends the gres: lines of ../Private/SLURM/nodes/*.conf (bin/add_node).
+AutoDetect=off

@@ -1,0 +1,26 @@
+#!/bin/bash
+# Run every ~30 s on each node. For each GPU this node gives SLURM (gres.conf), makes sure its
+# blocker job exists (submitting it held if not) and releases it if the GPU is busy outside
+# SLURM. Must run on the node itself, since it looks at local processes.
+source "$(dirname "$0")/../env.sh"
+dir=$SLURM_DIR
+node=$(hostname -s)
+idxs=$(awk -v n="$node" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$SLURM_HOME/etc/gres.conf")
+for idx in $idxs; do
+    name="blocking_job_${node}_$idx"
+    read -r jobid state prio <<< "$(squeue -h -n "$name" -o '%i %T %Q' | head -1)"
+    if [ -z "$jobid" ]; then
+        sbatch -Q --hold --requeue -p block -w "$node" --gres="gpu:g$idx:1" -c 1 -J "$name" \
+            -o /dev/null -e "$HOME/.local/slurm/var/log/$name.err" \
+            --wrap "exec '$dir/bin/blocker.sh' $idx"
+        continue
+    fi
+    # Held = pending with priority 0 (the reason text differs between --hold and requeuehold).
+    if [ "$state" = PENDING ] && [ "$prio" = 0 ] && "$dir/bin/gpu_busy_outside" "$idx"; then
+        scontrol release "$jobid"
+        # A requeued job gets a BeginTime ~2 min out; start it now instead.
+        scontrol update jobid="$jobid" StartTime=now
+        echo "$(date '+%F %T') released $name ($jobid)" >> "$HOME/.local/slurm/var/log/blocker_cron.log"
+    fi
+done
+

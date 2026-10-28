@@ -1,0 +1,179 @@
+#!/bin/bash
+# Sets up the workstation SLURM on this machine, or re-checks an existing setup. Safe to rerun:
+# each step only acts if something is missing or out of date.
+#
+# Usage: setup_node                     existing node (its node file is in Private/SLURM/nodes/)
+#        setup_node --gpus all|none|0,2  new node, or hardware changed: also (re)writes the node file
+#
+# Steps: checks, firewall (lets the lab's machines in to SLURM's ports, with sudo ufw), build (if the installed SLURM version isn't build.sh's), node file
+# (bin/add_node), munge key (the shared one in Private/SLURM/), crontab (merged into the existing
+# one), daemons (bin/start_daemons). Being the controller is just being SlurmctldHost in
+# Private/SLURM/slurm.conf: the same steps set up either.
+set -uo pipefail
+source "$(dirname "$0")/../env.sh"
+repo=$SLURM_DIR
+priv=$SLURM_PRIVATE_DIR
+host=$(hostname -s)
+add_node_args=()
+while [ $# -gt 0 ]; do
+    case $1 in
+        --gpus) add_node_args+=("$1" "$2"); shift 2 ;;
+        *) echo "usage: setup_node [--gpus all|none|0,2]" >&2; exit 2 ;;
+    esac
+done
+warnings=0
+ok()   { echo "  ok    $*"; }
+warn() { echo "  WARN  $*"; warnings=$((warnings + 1)); }
+fail() { echo "  FAIL  $*"; exit 1; }
+running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+
+[ -f "$priv/slurm.conf" ] || { echo "  FAIL  $priv/slurm.conf missing: check out the Private submodule"; exit 1; }
+ctld=$(sed -n 's/^SlurmctldHost=\([^( ]*\).*/\1/p' "$priv/slurm.conf")
+echo "== Checks ($host; controller $ctld)"
+[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = yes ] && ok "clock synchronized" \
+    || warn "clock not synchronized (munge credentials expire after 5 min)"
+crontab -l 2>&1 | grep -qi 'not allowed' && fail "user crontab not allowed here"
+ok "crontab allowed"
+# SLURM's ports, from Private/SLURM/slurm.conf
+read -r p_ctld p_slurmd p_lo p_hi <<< "$(sed -n 's/#.*//; s/^SlurmctldPort= *\([0-9]*\).*/\1/p; s/^SlurmdPort= *\([0-9]*\).*/\1/p; s/^SrunPortRange= *\([0-9]*\)-\([0-9]*\).*/\1 \2/p' "$priv/slurm.conf" | tr '\n' ' ')"
+[ -n "$p_hi" ] || fail "SlurmctldPort, SlurmdPort or SrunPortRange missing from $priv/slurm.conf"
+if ! running "$SLURM_HOME/var/run/slurmd.pid"; then
+    busy=$(ss -Hltn 2>/dev/null | awk '{ sub(/.*:/, "", $4); print $4 }' | sort -un \
+        | awk -v a="$p_ctld" -v b="$p_slurmd" -v lo="$p_lo" -v hi="$p_hi" '$1 == a || $1 == b || ($1 >= lo && $1 <= hi)' | tr '\n' ' ')
+    [ -z "$busy" ] && ok "ports $p_ctld, $p_slurmd, $p_lo-$p_hi free" || fail "ports in use by something else: $busy"
+fi
+if [ "$host" != "$ctld" ]; then
+    getent hosts "$ctld" > /dev/null && ok "controller $ctld resolves" || fail "can't resolve controller $ctld"
+fi
+
+echo "== Firewall"
+# Lets SLURM's ports in from the lab's machines only (Private/MachineHostnames.py, whether or not
+# they're in SLURM, at the addresses they resolve to now), on every machine so any can become the
+# controller. Rules this manages carry the comment below; ones for other sources or ports (eg.
+# after an address changes) are removed. Needs sudo, so asks for a password. Cron can't do this,
+# so rerun setup_node everywhere when the lab's machines or their addresses change.
+tag="workstation SLURM"
+ports="$p_ctld,$p_slurmd,$p_lo:$p_hi"
+machines=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from MachineHostnames import machine2hostname as m; print("\n".join(sorted(set(m.values()))))' "$priv/..") \
+    || fail "couldn't read the lab's machines from $priv/../MachineHostnames.py"
+want=$(for m in $machines; do
+    a=$(getent ahostsv4 "$m" | awk '$1 !~ /^127\./ { print $1 }' | sort -u)   # loopback isn't filtered
+    [ -n "$a" ] || getent ahostsv4 "$m" > /dev/null || a="unresolved $m"
+    [ -n "$a" ] && echo "$a"
+done | sort -u)
+skipped=$(grep '^unresolved' <<< "$want" | cut -d' ' -f2 | tr '\n' ' ')
+[ -n "$skipped" ] && ok "not letting in machines that don't resolve: $skipped"
+want=$(grep -v '^unresolved' <<< "$want")
+if ! command -v ufw > /dev/null; then
+    warn "no ufw here: if this machine has another firewall, let in TCP $ports from: $(echo $want)"
+elif ! sudo -n true 2> /dev/null && ! [ -t 0 ]; then
+    warn "sudo needs a password but there's no terminal to ask it on: rerun setup_node in a terminal"
+elif ! fw=$(sudo ufw status); then
+    warn "couldn't run sudo ufw status; set the rules by hand (Setup.md, Ports)"
+elif ! grep -q '^Status: active' <<< "$fw"; then
+    ok "ufw inactive: nothing to open"
+else
+    # Our current rules: "<ports>/tcp ALLOW <source> # workstation SLURM" (IPv6 twins skipped)
+    have=$(awk -v t="# $tag" 'index($0, t) && !/\(v6\)/ { for (i = 1; i < NF; i++) if ($i == "ALLOW") { sub(/\/tcp$/, "", $1); print $1, $(i + 1); break } }' <<< "$fw")
+    while read -r p src; do
+        [ -z "$p" ] && continue
+        [ "$p" = "$ports" ] && grep -qx "$src" <<< "$want" && continue
+        from=(); [ "$src" != Anywhere ] && from=(from "$src")
+        sudo ufw delete allow proto tcp "${from[@]}" to any port "$p" > /dev/null \
+            && ok "removed the old rule for $src (ports $p)" || warn "couldn't remove the rule for $src (ports $p)"
+    done <<< "$have"
+    added=0
+    for src in $want; do
+        grep -qx "$ports $src" <<< "$have" && continue
+        sudo ufw allow proto tcp from "$src" to any port "$ports" comment "$tag" > /dev/null \
+            && added=$((added + 1)) || warn "couldn't add the rule for $src"
+    done
+    ok "ufw lets in TCP $ports from the $(wc -w <<< "$want") address(es) of the lab's other machines ($added new rules)"
+fi
+
+echo "== Build"
+want=$("$repo/build.sh" --version)
+if [ "$("$SLURM_HOME/bin/sinfo" -V 2>/dev/null | cut -d' ' -f2)" = "$want" ]; then
+    ok "SLURM $want installed"
+    rebuilt=0
+else
+    "$repo/build.sh" || fail "build.sh failed"
+    rebuilt=1
+fi
+
+echo "== Node file"
+node_file=$SLURM_NODE_FILE
+if [ ${#add_node_args[@]} -gt 0 ]; then
+    "$repo/bin/add_node" "${add_node_args[@]}" > /dev/null || fail "add_node failed (see above)"
+fi
+[ -f "$node_file" ] || fail "no $node_file; rerun with --gpus (all, none or eg. 0,2)"
+node_home=$(sed -n 's/^home=//p' "$node_file")
+[ "$node_home" = "$HOME" ] && ok "$node_file is there, home=$HOME" \
+    || fail "$node_file has home=$node_home, but \$HOME is $HOME; rerun with --gpus"
+grep -q '^cpus:' "$node_file" || warn "no cpus: lines (GPU-CPU map) in $node_file; rerun with --gpus"
+if [ -n "$(git -C "$priv" status --porcelain -- "nodes/$host.conf")" ]; then
+    warn "node file not committed: commit and push it in Private/, then git pull on every machine (each picks it up within a minute)"
+fi
+
+echo "== Munge key"
+# One key, shared by every machine, in the Private repo; start_daemons installs it.
+[ -f "$priv/munge.key" ] && ok "shared key $priv/munge.key present" \
+    || fail "no $priv/munge.key: check out the Private submodule (a new cluster: mungekey -c -k $priv/munge.key, then commit it)"
+chmod 600 "$priv/munge.key"
+
+echo "== Crontab"
+# Replaces the SLURM lines (old ones: those mentioning SLURM/bin/) and keeps the rest.
+new_crontab=$({ crontab -l 2>/dev/null | grep -v -e '/SLURM/bin/' -e '^# Workstation SLURM'; \
+                sed "s|\${SLURM_DIR}|$repo|g" "$repo/crontab"; })
+if [ "$(crontab -l 2>/dev/null)" = "$new_crontab" ]; then
+    ok "crontab up to date"
+else
+    printf '%s\n' "$new_crontab" | crontab - && ok "installed SLURM lines (other lines kept)"
+fi
+
+echo "== Shell"
+grep -qF 'SLURM/env.sh' ~/.bashrc 2>/dev/null && ok "~/.bashrc loads SLURM" \
+    || warn "~/.bashrc doesn't load SLURM; run update_scripts_and_aliases"
+
+echo "== Daemons"
+if [ $rebuilt = 1 ]; then
+    # Running jobs survive restarting slurmd and slurmctld.
+    for p in slurmd slurmctld; do
+        running "$SLURM_HOME/var/run/$p.pid" && kill "$(cat "$SLURM_HOME/var/run/$p.pid")" && sleep 2
+    done
+fi
+"$repo/bin/start_daemons"
+sleep 3
+for p in munged slurmd; do
+    pidf=$SLURM_HOME/var/run/$p.pid; [ $p = munged ] && pidf=$SLURM_HOME/var/run/munge/munged.pid
+    running "$pidf" && ok "$p running" || fail "$p not running; see ~/.local/slurm/var/log/"
+done
+if [ "$host" = "$ctld" ]; then
+    running "$SLURM_HOME/var/run/slurmctld.pid" && ok "slurmctld running" || fail "slurmctld not running"
+fi
+cmp -s "$priv/munge.key" "$SLURM_HOME/etc/munge/munge.key" && ok "munge key installed" || fail "munge key not installed"
+if scontrol ping 2>/dev/null | grep -q 'is UP'; then
+    ok "controller $ctld reachable and accepts this machine's munge key"
+else
+    warn "scontrol ping can't reach $ctld (ports? munge key? is it set up?): $(scontrol ping 2>&1 | head -1)"
+fi
+# Builds only need to interoperate: this machine's SLURM version must match the controller's and
+# every slurmd's.
+mine=$(sinfo -V | cut -d' ' -f2)
+ctld_version=$(scontrol show config 2>/dev/null | sed -n 's/^SLURM_VERSION *= *//p')
+others=$(sinfo -h -N -o '%N %v' 2>/dev/null | sort -u | awk -v v="$mine" '$2 != v && $2 != "N/A"' | tr '\n' ' ')
+if [ "$ctld_version" != "$mine" ]; then
+    warn "SLURM $mine here, but the controller runs ${ctld_version:-?}"
+elif [ -n "$others" ]; then
+    warn "SLURM $mine here, but these nodes run another version: $others"
+else
+    ok "SLURM $mine, same as the controller and all nodes"
+fi
+state=$(sinfo -h -n "$host" -o %t 2>/dev/null | head -1)
+case $state in
+    idle*|mix*|alloc*) ok "SLURM sees $host as $state" ;;
+    "") warn "the controller doesn't know $host yet: commit and push its node file, then git pull on every machine (each picks it up within a minute)" ;;
+    *) warn "SLURM sees $host as $state" ;;
+esac
+
+echo "Done ($warnings warnings)."
