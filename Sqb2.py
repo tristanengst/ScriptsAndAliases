@@ -984,8 +984,8 @@ if __name__ == "__main__":
     P = argparse.ArgumentParser(add_help=False, prefix_chars="-+")
     P.add_argument("-u", "--users", action="store_true", default=False,
         help="Show only jobs for all users")
-    P.add_argument("-a", "--next_chunks", action="store_true", default=False,
-        help="Show next chunk jobs too")
+    P.add_argument("-a", "--blockers", action="store_true", default=False,
+        help="On APEX, also show the blocker jobs (SLURM/README.md)")
     P.add_argument("-n", "--nodes", action="store_true", default=False,
         help="Show show the node list for all jobs")
     P.add_argument("-s", "--submit_time", action="store_true", default=False,
@@ -1060,7 +1060,6 @@ if __name__ == "__main__":
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
-            next_chunks=args.next_chunks,
             nodes=args.nodes,
             excluded=args.exclude,
             submit_time=args.submit_time,
@@ -1079,7 +1078,6 @@ if __name__ == "__main__":
         job_datas = []
         for account in Utils.cluster2info[Utils.get_cluster_type()].accounts:
             job_datas_account, colnames = jobs_data(account=account, cur_user=not args.users,
-                next_chunks=args.next_chunks,
                 nodes=args.nodes,
                 excluded=args.exclude,
                 submit_time=args.submit_time,
@@ -1097,9 +1095,8 @@ if __name__ == "__main__":
                 job_datas += [colnames_job_data] + job_datas_account
     elif Utils.is_apex_cluster() and shutil.which("squeue"):
         # Like ComputeCanada, without accounts. Blocker jobs (SLURM/README.md) aren't the
-        # user's work; GPU availability is shown by FindFreeGPUs.py below instead.
+        # user's work, so are only shown with -a; FindFreeGPUs.py below shows GPU availability.
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
-            next_chunks=args.next_chunks,
             nodes=args.nodes,
             excluded=args.exclude,
             submit_time=args.submit_time,
@@ -1112,7 +1109,7 @@ if __name__ == "__main__":
             partition=args.partition,
             workdir=args.workdir,
             verbose=args.verbose)
-        job_datas = [jd for jd in job_datas if not jd.name.startswith("blocking_job_")]
+        job_datas = job_datas if args.blockers else [jd for jd in job_datas if not jd.name.startswith("blocking_job_")]
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
     else:
         # On workstations, the obvious equivalent is finding free GPUs.

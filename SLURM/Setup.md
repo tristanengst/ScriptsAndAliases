@@ -333,7 +333,9 @@ Run by cron (`crontab`).
   job `blocking_job_<node>_<N>`, and releases it when the GPU is used outside SLURM.
   `bin/blocker.sh` is the blocker job itself: it holds the GPU until it's free again, then
   requeues itself held. `bin/gpu_busy_outside` tells whether a GPU is in use outside SLURM (a GPU
-  process is SLURM's if a `slurmstepd` is among its ancestors); `task_prolog` uses it too.
+  process is SLURM's if a `slurmstepd` is among its ancestors), or errored as `ffg` shows it
+  (uncorrected ECC errors, or no utilization reading), which counts as in use; `task_prolog`
+  uses it too.
 - `bin/sweep_tmpdirs` (every minute): removes `SLURM_TMPDIR`s the Epilog missed (eg. after a
   crash): only those whose job neither the controller nor this machine's slurmstepds have running
   here, under a lock the Prolog also takes. Deletes nothing if either can't be asked.
