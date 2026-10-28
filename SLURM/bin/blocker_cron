@@ -5,10 +5,14 @@
 source "$(dirname "$0")/../env.sh"
 dir=$SLURM_DIR
 node=$(hostname -s)
+# Until the controller knows this node (its node file pulled there), there's nothing to block.
+scontrol show node "$node" > /dev/null 2>&1 || exit 0
 idxs=$(awk -v n="$node" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$SLURM_HOME/etc/gres.conf")
 for idx in $idxs; do
     name="blocking_job_${node}_$idx"
-    read -r jobid state prio <<< "$(squeue -h -n "$name" -o '%i %T %Q' | head -1)"
+    # If squeue fails, do nothing: an empty answer would mean "no blocker" and submit another.
+    out=$(squeue -h -n "$name" -o '%i %T %Q') || continue
+    read -r jobid state prio <<< "$(head -1 <<< "$out")"
     if [ -z "$jobid" ]; then
         sbatch -Q --hold --requeue -p block -w "$node" --gres="gpu:g$idx:1" -c 1 -J "$name" \
             -o /dev/null -e "$HOME/.local/slurm/var/log/$name.err" \

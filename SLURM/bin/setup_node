@@ -93,7 +93,7 @@ fi
 
 echo "== Build"
 want=$("$repo/build.sh" --version)
-if [ "$("$SLURM_HOME/bin/sinfo" -V 2>/dev/null | cut -d' ' -f2)" = "$want" ]; then
+if [ "$(cat "$SLURM_HOME/.slurm_build" 2>/dev/null)" = "$want" ]; then
     ok "SLURM $want installed"
     rebuilt=0
 else
@@ -152,6 +152,8 @@ if [ "$host" = "$ctld" ]; then
     running "$SLURM_HOME/var/run/slurmctld.pid" && ok "slurmctld running" || fail "slurmctld not running"
 fi
 cmp -s "$priv/munge.key" "$SLURM_HOME/etc/munge/munge.key" && ok "munge key installed" || fail "munge key not installed"
+# Retries for a while: munged may have only just (re)started.
+for _ in 1 2 3 4 5 6; do scontrol ping 2>/dev/null | grep -q 'is UP' && break; sleep 3; done
 if scontrol ping 2>/dev/null | grep -q 'is UP'; then
     ok "controller $ctld reachable and accepts this machine's munge key"
 else

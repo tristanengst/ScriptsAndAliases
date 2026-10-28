@@ -29,6 +29,8 @@ Every machine is set up the same way (`setup_node`), and the one named there run
 Nothing about a node depends on which machine is the controller, or on the controller being
 reachable while setting it up.
 
+**Users are matched by name, not by uid:** see "Users and uids" below.
+
 **The munge key** (the secret every machine's `munged` uses to sign and check SLURM's messages)
 is shared by all machines: one file, `Private/SLURM/munge.key`, which `start_daemons` installs as
 `~/.local/slurm/etc/munge/munge.key`. Its origin is recorded in `Private/SLURM/README.md`.
@@ -61,12 +63,13 @@ the new controller's `~/.local/slurm/var/state/`.
    - `~/.ScriptsAndAliases` is cloned and up to date, with the Private submodule checked out, and
      conda is installed (`build.sh` finds it through `$CONDA_EXE`, `conda` on PATH, or
      `~/miniconda3`, `~/miniforge3`, `~/anaconda3`).
-   - `sudo` on the machine: `setup_node` uses it to open SLURM's ports (see Ports, below).
+   - `sudo` on the machine: `setup_node` uses it to open SLURM's ports automatically (what it
+     does: Ports, below).
 2. **On NODE:** `~/.ScriptsAndAliases/SLURM/bin/setup_node --gpus all` (or `none`, or the
    nvidia-smi indices SLURM gets, eg. `--gpus 0,2`; the rest stay outside SLURM). It:
    - checks the clock, crontab, that the ports are free and that the controller resolves;
    - opens SLURM's ports in `ufw` (with `sudo`) to the lab's machines (`MachineHostnames.py`);
-   - builds SLURM if the installed version isn't `build.sh`'s (~5 min);
+   - builds SLURM if the installed build isn't `build.sh`'s (~5 min);
    - writes the node file `Private/SLURM/nodes/NODE.conf` (`bin/add_node`: home from `$HOME`,
      CPU layout and memory from `slurmd -C`, GPUs from nvidia-smi, feature = the GPU model's
      name, derived from nvidia-smi's, eg. `rtx_2080_super`) and, if it has none, its GPU-CPU map
@@ -93,7 +96,54 @@ the new controller's `~/.local/slurm/var/state/`.
      blocker runs; stop it; within ~30 s the blocker is held again. (`~/SLURMSetupProgress.md` has
      the test helper.)
 
+## Users and uids
+
+**The issue.** Each machine has its own accounts, so the same user has a different uid on
+different machines (eg. `tme3` is 1006 on A99, 1001 on A4, 1003 on A3 and S1). Stock SLURM
+assumes a user's uid is the same everywhere (clusters normally get that from LDAP): munge signs
+every message with the sender's numeric uid, and SLURM compares uids to decide who someone is.
+With different uids, the machines reject each other ("Security violation ... from uid 1006",
+"cred/munge: Unexpected uid"), jobs submitted from one machine belong to a nonexistent user on
+the controller, and `squeue`/`scancel -u` match nothing from other machines.
+
+**The patch.** `build.sh` applies `patches/user-by-name.patch`, under which a user *is* their
+user name, and a uid is only that name's number on one machine:
+- Where SLURM needs a number, it uses the local one: every signed message carries the sender's
+  user name, which the receiver turns into its own uid and groups; a machine running a job runs
+  it as the job's user name's local uid; a uid a client sends as "me" (eg. when `srun` starts a
+  step) is replaced by the sender's, as SLURM already does for job submission.
+- Where SLURM matches users, it compares names: `squeue -u`/`--me`/`--notme` and
+  `scancel -u`/`--me` work from any machine.
+
+The alternative, giving the user the same uid on every machine (`sudo usermod -u`, then
+re-owning files outside the home directory), needs no patch, but changes accounts on shared
+machines.
+
+**What the patch doesn't fix:**
+- `squeue -s -u` (job steps by user) still matches by number, since SLURM's step listing has no
+  user name: it only works on the controller's machine.
+- Numbers SLURM shows or passes on can be another machine's: eg. `scontrol show job`'s
+  `UserId=tme3(1006)` is the controller's uid, and `SLURM_JOB_UID` in the Prolog and Epilog may
+  be too. Use user names (`SLURM_JOB_USER`, `id -un`), never uids.
+- Options that take a uid number (eg. `squeue -u 1006`) mean that number on the machine they're
+  run on.
+- Every machine must run the patched build (`setup_node` rebuilds when the patch changes): a
+  patched and an unpatched machine still disagree, as above.
+- It relies on munged's socket being reachable only by the user running SLURM (it's under
+  `~/.local/slurm`, not readable by others): anyone who could use it could claim any user name.
+- SLURM features not used here (accounting, `sbcast`, X11 forwarding, reservations by user)
+  weren't checked, and may still compare uids.
+
 ## Ports
+
+**`setup_node` handles the ports automatically; nothing needs doing by hand on a machine with
+`ufw`.** This section says what it does, so it can be checked, or done by hand where it can't
+(another firewall, or `setup_node` couldn't run `sudo`):
+
+- With `ufw` enabled: asks for the `sudo` password (run it in a terminal), then lets the lab's
+  machines in to SLURM's ports and removes its stale rules (details below).
+- With `ufw` installed but disabled (eg. A99): nothing to do; it says "ufw inactive".
+- Without `ufw`: it warns, listing the ports and addresses another firewall must let in.
 
 Which ports SLURM uses is set in `Private/SLURM/slurm.conf` (`SlurmctldPort`: slurmctld, on the
 controller; `SlurmdPort`: slurmd, on every machine; `SrunPortRange`: srun, on the machine running
@@ -147,8 +197,9 @@ After hardware changes, rerun it with `--gpus`. After changing `slurm.conf.in`, 
 pull everywhere; each machine applies it within a minute. When a machine's address changes, a
 machine is added to `Private/MachineHostnames.py`, or after changing the ports: rerun
 `setup_node` on every machine (firewall rules). After changing the SLURM version in
-`build.sh`: push, pull, and `setup_node` on every machine rebuilds and restarts its daemons
-(running jobs survive). Cron restarts a daemon that stops within a minute, so to stop SLURM on a
+`build.sh` or a patch: push, pull, and `setup_node` on every machine rebuilds and restarts its
+daemons (running jobs survive). Until every machine has the new build, machines with different
+builds may not understand each other. Cron restarts a daemon that stops within a minute, so to stop SLURM on a
 machine, first remove its SLURM crontab lines (`crontab -e`).
 
 Logs: `~/.local/slurm/var/log/` (`slurmd.log`, `slurmctld.log` on the controller, `cron.log`,
@@ -189,9 +240,12 @@ What's normally `/etc/slurm/`, the same for every machine.
 
 - `bin/setup_node`: sets up or re-checks a machine (above): checks, build, node file, munge key,
   crontab, daemons.
-- `build.sh`: builds SLURM into `~/.local/slurm`: a pinned, checksummed SLURM version; conda-forge
-  compilers with a glibc 2.28 sysroot; munge, json-c, lz4 and readline from conda-forge, unpinned.
-  Per machine, since `$HOME` paths are compiled in; machines only need the same SLURM version.
+- `build.sh`: builds SLURM into `~/.local/slurm`: a pinned, checksummed SLURM version with
+  `patches/*.patch` applied; conda-forge compilers with a glibc 2.28 sysroot; munge, json-c, lz4
+  and readline from conda-forge, unpinned. Per machine, since `$HOME` paths are compiled in;
+  machines only need the same build (`build.sh --version`: the SLURM version and a hash of the
+  patches, recorded in `~/.local/slurm/.slurm_build`).
+- `patches/user-by-name.patch`: makes SLURM match users by name, not uid (above).
 - `crontab`: the SLURM crontab lines, merged into the user's crontab by `setup_node`.
 - `env.sh`: puts SLURM on PATH. Sourced by `~/.bashrc` and everything in `bin/`; scripts SLURM
   runs (no `HOME`, or the submitting machine's) pass `--node-home` to take it from the node file.

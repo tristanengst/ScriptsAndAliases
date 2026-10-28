@@ -1,0 +1,346 @@
+Workstation SLURM: users are the same user by name, not by uid (each machine has its own
+accounts, so uids differ between machines). A uid is only a name's number on one machine:
+where SLURM needs a number (signing, running a job) it's the local one; where it matches
+users, it compares names. Applied by build.sh. See the comments in the code.
+
+diff -ru a/src/common/uid.c b/src/common/uid.c
+--- a/src/common/uid.c
++++ b/src/common/uid.c
+@@ -228,6 +228,13 @@
+ 	slurm_mutex_unlock(&uid_lock);
+ }
+ 
++extern bool same_user(uid_t uid, const char *name, uid_t local_uid)
++{
++	if (name && name[0])
++		return !xstrcmp(name, uid_to_string_cached(local_uid));
++	return uid == local_uid;
++}
++
+ extern char *uid_to_string_cached(uid_t uid)
+ {
+ 	uid_cache_entry_t *entry;
+diff -ru a/src/common/uid.h b/src/common/uid.h
+--- a/src/common/uid.h
++++ b/src/common/uid.h
+@@ -107,6 +107,15 @@
+ extern char *uid_to_string_cached(uid_t uid);
+ 
+ /*
++ * Workstation SLURM patch: a user is identified by name, not uid (see
++ * auth_munge.c), since one user's uid differs between machines. A uid is only
++ * that name's number on one machine. Returns whether the user [uid]/[name] that
++ * another machine (eg. slurmctld's) sent is local user [local_uid]: by name if
++ * [name] is set, else by number.
++ */
++extern bool same_user(uid_t uid, const char *name, uid_t local_uid);
++
++/*
+  * Translate uid to home directory.
+  * NOTE: xfree the return value
+  */
+diff -ru a/src/interfaces/cred.c b/src/interfaces/cred.c
+--- a/src/interfaces/cred.c
++++ b/src/interfaces/cred.c
+@@ -631,9 +631,49 @@
+ 	slurm_rwlock_unlock(&cred->mutex);
+ }
+ 
++/*
++ * Workstation SLURM patch: users are the same user by name, not by uid (see
++ * auth_munge.c). A credential's identity was filled in by slurmctld, with the
++ * uid, gid and groups the user has on slurmctld's machine; replace them with
++ * those the same user name has here. A name unknown here gets uid nobody, which
++ * launching refuses.
++ */
++static void _localize_identity(slurm_cred_arg_t *arg)
++{
++	uid_t uid;
++	identity_t *id;
++
++	if (!arg || !arg->id || !arg->id->pw_name)
++		return;
++	if (uid_from_string(arg->id->pw_name, &uid) != SLURM_SUCCESS) {
++		error("%s: no local user %s", __func__, arg->id->pw_name);
++		arg->uid = SLURM_AUTH_NOBODY;
++		arg->gid = SLURM_AUTH_NOBODY;
++		return;
++	}
++	if ((uid == arg->uid) && (arg->id->uid == uid))
++		return;
++	if (!(id = fetch_identity(uid, gid_from_uid(uid), false))) {
++		error("%s: fetch_identity(%u) failed", __func__, uid);
++		arg->uid = SLURM_AUTH_NOBODY;
++		arg->gid = SLURM_AUTH_NOBODY;
++		return;
++	}
++	debug("%s: user %s is uid %u here, not %u", __func__, id->pw_name, uid,
++	      arg->uid);
++	FREE_NULL_IDENTITY(arg->id);
++	arg->id = id;
++	arg->uid = id->uid;
++	arg->gid = id->gid;
++}
++
+ extern slurm_cred_t *slurm_cred_unpack(buf_t *buffer, uint16_t protocol_version)
+ {
+-	return (*(ops.cred_unpack))(buffer, protocol_version);
++	slurm_cred_t *cred = (*(ops.cred_unpack))(buffer, protocol_version);
++
++	if (cred)
++		_localize_identity(cred->arg);
++	return cred;
+ }
+ 
+ extern slurm_cred_t *slurm_cred_alloc(bool alloc_arg)
+diff -ru a/src/plugins/auth/munge/auth_munge.c b/src/plugins/auth/munge/auth_munge.c
+--- a/src/plugins/auth/munge/auth_munge.c
++++ b/src/plugins/auth/munge/auth_munge.c
+@@ -98,6 +98,18 @@
+ static int bad_cred_test = -1;
+ 
+ /*
++ * Workstation SLURM patch: users are the same user by name, not by uid. Each machine has its
++ * own accounts, so one user can have different uids on different machines, and munge
++ * credentials carry only the sender's numeric uid. So every credential also carries the
++ * sender's user name, in the signed payload after NAME_TAG, and the receiver takes the uid and
++ * gid of that name on its own machine. Uid restrictions on who may decode a credential are
++ * dropped (they name the receiver's uid as the sender's machine knows it), except in init()'s
++ * self-test. This relies on munged's socket being reachable only by the user running SLURM.
++ */
++#define NAME_TAG "slurm-user-name:"
++static bool keep_uid_restriction = false;
++
++/*
+  * The Munge implementation of the slurm AUTH credential
+  */
+ #define MUNGE_MAGIC 0xfeed
+@@ -146,7 +158,9 @@
+ 		char *socket = slurm_auth_opts_to_socket(slurm_conf.authinfo);
+ 		uid_t uid = getuid() + 1;
+ 
++		keep_uid_restriction = true;
+ 		cred = auth_p_create(slurm_conf.authinfo, uid, NULL, 0);
++		keep_uid_restriction = false;
+ 		if (!cred) {
+ 			error("Failed to create MUNGE Credential");
+ 			rc = SLURM_ERROR;
+@@ -179,6 +193,12 @@
+ 	munge_ctx_t ctx = munge_ctx_create();
+ 	SigFunc *ohandler;
+ 	char *socket;
++	char *name = uid_to_string_cached(getuid());
++	char *payload = NULL;
++	int plen;
++
++	if (!keep_uid_restriction)
++		r_uid = SLURM_AUTH_UID_ANY;
+ 
+ 	if (!ctx) {
+ 		error("munge_ctx_create failure");
+@@ -232,8 +252,15 @@
+ 	 */
+ 	ohandler = xsignal(SIGALRM, (SigFunc *)SIG_BLOCK);
+ 
++	/* NAME_TAG, the name and its NUL, then the caller's data. */
++	plen = strlen(NAME_TAG) + strlen(name) + 1 + dlen;
++	payload = xmalloc(plen);
++	sprintf(payload, "%s%s", NAME_TAG, name);
++	if (dlen)
++		memcpy(payload + plen - dlen, data, dlen);
++
+ again:
+-	err = munge_encode(&cred->m_str, ctx, data, dlen);
++	err = munge_encode(&cred->m_str, ctx, payload, plen);
+ 	if (err != EMUNGE_SUCCESS) {
+ 		if ((err == EMUNGE_SOCKET) && retry--) {
+ 			debug("Munge encode failed: %s (retrying ...)",
+@@ -260,6 +287,7 @@
+ 	xsignal(SIGALRM, ohandler);
+ 
+ 	munge_ctx_destroy(ctx);
++	xfree(payload);
+ 
+ 	return cred;
+ }
+@@ -569,6 +597,34 @@
+ 		error("auth_munge: Unable to retrieve addr: %s",
+ 		      munge_ctx_strerror(ctx));
+ 
++	/* The sender's user name (NAME_TAG): take its uid and gid here. */
++	if (!err && c->data && (c->dlen > strlen(NAME_TAG)) &&
++	    !memcmp(c->data, NAME_TAG, strlen(NAME_TAG))) {
++		char *name = (char *) c->data + strlen(NAME_TAG);
++		char *end = memchr(name, '\0', c->dlen - strlen(NAME_TAG));
++		int rest;
++		void *data = NULL;
++
++		if (!end || uid_from_string(name, &c->uid) ||
++		    ((c->gid = gid_from_uid(c->uid)) == (gid_t) -1)) {
++			error("%s: no local user for user name %s", __func__,
++			      end ? name : "(unterminated)");
++			free(c->data);
++			c->data = NULL;
++			c->dlen = 0;
++			err = EMUNGE_CRED_INVALID;
++			goto done;
++		}
++		rest = c->dlen - (end + 1 - (char *) c->data);
++		if (rest) {
++			data = malloc(rest);
++			memcpy(data, end + 1, rest);
++		}
++		free(c->data);
++		c->data = data;
++		c->dlen = rest;
++	}
++
+ 	if (c->uid == SLURM_AUTH_NOBODY)
+ 		err = EMUNGE_CRED_INVALID;
+ 	else if (c->gid == SLURM_AUTH_NOBODY)
+diff -ru a/src/plugins/cred/munge/cred_munge.c b/src/plugins/cred/munge/cred_munge.c
+--- a/src/plugins/cred/munge/cred_munge.c
++++ b/src/plugins/cred/munge/cred_munge.c
+@@ -244,12 +244,12 @@
+ 		debug2("Credential was replayed or expired, but this is expected.");
+ 	}
+ 
+-	if ((uid != slurm_conf.slurm_user_id) && (uid != 0)) {
+-		error("%s: Unexpected uid (%u) != Slurm uid (%u)",
+-		      plugin_type, uid, slurm_conf.slurm_user_id);
+-		rc = ESIG_BAD_USERID;
+-		goto end_it;
+-	}
++	/*
++	 * Workstation SLURM patch: the signer (slurmctld's SlurmUser) has its
++	 * own uid on its own machine, which needn't be slurm_user_id here (see
++	 * auth_munge.c), so that isn't checked: only holders of the munge key
++	 * can sign.
++	 */
+ 
+ 	if (expiration) {
+ 		int ttl;
+diff -ru a/src/scancel/opt.c b/src/scancel/opt.c
+--- a/src/scancel/opt.c
++++ b/src/scancel/opt.c
+@@ -437,7 +437,8 @@
+ 			break;
+ 		case OPT_LONG_ME:
+ 			xfree(opt.user_name);
+-			opt.user_name = xstrdup_printf("%u", getuid());
++			/* Workstation SLURM patch: by name (see uid.h) */
++			opt.user_name = uid_to_string(getuid());
+ 			break;
+ 		case (int)'n':
+ 			xfree(opt.job_name);
+diff -ru a/src/scancel/scancel.c b/src/scancel/scancel.c
+--- a/src/scancel/scancel.c
++++ b/src/scancel/scancel.c
+@@ -57,6 +57,7 @@
+ #include "src/common/slurm_protocol_api.h"
+ #include "src/common/slurm_protocol_defs.h"
+ #include "src/common/timers.h"
++#include "src/common/uid.h"
+ #include "src/common/xstring.h"
+ #include "src/common/xmalloc.h"
+ #include "src/scancel/scancel.h"
+@@ -545,7 +546,8 @@
+ 		}
+ 
+ 		if ((opt.user_name) &&
+-		    (job_ptr->user_id != opt.user_id)) {
++		    !same_user(job_ptr->user_id, job_ptr->user_name,
++			       opt.user_id)) {
+ 			job_ptr->step_id.job_id = 0;
+ 			continue;
+ 		}
+diff -ru a/src/slurmctld/job_mgr.c b/src/slurmctld/job_mgr.c
+--- a/src/slurmctld/job_mgr.c
++++ b/src/slurmctld/job_mgr.c
+@@ -5910,6 +5910,15 @@
+ 		return ESLURM_SIGNAL_JOBS_INVALID;
+ 
+ 	/*
++	 * Workstation SLURM patch: the user is the user name (see uid.h); the
++	 * uid sent is that name's on the sender's machine. Use its uid here.
++	 */
++	if (kill_msg->user_name &&
++	    (uid_from_string(kill_msg->user_name, &kill_msg->user_id) !=
++	     SLURM_SUCCESS))
++		kill_msg->user_id = SLURM_AUTH_NOBODY;
++
++	/*
+ 	 * Items in the signal_args.responses list are free'd in
+ 	 * _foreach_xfer_responses
+ 	 */
+@@ -11003,7 +11012,18 @@
+ 		}
+ 
+ 		packstr(dump_job_ptr->name, buffer);
+-		packstr(dump_job_ptr->user_name, buffer);
++		/*
++		 * Workstation SLURM patch: always send the user name, which
++		 * other machines match on (see uid.h); user_name is only set
++		 * once a job starts.
++		 */
++		if (dump_job_ptr->user_name) {
++			packstr(dump_job_ptr->user_name, buffer);
++		} else {
++			char *name = user_from_job(dump_job_ptr);
++			packstr(name, buffer);
++			xfree(name);
++		}
+ 		packstr(dump_job_ptr->wckey, buffer);
+ 		pack32(dump_job_ptr->req_switch, buffer);
+ 		pack32(dump_job_ptr->wait4switch, buffer);
+diff -ru a/src/squeue/opts.c b/src/squeue/opts.c
+--- a/src/squeue/opts.c
++++ b/src/squeue/opts.c
+@@ -543,7 +543,11 @@
+ 		squeue_job_step_t *job_step_ptr = list_peek(params.job_list);
+ 		params.job_id = job_step_ptr->step_id.job_id;
+ 	}
+-	if (params.user_list && (list_count(params.user_list) == 1)) {
++	/*
++	 * Workstation SLURM patch: not params.user_id, which would have
++	 * slurmctld filter by this machine's uid; _filter_job() matches by name.
++	 */
++	if (0 && params.user_list && (list_count(params.user_list) == 1)) {
+ 		list_itr_t *iterator;
+ 		uint32_t *uid_ptr;
+ 		iterator = list_iterator_create(params.user_list);
+diff -ru a/src/squeue/print.c b/src/squeue/print.c
+--- a/src/squeue/print.c
++++ b/src/squeue/print.c
+@@ -3161,14 +3161,14 @@
+ 		|| (!hostset_intersects(params.nodes, job->nodes))))
+ 		return true;
+ 
+-	if (params.notme_flag && (getuid() == job->user_id))
++	if (params.notme_flag && same_user(job->user_id, job->user_name, getuid()))
+ 		return true;
+ 
+ 	if (params.user_list) {
+ 		bool filter = true;
+ 		iterator = list_iterator_create(params.user_list);
+ 		while ((user = list_next(iterator))) {
+-			if (*user == job->user_id) {
++			if (same_user(job->user_id, job->user_name, *user)) {
+ 				filter = false;
+ 				break;
+ 			}
+diff -ru a/src/stepmgr/stepmgr.c b/src/stepmgr/stepmgr.c
+--- a/src/stepmgr/stepmgr.c
++++ b/src/stepmgr/stepmgr.c
+@@ -5107,6 +5107,11 @@
+ 
+ 	xassert(msg->auth_ids_set);
+ 
++	/*
++	 * Workstation SLURM patch: like job submission, ignore the uid sent (the
++	 * sender's on its own machine; see uid.h) and use the sender's here.
++	 */
++	req_step_msg->user_id = msg->auth_uid;
+ 	if (req_step_msg->user_id == SLURM_AUTH_NOBODY) {
+ 		req_step_msg->user_id = msg->auth_uid;
+ 
