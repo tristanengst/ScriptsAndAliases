@@ -99,8 +99,7 @@ the new controller's `~/.local/slurm/var/state/`.
 ## Users and uids
 
 **The issue.** Each machine has its own accounts, so the same user has a different uid on
-different machines (eg. `tme3` is 1006 on A99, 1001 on A4, 1003 on A3 and S1). Stock SLURM
-assumes a user's uid is the same everywhere (clusters normally get that from LDAP): munge signs
+different machines. Stock SLURM assumes a user's uid is the same everywhere: munge signs
 every message with the sender's numeric uid, and SLURM compares uids to decide who someone is.
 With different uids, the machines reject each other ("Security violation ... from uid 1006",
 "cred/munge: Unexpected uid"), jobs submitted from one machine belong to a nonexistent user on
@@ -113,7 +112,11 @@ user name, and a uid is only that name's number on one machine:
   it as the job's user name's local uid; a uid a client sends as "me" (eg. when `srun` starts a
   step) is replaced by the sender's, as SLURM already does for job submission.
 - Where SLURM matches users, it compares names: `squeue -u`/`--me`/`--notme` and
-  `scancel -u`/`--me` work from any machine.
+  `scancel -u`/`--me` work from any machine. slurmctld sends every job's user name (stock SLURM
+  only sets it once a job starts).
+- Where SLURM shows users, it shows the name sent: `squeue`'s `USER` and `scontrol show job`'s
+  `UserId=`. Otherwise another machine shows slurmctld's uid under its own name for that
+  number: on A4, uid 1006 (`tme3` on A99) is a different person.
 
 The alternative, giving the user the same uid on every machine (`sudo usermod -u`, then
 re-owning files outside the home directory), needs no patch, but changes accounts on shared
@@ -122,9 +125,12 @@ machines.
 **What the patch doesn't fix:**
 - `squeue -s -u` (job steps by user) still matches by number, since SLURM's step listing has no
   user name: it only works on the controller's machine.
-- Numbers SLURM shows or passes on can be another machine's: eg. `scontrol show job`'s
-  `UserId=tme3(1006)` is the controller's uid, and `SLURM_JOB_UID` in the Prolog and Epilog may
-  be too. Use user names (`SLURM_JOB_USER`, `id -un`), never uids.
+- Numbers SLURM shows or passes on can be another machine's: eg. the `1006` in `scontrol show
+  job`'s `UserId=tme3(1006)` is the controller's uid, and `SLURM_JOB_UID` in the Prolog and
+  Epilog may be too. Use user names (`SLURM_JOB_USER`, `id -un`), never uids.
+- `squeue --json` (and other JSON/YAML output) and `squeue -s` (steps) still name users by
+  looking up the number on the machine they run on, so on another machine they can show someone
+  else's name.
 - Options that take a uid number (eg. `squeue -u 1006`) mean that number on the machine they're
   run on.
 - Every machine must run the patched build (`setup_node` rebuilds when the patch changes): a
@@ -133,6 +139,9 @@ machines.
   `~/.local/slurm`, not readable by others): anyone who could use it could claim any user name.
 - SLURM features not used here (accounting, `sbcast`, X11 forwarding, reservations by user)
   weren't checked, and may still compare uids.
+
+The same list is at the top of the patch file. Without the patch, uids must match on every
+machine; groups needn't (without root, SLURM never switches a job's group).
 
 ## Ports
 
@@ -206,7 +215,7 @@ Logs: `~/.local/slurm/var/log/` (`slurmd.log`, `slurmctld.log` on the controller
 `blocker_cron.log`, `task_prolog.log`, `sweep_tmpdirs.log`, `prolog.log`) and
 `~/.local/slurm/var/log/munge/munged.log`.
 
-## Files
+# Files
 
 Paths are relative to this folder, `SLURM/` (public); `../Private/SLURM/` is private (hostnames).
 

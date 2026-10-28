@@ -21,7 +21,9 @@ prefix=${SLURM_PREFIX:-$HOME/.local/slurm}        # runtime libs + SLURM itself 
 build=${SLURM_BUILD_DIR:-$HOME/.local/slurm-build} # compilers + source
 
 patches=("$(cd "$(dirname "$0")" && pwd)"/patches/*.patch)
-build_id=$version+$(cat "${patches[@]}" | sha256sum | cut -c1-8)
+# The hash covers only the patches' code changes (from their first "diff"), so editing their notes
+# doesn't make every machine rebuild.
+build_id=$version+$(for p in "${patches[@]}"; do sed -n '/^diff /,$p' "$p"; done | sha256sum | cut -c1-8)
 if [ "${1:-}" = --version ]; then echo "$build_id"; exit 0; fi
 
 conda=${CONDA_EXE:-}

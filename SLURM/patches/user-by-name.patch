@@ -1,8 +1,52 @@
 Workstation SLURM: users are the same user by name, not by uid (each machine has its own
 accounts, so uids differ between machines). A uid is only a name's number on one machine:
-where SLURM needs a number (signing, running a job) it's the local one; where it matches
-users, it compares names. Applied by build.sh. See the comments in the code.
+where SLURM needs a number (signing, running a job) it's the local one; where it matches or
+shows users, it uses names. Applied by build.sh. See the comments in the code, and
+SLURM/Setup.md ("Users and uids").
 
+Doesn't fix:
+- squeue -s -u (steps by user) matches by number: only right on the controller's machine.
+- squeue --json/--yaml and squeue -s name users from the local number: elsewhere, someone else's.
+- Numbers shown or passed on can be another machine's: the uid in scontrol's UserId=name(uid),
+  SLURM_JOB_UID/SLURM_JOB_GID (eg. in the Prolog and Epilog). Use names.
+- Options taking a uid number (eg. squeue -u 1006) mean that number on the machine they run on.
+- Patched and unpatched machines still disagree: every machine needs this build.
+- Relies on munged's socket being usable only by the SLURM user: anyone who can use it can
+  claim any user name.
+- Not checked: accounting, sbcast, X11 forwarding, reservations or partitions by user or group.
+Without the patch, uids (not gids) must match on every machine.
+
+diff -ru a/src/common/job_record.c b/src/common/job_record.c
+--- a/src/common/job_record.c
++++ b/src/common/job_record.c
+@@ -34,6 +34,7 @@
+ #include "job_record.h"
+ 
+ #include "src/common/port_mgr.h"
++#include "src/common/id_util.h"
+ #include "src/common/assoc_mgr.h"
+ #include "src/common/sluid.h"
+ #include "src/common/slurm_protocol_pack.h"
+@@ -2134,7 +2135,18 @@
+ 		packstr(dump_job_ptr->tres_per_task, buffer);
+ 
+ 		pack32(dump_job_ptr->user_id, buffer);
+-		packstr(dump_job_ptr->user_name, buffer);
++		/*
++		 * Workstation SLURM patch: always send the user name, which other
++		 * machines match on (see uid.h); user_name is only set once a job
++		 * starts. (State files keep what's set.)
++		 */
++		if (dump_job_ptr->user_name || for_state) {
++			packstr(dump_job_ptr->user_name, buffer);
++		} else {
++			char *name = user_from_job(dump_job_ptr);
++			packstr(name, buffer);
++			xfree(name);
++		}
+ 
+ 		pack32(dump_job_ptr->wait4switch, buffer);
+ 		packstr(dump_job_ptr->wckey, buffer);
 diff -ru a/src/common/uid.c b/src/common/uid.c
 --- a/src/common/uid.c
 +++ b/src/common/uid.c
@@ -254,6 +298,21 @@ diff -ru a/src/scancel/scancel.c b/src/scancel/scancel.c
  			job_ptr->step_id.job_id = 0;
  			continue;
  		}
+diff -ru a/src/scontrol/info_job.c b/src/scontrol/info_job.c
+--- a/src/scontrol/info_job.c
++++ b/src/scontrol/info_job.c
+@@ -212,7 +212,10 @@
+ 	}
+ 
+ 	/****** Line ******/
+-	user_name = uid_to_string((uid_t) job_ptr->user_id);
++	/* Workstation SLURM patch: the name sent, not this machine's name for
++	 * slurmctld's uid (see uid.h) */
++	user_name = job_ptr->user_name ? xstrdup(job_ptr->user_name) :
++		uid_to_string((uid_t) job_ptr->user_id);
+ 	group_name = gid_to_string((gid_t) job_ptr->group_id);
+ 	xstrfmtcat(out, "UserId=%s(%u) GroupId=%s(%u) MCS_label=%s",
+ 		   user_name, job_ptr->user_id, group_name, job_ptr->group_id,
 diff -ru a/src/slurmctld/job_mgr.c b/src/slurmctld/job_mgr.c
 --- a/src/slurmctld/job_mgr.c
 +++ b/src/slurmctld/job_mgr.c
@@ -273,26 +332,6 @@ diff -ru a/src/slurmctld/job_mgr.c b/src/slurmctld/job_mgr.c
  	 * Items in the signal_args.responses list are free'd in
  	 * _foreach_xfer_responses
  	 */
-@@ -11003,7 +11012,18 @@
- 		}
- 
- 		packstr(dump_job_ptr->name, buffer);
--		packstr(dump_job_ptr->user_name, buffer);
-+		/*
-+		 * Workstation SLURM patch: always send the user name, which
-+		 * other machines match on (see uid.h); user_name is only set
-+		 * once a job starts.
-+		 */
-+		if (dump_job_ptr->user_name) {
-+			packstr(dump_job_ptr->user_name, buffer);
-+		} else {
-+			char *name = user_from_job(dump_job_ptr);
-+			packstr(name, buffer);
-+			xfree(name);
-+		}
- 		packstr(dump_job_ptr->wckey, buffer);
- 		pack32(dump_job_ptr->req_switch, buffer);
- 		pack32(dump_job_ptr->wait4switch, buffer);
 diff -ru a/src/squeue/opts.c b/src/squeue/opts.c
 --- a/src/squeue/opts.c
 +++ b/src/squeue/opts.c
@@ -312,7 +351,19 @@ diff -ru a/src/squeue/opts.c b/src/squeue/opts.c
 diff -ru a/src/squeue/print.c b/src/squeue/print.c
 --- a/src/squeue/print.c
 +++ b/src/squeue/print.c
-@@ -3161,14 +3161,14 @@
+@@ -844,7 +844,10 @@
+ 	if (job == NULL)	/* Print the Header instead */
+ 		_print_str("USER", width, right, true);
+ 	else {
+-		char *uname = uid_to_string_cached((uid_t) job->user_id);
++		/* Workstation SLURM patch: the name sent, not this machine's
++		 * name for slurmctld's uid (see uid.h) */
++		char *uname = job->user_name ? job->user_name :
++			uid_to_string_cached((uid_t) job->user_id);
+ 		_print_str(uname, width, right, true);
+ 	}
+ 	if (suffix)
+@@ -3161,14 +3164,14 @@
  		|| (!hostset_intersects(params.nodes, job->nodes))))
  		return true;
  
