@@ -25,6 +25,8 @@ ProctrackType=proctrack/pgid      # cgroups need root
 TaskProlog=${SLURM_DIR}/bin/task_prolog
 Prolog=${SLURM_DIR}/bin/prolog
 Epilog=${SLURM_DIR}/bin/epilog
+TreeWidth=65533                   # slurmctld contacts every slurmd itself, never relaying through
+                                  # other machines (which may not reach each other; Setup.md, Tunnels)
 SelectType=select/cons_tres
 SelectTypeParameters=CR_Core      # don't schedule memory on shared boxes
 GresTypes=gpu

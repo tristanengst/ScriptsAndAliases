@@ -33,5 +33,48 @@ Relative `-o`/`-e` paths are relative to that directory, and written on the mach
 - **Memory** isn't allocated or tracked: `--mem` only picks a machine with that much.
 - **Partitions and limits:** one partition, `gpu` (the default), with no time limit.
 - **Nothing is enforced** (no cgroups without root): a job can use more CPUs or memory than it asked for, or GPUs it wasn't given (eg. by changing `CUDA_VISIBLE_DEVICES`). Processes that detach (`setsid`, daemons) escape `scancel`.
+- **Interactive `srun`/`salloc` only works between machines the network connects:** not from a workstation onto S1–S3 or V21 (it hangs), since the network blocks those for SLURM (`Setup.md`, "Tunnels"). Use `sbatch` for those machines; `srun` inside a batch job works everywhere.
 - **Requeued jobs** wait ~2 minutes before they can start again (SLURM's behaviour).
 - **No `sacct`** (no accounting database). Finished jobs are listed in `~/.local/slurm/var/log/jobcomp.txt` on the controller.
+
+## Choosing GPUs
+
+Every machine's GPUs are a single model, and the machine has a **feature** naming it, derived from
+nvidia-smi's name (`gpu_names` can rename it). Jobs pick models with `--constraint` and a number
+of GPUs with `--gpus-per-node`; `sinfo -N -o '%N %f %G'` lists the machines in SLURM now, with
+their features and GPUs. SLURM knows nothing about GPU memory, so memory needs translating into
+models and counts (table). The lab's machines, as of 2026-10:
+
+| Machines | GPUs each | Model (feature) | Memory per GPU |
+|---|---|---|---|
+| S1, S2, S3 | 10 (if none are broken) | L40S (`l40s`) | 45 GiB |
+| V21 | 8 | RTX 6000 (feature: see `sinfo` once it's in SLURM) | depends on which RTX 6000: check `nvidia-smi` |
+| A4, A9 | 2 | RTX 3090 (`rtx_3090`) | 24 GiB |
+| A99 | 1 (the other GPU stays outside SLURM) | RTX 2080 SUPER (`rtx_2080_super`) | 8 GiB |
+
+Jobs always run on one machine here (`torchrun --nnodes=1`). The three usual cases:
+
+1. **Any K GPUs on one machine:**
+   ```bash
+   #SBATCH --nodes=1
+   #SBATCH --gpus-per-node=K
+   ```
+   Runs on any machine that has K GPUs free in SLURM; add `--constraint` to limit the models.
+   A K larger than any machine has (eg. 12) is rejected when submitting ("Requested node
+   configuration is not available"); K=4 only fits S1–S3 and V21.
+2. **Any single GPU:** `#SBATCH --gpus-per-node=1`. For many independent single-GPU runs, a job
+   array (`#SBATCH --array=0-99`, one GPU each) spreads them over every free GPU.
+3. **At least X GB of GPU memory:** not expressible directly. Turn it into models and counts:
+   - *On one GPU* (the model must fit on each GPU, eg. ≥ 24 GiB): list the models that have it,
+     `#SBATCH --gpus-per-node=1` and `#SBATCH --constraint="l40s|rtx_3090"`.
+   - *In total, across one machine's GPUs:* each model needs K = ⌈X / memory per GPU⌉ GPUs, and a
+     job has one K, so group the models that share a K. Eg. X = 80 GiB: 2 × L40S, while RTX 3090s
+     would need 4 (no machine has that), so `--gpus-per-node=2 --constraint=l40s`. When the
+     acceptable models need different Ks (eg. X = 40 GiB: 1 × L40S or 2 × RTX 3090), either take
+     the larger K for all of them (`--gpus-per-node=2 --constraint="l40s|rtx_3090"`, using one
+     more L40S than needed), or pick one model.
+
+A machine's GPU count in SLURM is what its node file says, not what works today: if a GPU
+breaks, SLURM still gives it to jobs until that machine reruns `setup_node --gpus` without it
+(`Setup.md`).
+

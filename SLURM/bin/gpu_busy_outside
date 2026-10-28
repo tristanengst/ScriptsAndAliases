@@ -2,7 +2,9 @@
 # Usage: gpu_busy_outside IDX
 # Exits 0 if GPU IDX (nvidia-smi index) has a compute process that isn't part of a SLURM job,
 # ie. none of its ancestors is a slurmstepd. Processes we can't see in /proc (other PID
-# namespaces, or already gone) count as outside. Exits 1 otherwise, 2 on nvidia-smi failure.
+# namespaces, or already gone), or that nvidia-smi can't name (pid "[N/A]", eg. on a GPU that
+# needs a reset), count as outside, so a broken GPU stays blocked. Exits 1 otherwise, 2 on
+# nvidia-smi failure.
 idx=$1
 pids=$(nvidia-smi -i "$idx" --query-compute-apps=pid --format=csv,noheader) || exit 2
 in_slurm() {
@@ -14,6 +16,7 @@ in_slurm() {
     return 1
 }
 for pid in $pids; do
+    [[ $pid =~ ^[0-9]+$ ]] || exit 0
     in_slurm "$pid" || exit 0
 done
 exit 1

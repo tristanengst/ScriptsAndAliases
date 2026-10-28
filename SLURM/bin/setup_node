@@ -152,6 +152,16 @@ if [ "$host" = "$ctld" ]; then
     running "$SLURM_HOME/var/run/slurmctld.pid" && ok "slurmctld running" || fail "slurmctld not running"
 fi
 cmp -s "$priv/munge.key" "$SLURM_HOME/etc/munge/munge.key" && ok "munge key installed" || fail "munge key not installed"
+tunnel_port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$node_file")
+if [ -n "$tunnel_port" ] && [ "$host" != "$ctld" ]; then
+    # Setup.md, "Tunnels"
+    ssh -o BatchMode=yes -o ControlMaster=no -o ControlPath=none -o ConnectTimeout=10 \
+        -o StrictHostKeyChecking=accept-new "$ctld" true 2>/dev/null \
+        && ok "ssh to $ctld works without a password" \
+        || fail "can't ssh to $ctld without a password, which the tunnel needs (ssh-copy-id $ctld)"
+    running "$SLURM_HOME/var/run/tunnel.pid" && ok "tunnel to $ctld running (its port $tunnel_port)" \
+        || warn "tunnel to $ctld not running; see ~/.local/slurm/var/log/tunnel.log"
+fi
 # Retries for a while: munged may have only just (re)started.
 for _ in 1 2 3 4 5 6; do scontrol ping 2>/dev/null | grep -q 'is UP' && break; sleep 3; done
 if scontrol ping 2>/dev/null | grep -q 'is UP'; then

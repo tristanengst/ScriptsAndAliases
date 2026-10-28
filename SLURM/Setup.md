@@ -198,6 +198,46 @@ nc -zv -w 3 NODE $srun_lo        # on OTHER
 
 `setup_node`'s `scontrol ping` check also tests `SlurmctldPort` from each machine.
 
+## Tunnels
+
+**The issue.** The department's network lets ssh through between all the lab's machines, but not
+SLURM's ports in every direction. Tested on 2026-10-27:
+
+| From → to | ssh | SLURM's ports |
+|---|---|---|
+| anywhere → workstations | yes | yes |
+| servers (S1–S3) → each other | yes | yes |
+| workstations → S1–S3 | yes | no (only 8080 got through) |
+| workstations, S1–S3 → V21 | yes (V21: port 24) | no |
+| V21 → anywhere | yes | yes |
+
+So the controller (a workstation, which everyone can reach) can't reach slurmd on S1–S3 or V21.
+
+**The fix.** A machine the controller can't reach directly has `tunnel_port=P` in its node file,
+set by hand (P: unique among the node files; 46901 and up). Then:
+- `bin/start_daemons` on that machine (cron, every minute) keeps one ssh connection to the
+  controller running, with a reverse forward: the controller's `127.0.0.1:P` reaches this
+  machine's slurmd. It's an ssh process of its own (no connection sharing), restarted within a
+  minute if it dies, and moved if `SlurmctldHost` changes. Log: `~/.local/slurm/var/log/tunnel.log`.
+- `bin/render_config` on the controller lists that machine as `NodeAddr=127.0.0.1 Port=P`; every
+  other machine's config, and the machine's own slurmd port, are unchanged.
+- `TreeWidth` is high, so the controller contacts every slurmd itself instead of relaying
+  through other machines.
+
+This needs every tunnelled machine to ssh to the controller without a password (`ssh-copy-id`),
+which `setup_node` checks. Everything else reaches the controller directly.
+
+**What works:** batch jobs on and from every machine, `srun` inside jobs, and every query
+command (`squeue`, `scancel`, `scontrol`, `sinfo`) from every machine.
+
+**What doesn't:** interactive `srun`/`salloc` between machines the network separates (eg. from a
+workstation onto S1: it hangs). SLURM sends those machine to machine, not through the
+controller. Also `salloc`/`srun` started on a tunnelled machine may not hear the controller's
+callbacks (allocation ready, time limits). Use `sbatch` there, or run interactively from a
+machine on the same side.
+
+If the department opens SLURM's ports, delete the `tunnel_port=` lines: nothing else changes.
+
 ## Maintenance
 
 Rerun `setup_node` any time to check a machine; it only changes what's missing or out of date.

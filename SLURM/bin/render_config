@@ -11,6 +11,18 @@ etc=$SLURM_HOME/etc
 mkdir -p "$etc"
 tmp=$(mktemp -d "$etc/.render.XXXXXX")
 shopt -s nullglob
+# Every node file's slurm: line. On the controller, a machine with tunnel_port=P is reached through
+# the ssh tunnel it keeps to the controller (bin/start_daemons): NodeAddr=127.0.0.1 Port=P.
+node_lines() {
+    local ctld f line port
+    ctld=$(sed -n 's/^SlurmctldHost=\([^( #]*\).*/\1/p' "$priv/slurm.conf")
+    for f in "$priv"/nodes/*.conf; do
+        line=$(sed -n 's/^slurm: *//p' "$f")
+        port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$f")
+        [ -n "$port" ] && [ "$(hostname -s)" = "$ctld" ] && line="$line NodeAddr=127.0.0.1 Port=$port"
+        printf '%s\n' "$line"
+    done
+}
 # Renames each Feature= value listed in gpu_names ("derived = feature" lines).
 rename_features() {
     awk 'NR == FNR { sub(/#.*/, ""); gsub(/ /, ""); if (split($0, kv, "=") == 2) name[kv[1]] = kv[2]; next }
@@ -23,7 +35,7 @@ rename_features() {
 while IFS= read -r line; do
     case $line in
         @PRIVATE@) grep -v '^#' "$priv/slurm.conf" ;;
-        @NODES@) cat /dev/null "$priv"/nodes/*.conf | sed -n 's/^slurm: *//p' | rename_features ;;
+        @NODES@) node_lines | rename_features ;;
         *) printf '%s\n' "$line" ;;
     esac
 done < "$SLURM_DIR/slurm.conf.in" | sed "s|\${HOME}|$HOME|g; s|\${USER}|$(id -un)|g; s|\${SLURM_DIR}|$SLURM_DIR|g" > "$tmp/slurm.conf"

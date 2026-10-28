@@ -1,7 +1,7 @@
 #!/bin/bash
 # Makes this machine's SLURM match the repo: renders the config, installs the shared munge key
 # (../Private/SLURM/munge.key), and runs munged, slurmd, and slurmctld if this is SlurmctldHost
-# (stopping it if it no longer is). Daemons already running are told to reread the config if it
+# (stopping it if it no longer is), and the ssh tunnel to the controller if this machine has one. Daemons already running are told to reread the config if it
 # changed since they last read it (SIGHUP; running jobs are unaffected), and munged is restarted if the key changed. Run
 # by cron every minute, so a pulled change takes effect by itself, and crashed daemons restart.
 source "$(dirname "$0")/../env.sh"
@@ -30,6 +30,28 @@ fi
 running "$var/run/munge/munged.pid" || munged --force
 
 ctld_host=$(sed -n 's/^SlurmctldHost=\([^( ]*\).*/\1/p' "$SLURM_HOME/etc/slurm.conf")
+
+# Tunnel (Setup.md, "Tunnels"): a machine the controller can't reach directly has tunnel_port=P in
+# its node file, and keeps one ssh connection to the controller with a reverse forward: the
+# controller's 127.0.0.1:P reaches this machine's slurmd. Its own ssh process (no connection
+# sharing), so it can be watched and restarted; restarted with the controller if that changes.
+tunnel_port=$(sed -n 's/^tunnel_port= *\([0-9]*\).*/\1/p' "$SLURM_NODE_FILE" 2>/dev/null)
+tunnel_want=
+[ -n "$tunnel_port" ] && [ "$ctld_host" != "$(hostname -s)" ] && tunnel_want="$ctld_host $tunnel_port"
+if running "$var/run/tunnel.pid" && [ "$(cat "$var/run/tunnel.target" 2>/dev/null)" != "$tunnel_want" ]; then
+    stop "$var/run/tunnel.pid" && echo "$(date '+%F %T') stopped the tunnel"
+fi
+if [ -n "$tunnel_want" ] && ! running "$var/run/tunnel.pid"; then
+    slurmd_port=$(sed -n 's/^SlurmdPort= *\([0-9]*\).*/\1/p' "$SLURM_HOME/etc/slurm.conf")
+    setsid ssh -N -o BatchMode=yes -o ControlMaster=no -o ControlPath=none \
+        -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+        -o StrictHostKeyChecking=accept-new \
+        -R "127.0.0.1:$tunnel_port:127.0.0.1:$slurmd_port" "$ctld_host" \
+        >> "$var/log/tunnel.log" 2>&1 < /dev/null &
+    echo $! > "$var/run/tunnel.pid"
+    echo "$tunnel_want" > "$var/run/tunnel.target"
+    echo "$(date '+%F %T') started the tunnel to $ctld_host (its port $tunnel_port)"
+fi
 for d in slurmctld slurmd; do
     pidf=$var/run/$d.pid
     if [ $d = slurmctld ] && [ "$ctld_host" != "$(hostname -s)" ]; then
