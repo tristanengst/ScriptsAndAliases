@@ -57,10 +57,11 @@ def get_cluster_type():
         return "solar"
     else:
         h_ = "-".join(h.split("-")[:2])
-        return os.environ.get("CLUSTER_TYPE", "cs-apex")
+        return os.environ.get("CLUSTER_TYPE", "apex")
 
 def is_solar(): return get_cluster_type() in ["solar"]
 def is_cc(): return get_cluster_type() in ["nibi", "narval", "cedar", "beluga", "graham", "rorqual", "trillium", "fir", "vulcan", "killarney", "tamia"]
+def is_apex_cluster(): return get_cluster_type() in ["apex"] # APEX workstations and servers, SLURM or not (SLURM/README.md)
 def is_slurm(): return is_solar() or is_cc()
 def is_workstation(): return not is_solar() and not is_cc()
 

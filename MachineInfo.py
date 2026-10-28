@@ -253,7 +253,7 @@ cluster2node2config = dict(
     ),
     solar=get_solar_node2config() if Utils.is_solar() else dict(),
     # These values don't have to be right
-    cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True),)
+    apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True),)
 )
 cluster2node2config = {k: {nk: dict(cpus_per_gpu_target=nv["cpus_per_gpu"], mem_per_gpu_target=nv["mem_per_gpu"]) | nv for nk,nv in v.items()} for k,v in cluster2node2config.items()}
 cluster2node2config = {k: {nk: argparse.Namespace(**nv) for nk,nv in v.items()} for k,v in cluster2node2config.items()}

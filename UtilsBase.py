@@ -691,9 +691,8 @@ def time_stamp_to_datetime(time_stamp):
     time_stamp = time_stamp.strip().upper()
     # Common custom time stamp format to make life easier
     if time_stamp.find("-") in [1,2]:
-        dt = datetime.strptime(time_stamp, "%m-%d-%H:%M")
-        dt = dt.replace(year=datetime.now().year)
-        return dt
+        # With the year, since a date without one is ambiguous (eg. leap days)
+        return datetime.strptime(f"{datetime.now().year}-{time_stamp}", "%Y-%m-%d-%H:%M")
     elif "T" in time_stamp:
         return datetime.strptime(time_stamp, "%Y-%m-%dT%H:%M:%S")
     elif "-" in time_stamp:

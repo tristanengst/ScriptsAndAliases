@@ -65,7 +65,7 @@ def colorize_time_lefts(job_infos, cur_user=True):
         num_colors=len(cutoff_values)+1)
 
     def colorize_time_left(ji):
-        if (ji.time_left in ["N/A", None]
+        if (ji.time_left in ["N/A", None, "UNLIMITED"]
             or ji.time_left.startswith("INV")
             or not "user" in ji
             or (cur_user and not ji.user == os.environ["USER"])
@@ -364,8 +364,11 @@ def job_info_with_formatted_date_time(jd, *, key, tz="America/Vancouver"):
     date_time = vars(jd)[key]
     valid_date_time = False
 
-    # If [start_time] starts with four numbers, these are the year and are removed.
+    # If [start_time] starts with four numbers, these are the year and are removed
+    # (kept for parsing: a date without a year is ambiguous, eg. leap days).
+    year = datetime.now().year
     if len(date_time) > 4 and date_time[0:4].isnumeric():
+        year = int(date_time[0:4])
         date_time = date_time[5:]  # Remove the year and the dash after it
     
     if date_time[0].isnumeric():
@@ -387,7 +390,7 @@ def job_info_with_formatted_date_time(jd, *, key, tz="America/Vancouver"):
     if valid_date_time and tz:
         from zoneinfo import ZoneInfo
         target_tz = ZoneInfo("America/Vancouver")
-        dt = datetime.strptime(date_time, "%m-%d-%H:%M")
+        dt = datetime.strptime(f"{year}-{date_time}", "%Y-%m-%d-%H:%M")
         dt = dt.astimezone(target_tz)  # Convert to local timezone
         date_time = dt.strftime("%m-%d-%H:%M")
 
@@ -396,7 +399,9 @@ def job_info_with_formatted_date_time(jd, *, key, tz="America/Vancouver"):
 def job_info_with_formatted_time_delta(jd, key="time_left"):
     """Returns job info [jd] with the time delta key [key] formatted."""
     delta = vars(jd)[key]
-    if "-" in delta:
+    if delta == "UNLIMITED":    # No time limit, eg. on APEX
+        return jd
+    elif "-" in delta:
         days, hhmmss = delta.split("-")
         hh, mm, ss = hhmmss.split(":")
         days, hh, mm, ss = int(days), int(hh), int(mm), int(ss)
@@ -426,6 +431,8 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
             gpu_name = node2config[jd.host].gpu_name
             return MachineInfo.gpu_name2alias[gpu_name]
         elif Utils.is_solar() and not jd.host in node2config:
+            return "default_gpu"
+        elif Utils.is_apex_cluster():
             return "default_gpu"
         elif Utils.is_cc():
             node2config = MachineInfo.cluster2node2config[Utils.get_cluster_type()]
@@ -487,6 +494,9 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
                 gpu_type2count[gpu_alias] = max(gpu_type2count[gpu_alias], gpu_count)
             num_gpus = sum(gpu_type2count.values())
             gpu_alias = max(gpu_type2count.keys(), key=lambda x: gpu_type2count[x] * MachineInfo.gpu2vram[x])
+        elif Utils.is_apex_cluster() and len(gpus) == 2 and gpus[1].isdigit():
+            num_gpus = int(gpus[1])
+            gpu_alias = "default_gpu"
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}. Job data was {jd}")
         
@@ -1085,6 +1095,25 @@ if __name__ == "__main__":
             if len(job_datas_account) > 0:
                 colnames_job_data = argparse.Namespace(**{c: f"__account {account}" if c == "jobid" else c for c in colnames})
                 job_datas += [colnames_job_data] + job_datas_account
+    elif Utils.is_apex_cluster() and shutil.which("squeue"):
+        # Like ComputeCanada, without accounts. Blocker jobs (SLURM/README.md) aren't the
+        # user's work; GPU availability is shown by FindFreeGPUs.py below instead.
+        job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
+            next_chunks=args.next_chunks,
+            nodes=args.nodes,
+            excluded=args.exclude,
+            submit_time=args.submit_time,
+            eligible_time=args.eligible_time,
+            time_limit=args.time_limit,
+            queue=args.queue,
+            heartbeat=args.heartbeat,
+            heartbeat_analysis=args.heartbeat_analysis,
+            checkpoint=args.checkpoint,
+            partition=args.partition,
+            workdir=args.workdir,
+            verbose=args.verbose)
+        job_datas = [jd for jd in job_datas if not jd.name.startswith("blocking_job_")]
+        job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
         print(subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py"))
@@ -1155,7 +1184,7 @@ if __name__ == "__main__":
     # Now describe the overall cluster status or roughly how allocated it is
     time_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     meta_str = f"--- Overall Cluster Status ({time_str}) ---"
-    if Utils.is_slurm():
+    if Utils.is_slurm() or Utils.is_apex_cluster():
         state2count = count_jobs_by_state(job_datas)
         job_count_str = format_job_counts_by_state(state2count)
         meta_str += "\n\t| " + job_count_str
@@ -1178,7 +1207,10 @@ if __name__ == "__main__":
         account2lfs = None
         meta_str2 = ""    
     
-    meta_str2 += "\t| " + ClusterInfo2.get_str(printable_free_nodes=args.printable_free_nodes)
+    if Utils.is_apex_cluster():
+        meta_str2 = subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py")
+    else:
+        meta_str2 += "\t| " + ClusterInfo2.get_str(printable_free_nodes=args.printable_free_nodes)
     # meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
     if args.verbose:
         print(meta_str2)
