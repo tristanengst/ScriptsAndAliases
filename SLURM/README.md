@@ -23,7 +23,7 @@ Relative `-o`/`-e` paths are relative to that directory, and written on the mach
 - **`$SLURM_TMPDIR`**. Each job is allocated `$SLURM_TMPDIR` at `~/slurm_tmpdirs/job_$SLURM_JOB_ID` on the machine running it. This is cleaned when the job starts (`SLURM/bin/prolog`), when it ends (`SLURM/bin/epilog`), and there is an external tool at `~/.ScriptsAndAliases/SLURM/bin/sweep_tmpdirs` to find ones that somehow are leftover that runs periodically (cron, every minute).
 - **Set up the environment inside the job script** (eg. activate conda there). A job inherits the submitting shell's environment; `HOME` and SLURM's own `PATH` entries are corrected for the machine it runs on, but other paths (conda, `PYTHONPATH`, ...) may point into the submitting machine's home.
 - **Don't use `--export=NONE` or `--export=ALL,VAR=value`.** Either makes SLURM load a login environment on the compute node, which needs root: the job is held ("user_env_retrieval_failed_requeued_held"). Set variables in the shell before `sbatch`, or in the script. Plain `--export=ALL` (the default) is fine.
-- **GPUs:** ask for `--gpus-per-node=N`, optionally with `--constraint=MODEL` (eg. `rtx_2080_super`, or `"a|b"`; `sinfo -o '%N %f'` lists them). Don't ask for the `gN` GRES types; those are for blockers. Which GPUs a job gets is only known once it starts, so job scripts never name them: inside the job, its GPUs are CUDA devices 0..N-1 (`cuda:0`, ...), whichever of the machine's GPUs they are. `CUDA_VISIBLE_DEVICES` holds their UUIDs, not numbers, since it's what hides the machine's other GPUs (no cgroups): CUDA and PyTorch accept that, but code that parses it as integers won't. Jobs without GPUs see none.
+- **GPUs:** ask for `--gpus-per-node=N`, optionally with `--constraint=MODEL` (eg. `2080s`, or `"a|b"`; `sinfo -o '%N %f'` lists them). Don't ask for the `gN` GRES types; those are for blockers. Which GPUs a job gets is only known once it starts, so job scripts never name them: inside the job, its GPUs are CUDA devices 0..N-1 (`cuda:0`, ...), whichever of the machine's GPUs they are. `CUDA_VISIBLE_DEVICES` holds their UUIDs, not numbers, since it's what hides the machine's other GPUs (no cgroups): CUDA and PyTorch accept that, but code that parses it as integers won't. Jobs without GPUs see none.
 - **CPUs come with the GPUs.** Each of a machine's GPUs has a fixed set of CPUs, given by the GPU to CPU map: the `cpus: <GPU index> <CPUs>` lines (one per GPU) of the machine's node file, which lives at `~/.ScriptsAndAliases/Private/SLURM/nodes/<hostname>.conf` (`hostname -s`). `SLURM/bin/add_node` writes those lines if they're missing and otherwise keeps them, so they may be edited (`--reset-cpus` rewrites them). `SLURM/bin/task_prolog` forces its use: it pins every process of every GPU job to its GPUs' CPUs from this map, so this is where the `taskset -c` functionality we'd normally use is implemented. Don't ask for CPUs (`-c`) in GPU jobs, and don't use `tpython_ddp` or `taskset`. Use the plain command with GPU ranges starting from zero, eg.
   ```bash
   #SBATCH --gpus-per-node=2
@@ -48,9 +48,9 @@ models and counts (table). The lab's machines, as of 2026-10:
 | Machines | GPUs each | Model (feature) | Memory per GPU |
 |---|---|---|---|
 | S1, S2, S3 | 10 (if none are broken) | L40S (`l40s`) | 45 GiB |
-| V21 | 8 | RTX 6000 (feature: see `sinfo` once it's in SLURM) | depends on which RTX 6000: check `nvidia-smi` |
+| V21 | 8 | RTX PRO 6000 Blackwell Server Edition (`rtx_pro_6000_blackwell_se`) | depends on which RTX 6000: check `nvidia-smi` |
 | A4, A9 | 2 | RTX 3090 (`rtx_3090`) | 24 GiB |
-| A99 | 1 (the other GPU stays outside SLURM) | RTX 2080 SUPER (`rtx_2080_super`) | 8 GiB |
+| A99 | 1 (the other GPU stays outside SLURM) | RTX 2080 SUPER (`2080s`) | 8 GiB |
 
 Jobs always run on one machine here (`torchrun --nnodes=1`). The three usual cases:
 

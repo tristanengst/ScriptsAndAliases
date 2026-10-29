@@ -5,3 +5,4 @@
 # Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
 # scontrol reconfigure on the controller.
 rtx_2080_super = 2080s
+rtx_pro_6000_blackwell_server_edition = rtx_pro_6000_blackwell_se

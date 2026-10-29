@@ -75,7 +75,7 @@ gpu2info = dict(
 ) | {
     "default_gpu": dict(vram=0, gen=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1, rgus_per_gpu=1.0),          # Placeholder values
     "titan": dict(vram=8, gen=1, good=False, gpu_name="titan_x", ddp=True, gpu_frac=1.0, rgus_per_gpu=0.1),                 # Estimated rgus_per_gpu
-    "2080": dict(vram=8, gen=2, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0, rgus_per_gpu=1.2),                   # Estimated rgus_per_gpu
+    "2080s": dict(vram=8, gen=2, good=False, gpu_name="2080s", ddp=True, gpu_frac=1.0, rgus_per_gpu=1.2),                   # Estimated rgus_per_gpu
     "3090": dict(vram=24, gen=3, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.0),
     }
 gpu2info = {k: argparse.Namespace(**v) for k,v in gpu2info.items()}
