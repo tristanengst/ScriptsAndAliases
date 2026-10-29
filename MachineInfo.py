@@ -85,7 +85,7 @@ gpu2vram = {k: v.vram for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v.good]
 bad_gpus = [k for k,v in gpu2info.items() if not v.good]
 gpu_alias2name = {k: v.gpu_name for k,v in gpu2info.items()}
-gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000", rtx_2080_super="2080s", rtx_pro_6000_blackwell_se="rtx6000")
+gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
 # Dictionary machine names to their hardware information. How to SSH to each machine is
 # in SSHCommunication.machine2hostname instead. Each entry is thus:
@@ -170,6 +170,40 @@ def get_solar_node2config():
 
     return node2config
 
+def get_apex_node2config():
+    """Returns a dictionary describing the APEX workstations' SLURM nodes as in
+    [cluster2node2config], or an empty one where that SLURM isn't available. Like
+    Solar, there's no canonical GPU type, so this is read from SLURM. Each node's GPU
+    type is its feature, which is the GPU's alias (SLURM/gpu_names), and its GPUs are
+    one GRES type each (gpu:g0:1,gpu:g1:1,...).
+    """
+    try:
+        result = subprocess.run(["scontrol", "show", "nodes", "--json"], capture_output=True, text=True, timeout=10)
+        node_datas = json.loads(result.stdout)["nodes"]
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError):
+        return dict()
+
+    def parse_node_data(nd):
+        gpu_aliases = [gpu_name2alias[f] for f in nd.get("features", []) if f in gpu_name2alias]
+        gpu_alias = gpu_aliases[0] if gpu_aliases else "unknown"
+        gpus_per_node = sum([int(g.split(":")[-1]) for g in nd.get("gres", "").split(",") if g.startswith("gpu:")])
+
+        cpus_per_gpu, mem_per_gpu = 1, 1
+        for tr_key,tr_val in [tr.split("=") for tr in nd.get("tres", "").split(",") if "=" in tr]:
+            if tr_key == "cpu":
+                cpus_per_gpu = int(tr_val) // max(1, gpus_per_node)
+            elif tr_key == "mem":
+                mem_per_gpu = UtilsBase.unit_conversion(tr_val, target="GiB") // max(1, gpus_per_node)
+
+        return nd["name"], dict(
+            can_allocate="gpu" in nd.get("partitions", []),
+            gpu_name=gpu_alias2name.get(gpu_alias, gpu_alias), gpu_alias=gpu_alias, gpus_per_node=gpus_per_node,
+            cpus_per_gpu=cpus_per_gpu, mem_per_gpu=mem_per_gpu,
+            gpu_frac=1.,
+        )
+
+    return dict([parse_node_data(nd) for nd in node_datas])
+
 # Data from https://docs.alliancecan.ca/wiki/Allocations_and_compute_scheduling/en
 # for Alliance clusters. For these the amounts below record one bundle of compute.
 # IMPORTANT: these values reflect the 'bundle-per-gpu' values, which aren't
@@ -253,8 +287,7 @@ cluster2node2config = dict(
         p100l=dict(cpus_per_gpu=6, mem_per_gpu=56, gpu_alias="p100l", gpus_per_node=4,  gpu_name="p100l", can_allocate=True),
     ),
     solar=get_solar_node2config() if Utils.is_solar() else dict(),
-    # These values don't have to be right
-    apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True),)
+    apex=get_apex_node2config() if Utils.is_apex_cluster() else dict(),
 )
 cluster2node2config = {k: {nk: dict(cpus_per_gpu_target=nv["cpus_per_gpu"], mem_per_gpu_target=nv["mem_per_gpu"]) | nv for nk,nv in v.items()} for k,v in cluster2node2config.items()}
 cluster2node2config = {k: {nk: argparse.Namespace(**nv) for nk,nv in v.items()} for k,v in cluster2node2config.items()}
