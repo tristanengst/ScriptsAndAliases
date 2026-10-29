@@ -5,3 +5,7 @@
 #   cs-apex-99s = 1000    # A99 last of all
 # Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
 # scontrol reconfigure on the controller.
+rtx_3090 = 1
+l40s = 1
+cs-venus-21 = 2
+cs-apex-99s = 3
