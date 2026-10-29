@@ -19,8 +19,7 @@ from UserConfig import cluster2accounts
 
 # Basically it's easier to compute this once and have it ready than to have to compute
 # it for possibly many different JobInfo objects
-node2config_true = MachineInfo.cluster2node2config[get_cluster_type()] if get_cluster_type() in MachineInfo.cluster2node2config else dict()
-node2config_true = {n: argparse.Namespace(**c) for n,c in node2config_true.items()}
+node2config_true = MachineInfo.cluster2node2config.get(get_cluster_type(), dict())
 
 def as_int(s):
     """Returns string [s] as an integer. Can handle suffixes like G, M, etc, in which
@@ -241,10 +240,11 @@ class JobInfo:
             job does actually request at least one GPU.
             """
             if node2config_true:
-                if Utils.is_solar() and self.host:
-                    gpu_type = node2config_true.get(self.host, dict()).get("gpu_alias", None)
-                    return gpu_type
-                elif Utils.is_solar() and not self.host in node2config_true or self.host is None:
+                # Solar and the APEX workstations have no canonical GPU type; each node has one
+                per_node = Utils.is_solar() or Utils.is_apex_cluster()
+                if per_node and self.host in node2config_true:
+                    return node2config_true[self.host].gpu_alias
+                elif per_node or self.host is None:
                     return "default_gpu"
                 elif len({n.gpu_alias for n in node2config_true.values()}) == 1:
                     return list({n.gpu_alias for n in node2config_true.values()})[0]

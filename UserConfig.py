@@ -21,6 +21,7 @@ cluster2accounts = dict(
     killarney=["aip-keli"],
     tamia=["aip-keli"],
     solar=["cs-gpu-research"], # This is actually a partition! Scripts referencing this should be aware.
+    apex=["gpu"], # Also a partition: the APEX workstations' SLURM has no accounts (SLURM/README.md)
 )
 ######################################################################################
 ######################################################################################
