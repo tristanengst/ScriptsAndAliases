@@ -48,8 +48,8 @@ models and counts (table). The lab's machines, as of 2026-10:
 | Machines | GPUs each | Model (feature) | Memory per GPU |
 |---|---|---|---|
 | S1, S2, S3 | 10 (if none are broken) | L40S (`l40s`) | 45 GiB |
-| V21 | 8 | RTX PRO 6000 Blackwell Server Edition (`rtx_pro_6000_blackwell_se`) | depends on which RTX 6000: check `nvidia-smi` |
-| A4, A9 | 2 | RTX 3090 (`rtx_3090`) | 24 GiB |
+| V21 | 8 | RTX PRO 6000 Blackwell Server Edition (`rtx6000`) | depends on which RTX 6000: check `nvidia-smi` |
+| A4, A9 | 2 | RTX 3090 (`3090`) | 24 GiB |
 | A99 | 1 (the other GPU stays outside SLURM) | RTX 2080 SUPER (`2080s`) | 8 GiB |
 
 Jobs always run on one machine here (`torchrun --nnodes=1`). The three usual cases:
@@ -66,12 +66,12 @@ Jobs always run on one machine here (`torchrun --nnodes=1`). The three usual cas
    array (`#SBATCH --array=0-99`, one GPU each) spreads them over every free GPU.
 3. **At least X GB of GPU memory:** not expressible directly. Turn it into models and counts:
    - *On one GPU* (the model must fit on each GPU, eg. ≥ 24 GiB): list the models that have it,
-     `#SBATCH --gpus-per-node=1` and `#SBATCH --constraint="l40s|rtx_3090"`.
+     `#SBATCH --gpus-per-node=1` and `#SBATCH --constraint="l40s|3090"`.
    - *In total, across one machine's GPUs:* each model needs K = ⌈X / memory per GPU⌉ GPUs, and a
      job has one K, so group the models that share a K. Eg. X = 80 GiB: 2 × L40S, while RTX 3090s
      would need 4 (no machine has that), so `--gpus-per-node=2 --constraint=l40s`. When the
      acceptable models need different Ks (eg. X = 40 GiB: 1 × L40S or 2 × RTX 3090), either take
-     the larger K for all of them (`--gpus-per-node=2 --constraint="l40s|rtx_3090"`, using one
+     the larger K for all of them (`--gpus-per-node=2 --constraint="l40s|3090"`, using one
      more L40S than needed), or pick one model.
 
 When several machines could run a job, SLURM picks the one with the lowest weight in
