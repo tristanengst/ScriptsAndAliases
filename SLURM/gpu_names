@@ -4,3 +4,4 @@
 #   rtx_2080_super = 2080s
 # Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
 # scontrol reconfigure on the controller.
+rtx_2080_super = 2080s
