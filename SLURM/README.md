@@ -74,6 +74,10 @@ Jobs always run on one machine here (`torchrun --nnodes=1`). The three usual cas
      the larger K for all of them (`--gpus-per-node=2 --constraint="l40s|rtx_3090"`, using one
      more L40S than needed), or pick one model.
 
+When several machines could run a job, SLURM picks the one with the lowest weight in
+`node_weights` (unlisted machines: 1; `sinfo -N -o '%N %w'` shows them), so jobs fill those
+machines before the others.
+
 A machine's GPU count in SLURM is what its node file says, not what works today: if a GPU
 breaks, SLURM still gives it to jobs until that machine reruns `setup_node --gpus` without it
 (`Setup.md`).

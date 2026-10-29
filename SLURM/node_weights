@@ -1,0 +1,7 @@
+# Which machines SLURM fills first. When several machines could run a job, it goes to the one with
+# the lowest weight (SLURM's node Weight=; machines not listed here get 1). One line per machine or
+# GPU model feature (after gpu_names), <name> = <weight>; a machine's own line beats its model's, eg.
+#   l40s = 100            # the servers only once the workstations are full
+#   cs-apex-99s = 1000    # A99 last of all
+# Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
+# scontrol reconfigure on the controller.

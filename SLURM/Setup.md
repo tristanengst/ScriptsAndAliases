@@ -289,6 +289,8 @@ What's normally `/etc/slurm/`, the same for every machine.
   together. On S1-S3 that's exactly `TorchRun.py`'s hand-written map (checked on S1), and in
   principle on V21 (not reachable to check).
 - `gpu_names`: renames the GPU model feature names `add_node` derives (eg. `rtx_2080_super`).
+- `node_weights`: which machines SLURM fills first (their `Weight=`, lowest first), by machine
+  or GPU model feature.
 
 ### Making a machine available
 
