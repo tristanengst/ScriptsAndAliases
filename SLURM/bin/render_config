@@ -1,9 +1,10 @@
 #!/bin/bash
 # Writes this node's config to ~/.local/slurm/etc/: slurm.conf from slurm.conf.in (${HOME},
 # ${USER}, ${SLURM_DIR} filled in; @PRIVATE@ -> ../Private/SLURM/slurm.conf; @NODES@ -> every node
-# file's slurm: line, features renamed per gpu_names), gres.conf from gres.conf.in plus every node
-# file's gres: lines, and cgroup.conf as is. SLURM looks for gres.conf and cgroup.conf next to
-# slurm.conf. Prints "changed" if anything changed. Run by cron every minute.
+# file's slurm: line, features renamed per gpu_names, weights from gpu_weights), gres.conf from
+# gres.conf.in plus every node file's gres: lines, and cgroup.conf as is. SLURM looks for
+# gres.conf and cgroup.conf next to slurm.conf. Prints "changed" if anything changed. Run by cron
+# every minute.
 source "$(dirname "$0")/../env.sh"
 priv=$SLURM_PRIVATE_DIR
 [ -f "$priv/slurm.conf" ] || { echo "render_config: $priv/slurm.conf missing (Private submodule not checked out?)" >&2; exit 1; }
@@ -33,10 +34,20 @@ rename_features() {
                $i = s }
            print }' "$SLURM_DIR/gpu_names" -
 }
+# Adds Weight= from gpu_weights ("feature = weight" lines), by the first listed Feature= value,
+# to node lines that don't set one.
+add_weights() {
+    awk 'NR == FNR { sub(/#.*/, ""); gsub(/ /, ""); if (split($0, kv, "=") == 2) w[kv[1]] = kv[2]; next }
+         !/(^| )Weight=/ { for (i = 1; i <= NF; i++) if ($i ~ /^Feature=/) {
+               n = split(substr($i, 9), f, ",")
+               for (j = 1; j <= n; j++) if (f[j] in w) { $0 = $0 " Weight=" w[f[j]]; break }
+               break } }
+         { print }' "$SLURM_DIR/gpu_weights" -
+}
 while IFS= read -r line; do
     case $line in
         @PRIVATE@) grep -v '^#' "$priv/slurm.conf" ;;
-        @NODES@) node_lines | rename_features ;;
+        @NODES@) node_lines | rename_features | add_weights ;;
         *) printf '%s\n' "$line" ;;
     esac
 done < "$SLURM_DIR/slurm.conf.in" | sed "s|\${HOME}|$HOME|g; s|\${USER}|$(id -un)|g; s|\${SLURM_DIR}|$SLURM_DIR|g" > "$tmp/slurm.conf"

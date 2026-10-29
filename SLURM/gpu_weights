@@ -1,0 +1,10 @@
+# Node weights by GPU model feature (after gpu_names renames it): <feature> = <weight>.
+# Among machines a job can run on, SLURM uses the lowest weight first; unlisted models get 1.
+# A Weight= on a node file's slurm: line overrides this for that machine. Jobs can still put a
+# model first with --prefer (README.md, "Choosing GPUs").
+# Takes effect when each machine's cron reruns render_config (within a minute of pulling), then
+# scontrol reconfigure on the controller.
+l40s = 1
+rtx_3090 = 1
+rtx_pro_6000_blackwell_server_edition = 10
+2080s = 100

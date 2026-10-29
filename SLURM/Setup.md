@@ -247,7 +247,7 @@ If the department opens SLURM's ports, delete the `tunnel_port=` lines: nothing 
 
 Rerun `setup_node` any time to check a machine; it only changes what's missing or out of date.
 After hardware changes, rerun it with `--gpus`. After changing `slurm.conf.in`, `gres.conf.in`,
-`cgroup.conf`, `gpu_names` or anything in `Private/SLURM/` (including the munge key): push and
+`cgroup.conf`, `gpu_names`, `gpu_weights` or anything in `Private/SLURM/` (including the munge key): push and
 pull everywhere; each machine applies it within a minute. When a machine's address changes, a
 machine is added to `Private/MachineHostnames.py`, or after changing the ports: rerun
 `setup_node` on every machine (firewall rules). After changing the SLURM version in
@@ -289,6 +289,8 @@ What's normally `/etc/slurm/`, the same for every machine.
   together. On S1-S3 that's exactly `TorchRun.py`'s hand-written map (checked on S1), and in
   principle on V21 (not reachable to check).
 - `gpu_names`: renames the GPU model feature names `add_node` derives (eg. `rtx_2080_super`).
+- `gpu_weights`: node weights by GPU model (lowest is used first), added to the node lines by
+  `render_config`.
 
 ### Making a machine available
 
