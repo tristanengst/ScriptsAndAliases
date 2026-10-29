@@ -24,7 +24,8 @@ from UserConfig import cluster2accounts
 #                     Basically the leading digit of the generation's gaming GPUs,
 #                     or made-up as needed.
 # good              -- overall judgement on if the GPU is good (worth displaying in sqb) or not
-# gpu_name          -- name of the GPU as per SLURM, often not what we'd call it
+# gpu_name          -- name of the GPU as per SLURM, often not what we'd call it. On the
+#                     APEX workstations' SLURM it's the alias (SLURM/gpu_names).
 # ddp               -- whether the GPU can be used with DDP
 # gpu_frac        -- how many fractions of a regular GPU's VRAM it takes up
 # rgus_per_gpu    -- multiplier for RGUs when using this GPU type. See
@@ -56,7 +57,7 @@ gpu2info = dict(
     a5000=dict(vram=24, gen=3, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.0),
     a6000=dict(vram=48, gen=3, good=True, gpu_name="a6000", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.1),                   # Estimated rgus_per_gpu
     a6000a=dict(vram=48, gen=4, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.4),                   # Estimated rgus_per_gpu
-    rtx6000=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1., rgus_per_gpu=4),                   # Estimated rgus_per_gpu
+    rtx6000=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_se" if Utils.is_solar() else "rtx6000", ddp=True, gpu_frac=1., rgus_per_gpu=4),                   # Estimated rgus_per_gpu
     rtx6000_maxq=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_max-q", ddp=True, gpu_frac=1., rgus_per_gpu=4),     
     a40=dict(vram=48, gen=1, good=True, gpu_name="a40", ddp=True, gpu_frac=1, rgus_per_gpu=3.2),                           # Estimated rgus_per_gpu
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgus_per_gpu=4.0),
@@ -84,7 +85,7 @@ gpu2vram = {k: v.vram for k,v in gpu2info.items()}
 good_gpus = [k for k,v in gpu2info.items() if v.good]
 bad_gpus = [k for k,v in gpu2info.items() if not v.good]
 gpu_alias2name = {k: v.gpu_name for k,v in gpu2info.items()}
-gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
+gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000", rtx_2080_super="2080s", rtx_pro_6000_blackwell_se="rtx6000")
 
 # Dictionary machine names to their hardware information. How to SSH to each machine is
 # in SSHCommunication.machine2hostname instead. Each entry is thus:
