@@ -22,8 +22,10 @@ for idx in $idxs; do
     # Held = pending with priority 0 (the reason text differs between --hold and requeuehold).
     if [ "$state" = PENDING ] && [ "$prio" = 0 ] && "$dir/bin/gpu_busy_outside" "$idx"; then
         scontrol release "$jobid"
-        # A requeued job gets a BeginTime ~2 min out; start it now instead.
-        scontrol update jobid="$jobid" StartTime=now
+        # A requeued job gets a BeginTime ~2 min out; start it now instead. Blockers share gpu's
+        # PriorityTier (so they never preempt; slurm.conf.in), so this priority, set after the
+        # release (a held job's is 0), is what puts them ahead of waiting gpu jobs.
+        scontrol update jobid="$jobid" StartTime=now Priority=4000000000
         echo "$(date '+%F %T') released $name ($jobid)" >> "$HOME/.local/slurm/var/log/blocker_cron.log"
     fi
 done

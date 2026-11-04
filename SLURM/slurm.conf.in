@@ -45,5 +45,13 @@ DebugFlags=NO_CONF_HASH           # rendered configs differ per node (paths)
 # One GRES type per GPU (gN = nvidia-smi index N = /dev/nvidiaN), so blockers can pin one GPU.
 @NODES@
 
-PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE
-PartitionName=block Nodes=ALL PriorityTier=1000 Hidden=YES MaxTime=INFINITE
+# Preemption (README, "Partitions and preemption"): a job can preempt only jobs in a partition with
+# a strictly lower PriorityTier and PreemptMode other than OFF, requeueing them (srun/salloc jobs,
+# which can't be requeued, are cancelled). So urgent jobs preempt gpu jobs, and nothing else ever
+# preempts: blockers share gpu's tier, so they never preempt, and they can't be preempted. They go
+# first among waiting jobs through the priority blocker_cron gives them on release, not their tier.
+PreemptType=preempt/partition_prio
+PreemptMode=REQUEUE
+PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
+PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
+PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE

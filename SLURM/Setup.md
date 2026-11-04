@@ -353,6 +353,8 @@ Run by cron (`crontab`).
 - `bin/sweep_tmpdirs` (every minute): removes `SLURM_TMPDIR`s the Epilog missed (eg. after a
   crash): only those whose job neither the controller nor this machine's slurmstepds have running
   here, under a lock the Prolog also takes. Deletes nothing if either can't be asked.
+- `bin/preempt` (by hand): `scontrol requeue` (or `requeuehold` with `--hold`) for running batch
+  jobs, refusing blockers and jobs that can't be requeued; logs to `var/log/preempt.log`.
 
 ### On each machine, outside the repo
 
