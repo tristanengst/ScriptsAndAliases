@@ -93,7 +93,7 @@ the new controller's `~/.local/slurm/var/state/`.
    - `cd /NAS/$USER; srun -w NODE --gpus-per-node=1 bash -c 'echo $CUDA_VISIBLE_DEVICES; nvidia-smi -L'`:
      a GPU UUID of one of the GPUs given to SLURM.
    - `sbatch` from NODE to the controller and back (`-w`).
-   - `squeue -n blocking_job_NODE_0` (etc.): one held blocker per GPU, within a minute.
+   - `squeue -n blocking_job_MACHINE_0` (etc.; MACHINE is its name in `Private/MachineHostnames.py`, eg. A99): one held blocker per GPU, within a minute.
    - Blocker cycle: run a CUDA process on one of those GPUs outside SLURM; within ~30 s its
      blocker runs; stop it; within ~30 s the blocker is held again. (`~/SLURMSetupProgress.md` has
      the test helper.)
@@ -344,7 +344,7 @@ Run by cron (`crontab`).
   the config if it changed (`SIGHUP`; running jobs are unaffected). So after a reboot or a crash,
   daemons are back within a minute.
 - `bin/blocker_cron` (every 30 s): for each of this machine's GPUs in SLURM, keeps a held blocker
-  job `blocking_job_<node>_<N>`, and releases it when the GPU is used outside SLURM.
+  job `blocking_job_<machine>_<N>` (eg. `blocking_job_A99_1`), and releases it when the GPU is used outside SLURM.
   `bin/blocker.sh` is the blocker job itself: it holds the GPU until it's free again, then
   requeues itself held. `bin/gpu_busy_outside` tells whether a GPU is in use outside SLURM (a GPU
   process is SLURM's if a `slurmstepd` is among its ancestors), or errored as `ffg` shows it
@@ -353,6 +353,8 @@ Run by cron (`crontab`).
 - `bin/sweep_tmpdirs` (every minute): removes `SLURM_TMPDIR`s the Epilog missed (eg. after a
   crash): only those whose job neither the controller nor this machine's slurmstepds have running
   here, under a lock the Prolog also takes. Deletes nothing if either can't be asked.
+- `bin/reservenode` (by hand): submits a `reserve_<machine>_<N>` job per GPU in the `reserve`
+  partition (lowest tier, never preempted), each holding one GPU, like a blocker.
 - `bin/preempt` (by hand): `scontrol requeue` (or `requeuehold` with `--hold`) for running batch
   jobs, refusing blockers and jobs that can't be requeued; logs to `var/log/preempt.log`.
 

@@ -31,6 +31,9 @@ SelectType=select/cons_tres
 SelectTypeParameters=CR_Core      # don't schedule memory on shared boxes
 GresTypes=gpu
 SchedulerType=sched/backfill
+LaunchParameters=use_interactive_step   # salloc's shell is a step on the allocated node (through
+                                        # task_prolog; killed if the job is preempted), not a plain
+                                        # shell where salloc was typed
 AccountingStorageType=accounting_storage/none
 JobCompType=jobcomp/script         # bin/job_record: var/log/jobs/, var/log/jobcomp.txt
 JobCompLoc=${SLURM_DIR}/bin/job_record
@@ -55,3 +58,6 @@ PreemptMode=REQUEUE
 PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
 PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
 PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE
+# Reservations (bin/reservenode): below every other job, so one starts only on a GPU nothing else
+# is waiting for; once running, it holds that GPU until cancelled, and is never preempted.
+PartitionName=reserve Nodes=ALL PriorityTier=0 PreemptMode=OFF Hidden=YES MaxTime=INFINITE

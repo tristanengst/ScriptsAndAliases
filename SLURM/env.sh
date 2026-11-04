@@ -32,6 +32,17 @@ tunnel_port() {
     fi
     echo "$p"
 }
+# machine_name HOST: HOST's machine name (eg. cs-apex-99s -> A99), its first key in
+# ../Private/MachineHostnames.py, or HOST if it has none. machine_host NAME: the reverse (eg. A99 ->
+# cs-apex-99s), or NAME if it isn't a machine name.
+machine_name() {
+    local m; m=$(sed -n "s/^ *\([A-Za-z0-9_]*\) *= *\"$1\..*/\1/p" "$SLURM_PRIVATE_DIR/../MachineHostnames.py" 2>/dev/null | head -1)
+    echo "${m:-$1}"
+}
+machine_host() {
+    local h; h=$(sed -n "s/^ *$1 *= *\"\([^.\"]*\).*/\1/p" "$SLURM_PRIVATE_DIR/../MachineHostnames.py" 2>/dev/null | head -1)
+    echo "${h:-$1}"
+}
 # The same path on every machine, linking to that machine's home (made by bin/prolog): jobs
 # use --chdir=$SLURM_HOME_LINK/some/path to run in $HOME/some/path wherever they land.
 export SLURM_HOME_LINK=/tmp/$(id -un)-home
