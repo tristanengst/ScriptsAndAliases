@@ -354,7 +354,9 @@ Run by cron (`crontab`).
   crash): only those whose job neither the controller nor this machine's slurmstepds have running
   here, under a lock the Prolog also takes. Deletes nothing if either can't be asked.
 - `bin/reservenode` (by hand): submits a `reserve_<machine>_<N>` job per GPU in the `reserve`
-  partition (lowest tier, never preempted), each holding one GPU, like a blocker.
+  partition (lowest tier, preempted by every other job), each holding one GPU, like a blocker.
+  `bin/reserve.sh` is the reservation job itself: a CUDA context and a 16 MiB allocation on its
+  GPU, through libcuda with the system python, so the GPU looks occupied outside SLURM too.
 - `bin/preempt` (by hand): `scontrol requeue` (or `requeuehold` with `--hold`) for running batch
   jobs, refusing blockers and jobs that can't be requeued; logs to `var/log/preempt.log`.
 

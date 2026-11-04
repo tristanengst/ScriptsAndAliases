@@ -50,14 +50,16 @@ DebugFlags=NO_CONF_HASH           # rendered configs differ per node (paths)
 
 # Preemption (README, "Partitions and preemption"): a job can preempt only jobs in a partition with
 # a strictly lower PriorityTier and PreemptMode other than OFF, requeueing them (srun/salloc jobs,
-# which can't be requeued, are cancelled). So urgent jobs preempt gpu jobs, and nothing else ever
-# preempts: blockers share gpu's tier, so they never preempt, and they can't be preempted. They go
-# first among waiting jobs through the priority blocker_cron gives them on release, not their tier.
+# which can't be requeued, are cancelled). So urgent jobs preempt gpu jobs, and every job preempts
+# reservations; blockers share gpu's tier, so they preempt only reservations, and they can't be
+# preempted. They go first among waiting jobs through the priority blocker_cron gives them on
+# release, not their tier.
 PreemptType=preempt/partition_prio
 PreemptMode=REQUEUE
 PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
 PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
 PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE
-# Reservations (bin/reservenode): below every other job, so one starts only on a GPU nothing else
-# is waiting for; once running, it holds that GPU until cancelled, and is never preempted.
-PartitionName=reserve Nodes=ALL PriorityTier=0 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
+# Reservations (bin/reservenode): placeholders that make idle GPUs look occupied. Below every other
+# job, and preempted (requeued) by any of them, blockers included, so they only ever hold GPUs
+# nothing else wants; a preempted one waits to take its GPU again.
+PartitionName=reserve Nodes=ALL PriorityTier=0 PreemptMode=REQUEUE Hidden=YES MaxTime=INFINITE
