@@ -204,6 +204,7 @@ View available GPUs across all workstations and servers (`ffgc`: only this machi
 ```
 ffg
 ```
+If you can use SLURM from the current machine, each machine's line also shows its node's SLURM state (eg. `slurm: drained (reason)`, or `slurm: none` if it isn't a SLURM node).
 On workstations and servers (cluster type `apex`), `sqb` shows your SLURM jobs as on ComputeCanada (not the blocker jobs; `SLURM/README.md`), followed by `ffg`'s output. Where SLURM isn't installed, it's just `ffg`.
 **Note:** This command requires that your `~/.ssh/config` file has an entry `ssh_name` for some entry in `ssh_names` for each machine in the `machine2info` dictionary in `MachineInfo.py` such that `ssh ssh_name` will SSH onto the given machine without password authentication. _This is for network security—APEX lab workstations and servers' hostnames won't be publicly available in plaintext. If you use an SSH name not in the dictionary that doesn't give away the hostname, submit a pull request!_
 

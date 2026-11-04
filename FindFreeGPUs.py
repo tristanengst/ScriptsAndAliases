@@ -126,11 +126,40 @@ def gpu_index_to_users(h=None):
         twrite(f"Unexpected error for host={h}: {e}")
         return dict()
 
-def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None, color=True):
+def can_use_slurm():
+    """Returns if the current user can use SLURM here: its commands are installed and
+    the controller answers them. On the APEX workstations only the user running SLURM
+    can reach munged, so the controller rejects anyone else's messages.
+    """
+    try:
+        return subprocess.run(["sinfo", "-h", "-o", "%N"], capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+def machines_to_slurm_states(*machines):
+    """Returns a dictionary mapping each of [machines] to its node's state in SLURM, with
+    the reason if there is one (eg. why it's drained), or 'none' if it isn't a SLURM node.
+    Returns None if the current user can't use SLURM here.
+    """
+    if not can_use_slurm():
+        return None
+    result = subprocess.run(["sinfo", "-N", "-h", "-o", "%N|%T|%E"], capture_output=True, text=True, timeout=10)
+    node2state = dict()
+    for l in result.stdout.strip().splitlines(): # A node is listed once per partition
+        node, state, reason = l.split("|", 2)
+        node2state[node] = state if reason == "none" else f"{state} ({reason})"
+    return {m: node2state.get(SSHCommunication.machine2hostname.get(m, m).split(".")[0], "none") for m in machines}
+
+def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None, machine2slurm_state=None, color=True):
+    """Returns and prints a summary of GPU usage on each machine in
+    [machine2gpu_index2users], with its SLURM state from [machine2slurm_state] if given.
+    """
     if machine2gpu_index2users is None:
         machine2gpu_index2users = {SSHCommunication.get_machine_name(): gpu_index_to_users()}
 
-    machine_usage_strs = [MachineUsageStr(machine=m, gpu_index2users=gpu_index2users) for m, gpu_index2users in machine2gpu_index2users.items()]
+    machine2slurm_state = dict() if machine2slurm_state is None else machine2slurm_state
+    machine_usage_strs = [MachineUsageStr(machine=m, gpu_index2users=gpu_index2users, slurm_state=machine2slurm_state.get(m))
+        for m, gpu_index2users in machine2gpu_index2users.items()]
     machine_usage_strs = sorted(machine_usage_strs, key=lambda mus: mus.usability_score, reverse=True)
     max_property_lens = MachineUsageStr.get_max_property_lens(machine_usage_strs)
     usage_strs = [mus.usage_str(color=color, **max_property_lens) for mus in machine_usage_strs]
@@ -142,9 +171,11 @@ def machine_gpu_usage_summary_str(*, machine2gpu_index2users=None, color=True):
 
 class MachineUsageStr:
     """Data about a machine's current GPU usage and its string representation."""
-    def __init__(self, *, machine, gpu_index2users):
+    def __init__(self, *, machine, gpu_index2users, slurm_state=None):
         self.machine = machine
         self.gpu_index2users = gpu_index2users
+        self.slurm_state = slurm_state
+        self.slurm_state_str = "" if slurm_state is None else f"slurm: {slurm_state}"
 
         ##############################################################################
         # If [gpu_index2users] is a string, then it would indicate some sort of error.
@@ -202,7 +233,7 @@ class MachineUsageStr:
             
 
     def __repr__(self):
-        return self.__class__.__name__ + f"(machine={self.machine}, gpu_index2users={self.gpu_index2users})"
+        return self.__class__.__name__ + f"(machine={self.machine}, gpu_index2users={self.gpu_index2users}, slurm_state={self.slurm_state})"
     def __str__(self): return self.__repr__()
 
     @property
@@ -214,7 +245,8 @@ class MachineUsageStr:
     @property
     def gpu_range_str_max_len(self): return max([len(s) for s in self.gpu_range_strs]) if self.gpu_range_strs else 0
 
-    def usage_str(self, *, color=False, max_machine_name_str_len=0, max_free_gpu_str_len=0, max_free_gpu_idxs_str_len=0, max_gpu_range_str_max_len=0):
+    def usage_str(self, *, color=False, max_machine_name_str_len=0, max_free_gpu_str_len=0, max_free_gpu_idxs_str_len=0, max_gpu_range_str_max_len=0,
+        max_slurm_state_str_len=0):
         max_machine_name_str_len = max(max_machine_name_str_len, len(self.machine))
         max_free_gpu_str_len = max(max_free_gpu_str_len, len(self.free_gpu_str))
         max_free_gpu_idxs_str_len = max(max_free_gpu_idxs_str_len, len(self.free_gpu_idxs_str))
@@ -224,6 +256,15 @@ class MachineUsageStr:
         free_gpu_str = self.free_gpu_str.ljust(max_free_gpu_str_len)
         free_gpu_idxs_str = self.free_gpu_idxs_str.ljust(max_free_gpu_idxs_str_len)
         gpu_range_strs = [s.ljust(max_gpu_range_str_max_len) for s in self.gpu_range_strs]
+        slurm_state_str = self.slurm_state_str.ljust(max(max_slurm_state_str_len, len(self.slurm_state_str)))
+        # Red for states in which new jobs won't start on a node even once its resources
+        # free up, including sinfo's suffixes for not responding (*), powering down (%, !),
+        # in a maintenance reservation ($) and rebooting (@, ^). 'none' isn't a SLURM node
+        state = "" if self.slurm_state is None else self.slurm_state.split(" (")[0]
+        slurm_state_bad = state.endswith(tuple("*%!$@^")) or state.rstrip("*~#!%$@^-").startswith(("down", "drain",
+            "fail", "maint", "reserved", "inval", "unknown", "future", "power_down", "powering_down", "reboot", "none"))
+        slurm_state_str = colorize(slurm_state_str, color="red" if slurm_state_bad else "green") if color and state else slurm_state_str
+        slurm_state_str = f"{slurm_state_str}\t" if self.slurm_state_str else ""
 
         if self.gpu_information_avail:
             if color:
@@ -250,11 +291,12 @@ class MachineUsageStr:
                 gpu_range_strs = [colorize(s, color=c) for s, c in zip(gpu_range_strs, gpu_range_colors)]
 
             gpu_range_str = " | ".join(gpu_range_strs)
-            return f"{machine_str}\t{free_gpu_str}\t{free_gpu_idxs_str}\t| {gpu_range_str}"
+            return f"{machine_str}\t{slurm_state_str}{free_gpu_str}\t{free_gpu_idxs_str}\t| {gpu_range_str}"
 
         else:
-            s = f"{machine_str}\tNo GPU information found -> likely SSH map or SSH connection issue"
-            return colorize(s, color=88) if color else s
+            s = "No GPU information found -> likely SSH map or SSH connection issue"
+            machine_str, s = (colorize(machine_str, color=88), colorize(s, color=88)) if color else (machine_str, s)
+            return f"{machine_str}\t{slurm_state_str}{s}"
 
     @staticmethod
     def get_max_property_lens(machine_usage_strs):
@@ -262,10 +304,12 @@ class MachineUsageStr:
         max_free_gpu_str_len = max([mus.free_gpu_str_len for mus in machine_usage_strs])
         max_free_gpu_idxs_str_len = max([mus.free_gpu_idxs_str_len for mus in machine_usage_strs])
         max_gpu_range_str_max_len = max([mus.gpu_range_str_max_len for mus in machine_usage_strs])
+        max_slurm_state_str_len = max([len(mus.slurm_state_str) for mus in machine_usage_strs])
         return dict(max_machine_name_str_len=max_machine_name_str_len,
             max_free_gpu_str_len=max_free_gpu_str_len,
             max_free_gpu_idxs_str_len=max_free_gpu_idxs_str_len,
-            max_gpu_range_str_max_len=max_gpu_range_str_max_len)
+            max_gpu_range_str_max_len=max_gpu_range_str_max_len,
+            max_slurm_state_str_len=max_slurm_state_str_len)
 
 excluded_hosts = MachineInfo.machines_cc + ["solar"]
 if __name__ == "__main__":
@@ -279,4 +323,5 @@ if __name__ == "__main__":
         gpuindex2users = p.map(gpu_index_to_users, args.hosts, chunksize=math.ceil(len(args.hosts) / 16))
     machine2gpu_index2users = {h: gpu_index2users for h, gpu_index2users in zip(args.hosts, gpuindex2users)}
 
-    _ = machine_gpu_usage_summary_str(machine2gpu_index2users=machine2gpu_index2users)
+    _ = machine_gpu_usage_summary_str(machine2gpu_index2users=machine2gpu_index2users,
+        machine2slurm_state=machines_to_slurm_states(*args.hosts))
