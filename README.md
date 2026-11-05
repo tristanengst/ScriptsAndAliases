@@ -267,6 +267,8 @@ Host killarney killa
 Host tamia
   HostName tamia.alliancecan.ca
 ```
+Alliance Canada clusters require Duo MFA, which ssh only asks for with a terminal. `~/.ScriptsAndAliases/SSHMFA.sh HOST` opens the shared connection, with `SSHDuoAskpass.sh` choosing the first Duo option (a push) to approve, even without a terminal (eg. from an AI agent); later `ssh HOST ...` commands reuse it with no MFA. It does nothing if the connection is already open. `CronSSH.sh` does the same for commands run from cron.
+
 For APEX lab servers and workstations, we don't want to make hostnames public, so they're actually read from your `~/.ssh/config` file. The code then tries to associate the hostnames to servers and workstations it knows about. See the lab's Notion for a sample `~/.ssh/config` file that has names for which this association works.
 
 
