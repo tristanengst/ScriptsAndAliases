@@ -9,6 +9,7 @@ import math
 from multiprocessing import Pool
 import os
 import os.path as osp
+import re
 import subprocess
 import tempfile
 import uuid
@@ -28,8 +29,24 @@ class NvidiaSMIError(Exception):
     """Error related to nvidia-smi command execution."""
     pass
 
+def split_broken_gpus(result):
+    """Returns [result] with the lines nvidia-smi prints for GPUs it can't reach (eg.
+    one that has fallen off the bus) removed, and the indices of those GPUs. Such lines
+    look like 'Unable to determine the device handle for GPU1: 0000:0A:00.0: Unknown Error'.
+    """
+    lines, broken_gpu_idxs = [], []
+    for l in result.splitlines():
+        m = re.match(r"Unable to determine the device handle for GPU(\d+)", l.strip())
+        if m is None:
+            lines.append(l)
+        else:
+            broken_gpu_idxs.append(int(m.group(1)))
+    return "\n".join(lines).strip(), sorted(broken_gpu_idxs)
+
 def gpu_uid_to_index(h=None, ssh_args=()):
-    """Returns a dictionary mapping GPU UIDs to their indices."""
+    """Returns a dictionary mapping GPU UIDs to their indices. GPUs nvidia-smi can't
+    reach have no UID, so they get a placeholder one starting with 'broken-'.
+    """
     cmd = "nvidia-smi --query-gpu=index,gpu_uuid,name --format=csv,noheader"
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
@@ -37,10 +54,14 @@ def gpu_uid_to_index(h=None, ssh_args=()):
     result = result.strip() if result else None
     if result is None:
         return dict()
-    elif not result[0].isdigit():
+    result, broken_gpu_idxs = split_broken_gpus(result)
+    if result and not result[0].isdigit():
         raise NvidiaSMIError(f"nvidia-smi issue for host={h}: {result}")
+    elif not result and not broken_gpu_idxs:
+        return dict()
     else:
-        lines = [[x.strip() for x in l.split(",")] for l in result.strip().splitlines()]
+        lines = [[x.strip() for x in l.split(",")] for l in result.splitlines()]
+        lines += [(str(gpu_idx), f"broken-GPU{gpu_idx}", "broken") for gpu_idx in broken_gpu_idxs]
         # A99 has a GTX 1080 Ti alongside its RTX 2080 SUPER, but the 1080 Ti isn't
         # worth considering, so hide it
         if (h or SSHCommunication.get_machine_name()) == "A99":
@@ -52,8 +73,8 @@ def gpu_uid_to_procids(h=None, ssh_args=()):
     result = SSHCommunication.run_command_on_machine(machine=h, command=cmd,
         if_connect_error="HostInfoError",
         ssh_args=ssh_args)
-    result = result.strip() if result else None
-    if result is None:
+    result = split_broken_gpus(result)[0] if result else None
+    if not result:
         return dict()
     elif not result.startswith("GPU-"):
         raise NvidiaSMIError(f"nvidia-smi issue for host={h}: {result}")
@@ -89,8 +110,12 @@ def gpu_index_to_errors(h=None, ssh_args=()):
     if result is None:
         return dict()
 
-    gpu_idx2error = dict()
-    for gpu_idx, line in enumerate(result.splitlines()):
+    # Lines for reachable GPUs are in index order but skip the broken ones' indices
+    result, broken_gpu_idxs = split_broken_gpus(result)
+    lines = result.splitlines()
+    gpu_idxs = [i for i in range(len(lines) + len(broken_gpu_idxs)) if not i in broken_gpu_idxs]
+    gpu_idx2error = {gpu_idx: True for gpu_idx in broken_gpu_idxs}
+    for gpu_idx, line in zip(gpu_idxs, lines):
         split_line = [ll.strip() for ll in line.strip().split(",")]
         if not len(split_line) == 2:
             gpu_idx2error[gpu_idx] = True
