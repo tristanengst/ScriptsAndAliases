@@ -1,0 +1,37 @@
+#!/bin/bash
+# Usage: preempt [--hold] JOBID...
+# Stops running jobs and puts them back in the queue (scontrol requeue), instead of cancelling
+# them: each gets SIGTERM, then SIGKILL 30 s later (KillWait), and is PENDING again, starting over
+# from its script when resources are free (after SLURM's ~2 min requeue delay, so whatever is
+# already waiting for its GPUs goes first). --hold keeps it pending until `scontrol release JOBID`.
+# Only batch jobs can be requeued (not srun/salloc, nor sbatch --no-requeue); blockers are refused,
+# since blocker_cron manages them.
+source "$(dirname "$0")/../env.sh"
+action=requeue
+[ "${1:-}" = --hold ] && { action=requeuehold; shift; }
+[ $# -gt 0 ] || { sed -n 's/^# \{0,1\}//; 2,8p' "$0" >&2; exit 2; }
+rc=0
+for job in "$@"; do
+    info=$(scontrol show job "$job" 2>&1) || { echo "preempt: $job: $info" >&2; rc=1; continue; }
+    field() { grep -oE "(^| )$1=[^ ]*" <<< "$info" | head -1 | sed 's/^ *[^=]*=//'; }
+    state=$(field JobState) part=$(field Partition) name=$(field JobName)
+    if [ "$part" = block ]; then
+        echo "preempt: $job ($name) is a blocker; leaving it alone" >&2; rc=1; continue
+    elif [ "$state" != RUNNING ]; then
+        echo "preempt: $job ($name) is $state, not RUNNING" >&2; rc=1; continue
+    elif [ "$(field BatchFlag)" != 1 ]; then
+        echo "preempt: $job ($name) is an srun/salloc job, which can't be requeued (scancel it instead)" >&2
+        rc=1; continue
+    elif [ "$(field Requeue)" != 1 ]; then
+        echo "preempt: $job ($name) was submitted with --no-requeue (scancel it instead)" >&2
+        rc=1; continue
+    fi
+    if scontrol "$action" "$job"; then
+        echo "preempted $job ($name) on $(field NodeList)$([ $action = requeuehold ] && echo ', held')"
+        echo "$(date '+%F %T') $action $job ($name) on $(field NodeList) by $(hostname -s)" \
+            >> "$HOME/.local/slurm/var/log/preempt.log"
+    else
+        rc=1
+    fi
+done
+exit $rc

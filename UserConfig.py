@@ -21,6 +21,7 @@ cluster2accounts = dict(
     killarney=["aip-keli"],
     tamia=["aip-keli"],
     solar=["cs-gpu-research"], # This is actually a partition! Scripts referencing this should be aware.
+    apex=["gpu"], # Also a partition: the APEX workstations' SLURM has no accounts (SLURM/README.md)
 )
 ######################################################################################
 ######################################################################################
@@ -42,7 +43,8 @@ checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
     "~/Development/IMLE-SSL-2/probes",
     # "~/scratch/openPiMLE/exps",
     # "~/scratch/LeRobot/exps",
-    "~/Development/NewMetric/generated_images"]
+    "~/Development/NewMetric/generated_images",
+    "~/scratch/BettercIMLE"]
 job_result_search_dirs = [
     "~/Development/IMLE-SSL-2/pretrain_results",
     "~/Development/IMLE-SSL-2/job_results",

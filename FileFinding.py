@@ -237,6 +237,13 @@ def str_to_exp_folder(s, search_dirs=exp_search_dirs, resolve="pos", verbose=Fal
     """
     return str_to_file(s, search_dirs=search_dirs, file_type="exp", verbose=verbose, resolve=resolve, if_not_found=if_not_found)
 
+def str_to_exp_images_folders(s, search_dirs=exp_search_dirs):
+    """Returns the images/ folders, with trailing slashes, of all experiment folders
+    matching [s] that have one, eg. to complete `icat SUBSTRING` to images to imgcat.
+    """
+    folders = str_to_all_files(s, search_dirs=search_dirs, file_type="exp")
+    return sorted(osp.join(f, "images", "") for f in folders if osp.isdir(osp.join(f, "images")))
+
 def str_to_file(s, search_dirs=[], file_type="slurm", verbose=False, matches=None, resolve="pos", if_not_found="error"):
     """Returns the file(s) corresponding to string [s].
     
@@ -284,11 +291,12 @@ def get_args(args=None):
         "str_to_file",
         "str_to_exp_folder",
         "str_to_slurm_script",
-        "str_to_result_file",],
+        "str_to_result_file",
+        "str_to_exp_images_folders",],
         required=True, help="Function to run")
     
     P.add_argument("-s", "--value", required=True, help="Value to search for")
-    P.add_argument("--key", "Key to search under", default="name", help="Key to search under")
+    P.add_argument("--key", default="name", help="Key to search under")
     P.add_argument("--resolve", choices=["pos", "user", "half", "half_then_user", "latest", "all"],
         default="pos", help="How to resolve multiple matches")
     P.add_argument("--verbose", action="store_true", help="Whether to print verbose messages")
@@ -310,7 +318,7 @@ def get_args(args=None):
     
     P.add_argument("--output_as_meta", default=None,
         help="If set, key under the meta string to output the result under")
-    args = P.parse_args()
+    return P.parse_args(args=args)
 
 
 if __name__ == "__main__":
@@ -326,6 +334,8 @@ if __name__ == "__main__":
         result = str_to_slurm_script(args.value, search_dirs=args.slurm_script_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
     elif args.fn == "str_to_result_file":
         result = str_to_result_file(args.value, search_dirs=args.job_result_search_dirs, verbose=args.verbose, resolve=args.resolve, **args.json_kwargs)
+    elif args.fn == "str_to_exp_images_folders":
+        result = "\n".join(str_to_exp_images_folders(args.value, search_dirs=args.exp_search_dirs))  # One per line, for shell completion
     else:
         raise ValueError(f"[ERROR] Unknown function {args.fn}")
 

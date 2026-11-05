@@ -1,0 +1,63 @@
+#!/bin/bash
+# Writes this node's config to ~/.local/slurm/etc/: slurm.conf from slurm.conf.in (${HOME},
+# ${USER}, ${SLURM_DIR} filled in; @PRIVATE@ -> ../Private/SLURM/slurm.conf; @NODES@ -> every node
+# file's slurm: line, features renamed per gpu_names, Weight= per node_weights), gres.conf from gres.conf.in plus every node
+# file's gres: lines, and cgroup.conf as is. SLURM looks for gres.conf and cgroup.conf next to
+# slurm.conf. Prints "changed" if anything changed. Run by cron every minute.
+source "$(dirname "$0")/../env.sh"
+priv=$SLURM_PRIVATE_DIR
+[ -f "$priv/slurm.conf" ] || { echo "render_config: $priv/slurm.conf missing (Private submodule not checked out?)" >&2; exit 1; }
+etc=$SLURM_HOME/etc
+mkdir -p "$etc"
+tmp=$(mktemp -d "$etc/.render.XXXXXX")
+shopt -s nullglob
+# Every node file's slurm: line. On the controller, a machine with a tunnel (tunnel_port in env.sh)
+# is reached through the ssh tunnel it keeps to the controller (bin/start_daemons):
+# NodeAddr=127.0.0.1 Port=<its tunnel port>.
+node_lines() {
+    local ctld f line port
+    ctld=$(sed -n 's/^SlurmctldHost=\([^( #]*\).*/\1/p' "$priv/slurm.conf")
+    for f in "$priv"/nodes/*.conf; do
+        line=$(sed -n 's/^slurm: *//p' "$f")
+        port=$(tunnel_port "$(basename "$f" .conf)" "$f")
+        [ -n "$port" ] && [ "$(hostname -s)" = "$ctld" ] && line="$line NodeAddr=127.0.0.1 Port=$port"
+        printf '%s\n' "$line"
+    done
+}
+# Renames each Feature= value listed in gpu_names ("derived = feature" lines).
+rename_features() {
+    awk 'NR == FNR { sub(/#.*/, ""); gsub(/ /, ""); if (split($0, kv, "=") == 2) name[kv[1]] = kv[2]; next }
+         { for (i = 1; i <= NF; i++) if ($i ~ /^Feature=/) {
+               n = split(substr($i, 9), f, ","); s = "Feature="
+               for (j = 1; j <= n; j++) s = s (j > 1 ? "," : "") (f[j] in name ? name[f[j]] : f[j])
+               $i = s }
+           print }' "$SLURM_DIR/gpu_names" -
+}
+# Adds Weight= to each node line whose NodeName or a Feature= value is in node_weights ("name =
+# weight" lines), the NodeName's taking precedence.
+add_weights() {
+    awk 'NR == FNR { sub(/#.*/, ""); gsub(/[ \t]/, ""); if (split($0, kv, "=") == 2) w[kv[1]] = kv[2]; next }
+         { node = ""; weight = ""
+           for (i = 1; i <= NF; i++) {
+               if ($i ~ /^NodeName=/) node = substr($i, 10)
+               if ($i ~ /^Feature=/) { n = split(substr($i, 9), f, ",")
+                                       for (j = 1; j <= n; j++) if (f[j] in w) weight = w[f[j]] } }
+           if (node in w) weight = w[node]
+           print $0 (weight != "" ? " Weight=" weight : "") }' "$SLURM_DIR/node_weights" -
+}
+while IFS= read -r line; do
+    case $line in
+        @PRIVATE@) grep -v '^#' "$priv/slurm.conf" ;;
+        @NODES@) node_lines | rename_features | add_weights ;;
+        *) printf '%s\n' "$line" ;;
+    esac
+done < "$SLURM_DIR/slurm.conf.in" | sed "s|\${HOME}|$HOME|g; s|\${USER}|$(id -un)|g; s|\${SLURM_DIR}|$SLURM_DIR|g" > "$tmp/slurm.conf"
+{ cat "$SLURM_DIR/gres.conf.in"; cat /dev/null "$priv"/nodes/*.conf | sed -n 's/^gres: *//p'; } > "$tmp/gres.conf"
+cp "$SLURM_DIR/cgroup.conf" "$tmp/"
+changed=0
+for f in slurm.conf gres.conf cgroup.conf; do
+    if ! cmp -s "$tmp/$f" "$etc/$f"; then mv "$tmp/$f" "$etc/$f"; changed=1; fi
+done
+rm -rf "$tmp"
+[ $changed = 1 ] && echo changed
+exit 0

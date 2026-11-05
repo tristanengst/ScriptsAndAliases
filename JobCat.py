@@ -5,6 +5,7 @@ being in the right folder.
 import argparse
 import os
 import os.path as osp
+import shutil
 import subprocess
 import sys
 
@@ -32,31 +33,17 @@ if __name__ == "__main__":
     argv = [UtilsBase.strip_left(a, "-") if argv[idx-1][1] == "--substr" else a for idx,a in argv]
     args = P.parse_args(argv)
 
-    # If not on a cluster, the log file will be stored in the experiment directory
-    if not Utils.is_slurm() and not args.slurm:
-        twrite(f"Not on cluster -> find output under experiment directory")
-        args.search_dirs = FileFinding.exp_search_dirs if args.search_dirs == "default" else args.search_dirs
-        exp_name = FileFinding.str_to_exp_folder(args.substr, search_dirs=args.search_dirs, resolve="half_then_user")
-
-        possible_result_exts = [".txt", ".out", ".log", ".json", ".err"]
-        non_result_files = ["heartbeat.txt", "config.json", "wandb_attempt.txt"]
-
-        possible_result_files = [osp.join(exp_name, f) for f in os.listdir(exp_name) if any([f.endswith(ext) for ext in possible_result_exts]) and f not in non_result_files]
-
-        if len(possible_result_files) == 0:
-            twrite(f"No result files found for {args.substr} in {exp_name}")
-            sys.exit(0)
-        elif len(possible_result_files) == 1:
-            fname = possible_result_files[0]
-        else:
-            fname = UtilsBase.query_among_list(prompt=f"Multiple possible result files found for {args.substr}, please choose:", options=possible_result_files)
-    else:
+    # Look as on a SLURM cluster first: at the files of a matching running job, then in
+    # the job results/scripts/errors folders. Failing that, look in the experiment
+    # folder, where runs not submitted through SLURM (eg. with tpython_ddp) write their
+    # output.
+    fname = None
+    if shutil.which("squeue"):
         # First, check if the substring is part of the name of a running job of the
         # user, if it is, then we can access the result file using info from the job.
-        fname = None
         try:
             running_jobs = Utils.get_slurm_status(cur_user=True)
-            jobid2jobname = {j: info.name for j, info in running_jobs.items() if info.name is not None and (args.substr in info.name or args.substr in info.uid)}
+            jobid2jobname = {j: info.name for j, info in running_jobs.items() if info.name is not None and (args.substr in info.name or args.substr in (info.uid or ""))}
             if len(jobid2jobname) == 1:
                 jobinfo = running_jobs[list(jobid2jobname.keys())[0]]
                 if args.result:
@@ -74,27 +61,44 @@ if __name__ == "__main__":
         except Exception as e:
             twrite(f"Error while checking for running jobs: {e}")
             pass
-                        
-        if fname is None:
 
-            # This functionality could be useful but isn't really needed at present
-            if args.search_dirs == "default":
-                pass
-            
-            search_dirs = [s for s in args.search_dirs if not s == "default"]
-            if args.result:
-                file_type = "result"
-            elif args.slurm:
-                file_type = "slurm"
-            elif args.error:
-                file_type = "error"
-            else:
-                raise ValueError("One of --result, --slurm, or --error must be specified")
+    if fname is None:
+        search_dirs = [] if args.search_dirs == "default" else args.search_dirs
+        if args.result:
+            file_type = "result"
+        elif args.slurm:
+            file_type = "slurm"
+        elif args.error:
+            file_type = "error"
+        else:
+            raise ValueError("One of --result, --slurm, or --error must be specified")
 
-            fname = FileFinding.str_to_file(args.substr,
-                search_dirs=search_dirs,
-                file_type=file_type,
-                resolve="half_then_user")
+        fname = FileFinding.str_to_file(args.substr,
+            search_dirs=search_dirs,
+            file_type=file_type,
+            resolve="half_then_user",
+            if_not_found="none")
+
+    if fname is None and args.slurm:
+        twrite(f"No SLURM script found for {args.substr}")
+        sys.exit(1)
+    elif fname is None:
+        twrite(f"No job output found for {args.substr} -> find output under experiment directory")
+        exp_search_dirs = FileFinding.exp_search_dirs if args.search_dirs == "default" else args.search_dirs
+        exp_name = FileFinding.str_to_exp_folder(args.substr, search_dirs=exp_search_dirs, resolve="half_then_user")
+
+        possible_result_exts = [".txt", ".out", ".log", ".json", ".err"]
+        non_result_files = ["heartbeat.txt", "config.json", "wandb_attempt.txt"]
+
+        possible_result_files = [osp.join(exp_name, f) for f in os.listdir(exp_name) if any([f.endswith(ext) for ext in possible_result_exts]) and f not in non_result_files]
+
+        if len(possible_result_files) == 0:
+            twrite(f"No result files found for {args.substr} in {exp_name}")
+            sys.exit(0)
+        elif len(possible_result_files) == 1:
+            fname = possible_result_files[0]
+        else:
+            fname = UtilsBase.query_among_list(prompt=f"Multiple possible result files found for {args.substr}, please choose:", options=possible_result_files)
 
     subprocess.run(f"cat {fname}", shell=True)
     print("")

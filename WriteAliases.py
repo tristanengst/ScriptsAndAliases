@@ -49,7 +49,8 @@ aliases = [
     "alias lse=\"python ~/.ScriptsAndAliases/LSExperiment.py \"",
 
     # Common ways to run Sqb2.py.
-    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",       
+    "alias sqb=\"python ~/.ScriptsAndAliases/Sqb2.py \"",
+    "alias lm_job_monitor=\"python3 ~/.ScriptsAndAliases/lm_job_monitor.py \"",       
     "alias sqba=\"python ~/.ScriptsAndAliases/Sqb2.py -a \"",
     "alias sqbls=\"python ~/.ScriptsAndAliases/Sqb2.py -ls \"",
     "alias sqbas=\"python ~/.ScriptsAndAliases/Sqb2.py -as \"",
@@ -58,7 +59,8 @@ aliases = [
     "alias sqbasu=\"python ~/.ScriptsAndAliases/Sqb2.py -asu \"",
     "alias sqbaus=\"python ~/.ScriptsAndAliases/Sqb2.py -aus \"",
     "alias sqbl=\"python ~/.ScriptsAndAliases/Sqb2.py -l \"",
-    "alias sqbc=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --current \"",
+    "alias ffg=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py \"",
+    "alias ffgc=\"python ~/.ScriptsAndAliases/FindFreeGPUs.py --current \"",
 
     # Quiet output, saves cluster state to a file
     "alias sqbr=\"python ~/.ScriptsAndAliases/Sqb2.py -ausq --record default --verbose 0\"", 
@@ -137,6 +139,17 @@ aliases = [
     ##################################################################################
     ##################################################################################
     ##################################################################################
+
+    # Workstation SLURM, where it's built and no other SLURM is (SLURM/Setup.md). Must come before
+    # SemiSLURM's sbatch checks
+    "command -v sbatch > /dev/null || { [ -x ~/.local/slurm/bin/sbatch ] && . ~/.ScriptsAndAliases/SLURM/env.sh; }",
+
+    # SemiSLURM: SLURM-like jobs on workstations. scancel and $TMP only where SLURM isn't
+    "alias ssqb=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py queue \"",
+    "alias ssbatch=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py submit \"",
+    "alias sdispatch=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py dispatch \"",
+    "command -v sbatch > /dev/null || alias scancel=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py cancel \"",
+    "command -v sbatch > /dev/null || export TMP=\"$(python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py tmp)\"",
 
     # Useful on APEX workstations and servers: Miscellanous
     "alias get_wandb_id=\"python -c 'import uuid ; print(str(uuid.uuid4())[:8])'\"",

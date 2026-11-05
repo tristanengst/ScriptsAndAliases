@@ -14,14 +14,13 @@ import sys
 from collections import defaultdict
 
 import FileFinding
-import MachineInfo
 import SSHCommunication
 import Utils
 import UtilsBase
 from UtilsBase import twrite, tqdm
 import UserConfig
 
-known_clusters = UtilsBase.flatten([MachineInfo.machine2info[m]["ssh_names"] for m in MachineInfo.machine2info])
+known_clusters = list(SSHCommunication.machine2hostname)
 if osp.exists("/NAS") and Utils.is_workstation():
     known_clusters += [f"{c}->nas" for c in known_clusters] + [f"nas->{c}" for c in known_clusters]
     known_clusters += ["nas"]
@@ -181,7 +180,11 @@ if __name__ == "__main__":
         else:
             args.clusters = [send_to_cluster if send_to_cluster else send_from_cluster]
 
-    
+    # SSH to machines by what ~/.ssh/config calls them. Not when [output_as_meta] is set,
+    # since then the commands we output run on the caller, which already did this.
+    if not args.output_as_meta:
+        args.clusters = [SSHCommunication.to_ssh_name(c) for c in args.clusters]
+
 
     if not args.output_as_meta:
         sending_getting_str = "Sending to" if send_to_cluster else "Getting from"
@@ -305,7 +308,6 @@ if __name__ == "__main__":
                 result = subprocess.run(f"bash -c '{c}'", shell=True, check=True)
 
     else:
-        import MachineInfo
         import shlex
         import uuid
 

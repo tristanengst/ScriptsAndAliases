@@ -1,0 +1,6 @@
+#!/bin/bash
+# Epilog: runs on each node after a job. Removes the job's SLURM_TMPDIR. Always exits 0, since a
+# failing Epilog drains the node.
+source "$(dirname "$0")/../env.sh" --node-home || exit 0
+[ -n "$SLURM_JOB_ID" ] && rm -rf "$SLURM_TMPDIR_ROOT/job_$SLURM_JOB_ID"
+exit 0

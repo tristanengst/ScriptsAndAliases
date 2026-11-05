@@ -1,0 +1,92 @@
+#!/bin/bash
+# TaskProlog: runs as the job's user on the node before each task; "export X=Y" lines on stdout
+# set the task's environment, and a failure stops the task from starting. Fixes what a job
+# inherits from the machine it was submitted on (HOME, SLURM's PATH entries), sets SLURM_TMPDIR
+# (made by bin/prolog), points CUDA at the allocated GPUs, and pins the task to those GPUs' CPUs.
+# Before a job's first task, it
+# also fails the job if its directory doesn't exist here, and requeues it if one of its GPUs
+# became busy outside SLURM since blocker_cron last ran.
+source "$(dirname "$0")/../env.sh" --node-home || exit 1
+echo "export HOME=$HOME"
+echo "unset SLURM_CONF"
+echo "export PATH=$PATH"
+# SLURM_TMPDIR is made by bin/prolog.
+tmpdir=$SLURM_TMPDIR_ROOT/job_$SLURM_JOB_ID
+if [ ! -d "$tmpdir" ]; then
+    echo "print task_prolog: $tmpdir is missing (see bin/prolog)"
+    exit 1
+fi
+echo "export SLURM_TMPDIR=$tmpdir"
+# The job's first task: the batch script (no step id), or step 0 of a job without one (srun/salloc).
+first_task=0
+if [ -z "${SLURM_STEP_ID:-}" ]; then first_task=1
+elif [ "$SLURM_STEP_ID" = 0 ] && scontrol show job "$SLURM_JOB_ID" | grep -q 'BatchFlag=0'; then first_task=1; fi
+# A job whose directory doesn't exist here would otherwise silently run in /tmp (SLURM's fallback).
+if [ $first_task = 1 ]; then
+    workdir=$(scontrol show job "$SLURM_JOB_ID" | sed -n 's/^ *WorkDir=//p')
+    if [ ! -d "$workdir" ]; then
+        echo "$(date '+%F %T') job $SLURM_JOB_ID: no $workdir here" >> "$HOME/.local/slurm/var/log/task_prolog.log"
+        echo "print task_prolog: the job's directory $workdir doesn't exist on $(hostname -s)"
+        exit 1
+    fi
+fi
+echo "export CUDA_DEVICE_ORDER=PCI_BUS_ID"
+# Without cgroups, SLURM sets CUDA_VISIBLE_DEVICES to each GPU's position in gres.conf, not its
+# device number, so CUDA would see the wrong GPU. Rewrite it to the GPU UUIDs, using that GRES
+# type gN is the GPU with device minor N (/dev/nvidiaN).
+if [ -z "${CUDA_VISIBLE_DEVICES+x}" ]; then
+    # Job asked for no GPUs: hide them all, as cgroups would.
+    echo "export CUDA_VISIBLE_DEVICES="
+    exit 0
+fi
+# "GRES=gpu:g1:1(IDX:0),gpu:g3:1(IDX:2)" -> SLURM index -> type gN
+declare -A minor_of_idx
+detail=$(scontrol show job -d "$SLURM_JOB_ID" | grep -oE "Nodes=$(hostname -s) .*GRES=[^ ]*" | grep -oE 'GRES=.*')
+while read -r minor idxs; do
+    for i in ${idxs//,/ }; do
+        if [[ $i == *-* ]]; then for ((k=${i%-*}; k<=${i#*-}; k++)); do minor_of_idx[$k]=$minor; done
+        else minor_of_idx[$i]=$minor; fi
+    done
+done < <(grep -oE 'gpu:g[0-9]+:[0-9]+\(IDX:[0-9,-]+\)' <<< "$detail" | sed -E 's/gpu:g([0-9]+):[0-9]+\(IDX:([0-9,-]+)\)/\1 \2/')
+# Backstop, before the job's first task only. Batch jobs are requeued; others can't be, so are
+# cancelled.
+if [ "$SLURM_JOB_PARTITION" != block ] && [ $first_task = 1 ]; then
+    for m in $(printf '%s\n' "${minor_of_idx[@]}" | sort -u); do
+        "$SLURM_DIR/bin/gpu_busy_outside" "$m" || continue
+        if [ -z "${SLURM_STEP_ID:-}" ]; then action=requeue; else action=cancel; fi
+        echo "$(date '+%F %T') job $SLURM_JOB_ID: GPU $m busy outside SLURM: ${action}ing" \
+            >> "$HOME/.local/slurm/var/log/task_prolog.log"
+        echo "print task_prolog: GPU $m is busy outside SLURM: ${action}ing the job"
+        if [ $action = requeue ]; then scontrol requeue "$SLURM_JOB_ID"; else scancel "$SLURM_JOB_ID"; fi
+        exit 1
+    done
+fi
+declare -A uuid_of_minor
+for f in /proc/driver/nvidia/gpus/*/information; do
+    m=$(awk '/Device Minor/ {print $3}' "$f"); u=$(awk '/GPU UUID/ {print $3}' "$f")
+    uuid_of_minor[$m]=$u
+done
+uuids=()
+minors=()
+for i in ${CUDA_VISIBLE_DEVICES//,/ }; do
+    m=${minor_of_idx[$i]}
+    minors+=("$m")
+    if [ -z "$m" ] || [ -z "${uuid_of_minor[$m]}" ]; then
+        echo "print task_prolog: can't map SLURM GPU index $i (GRES: $detail); hiding all GPUs"
+        echo "export CUDA_VISIBLE_DEVICES="
+        exit 0
+    fi
+    uuids+=("${uuid_of_minor[$m]}")
+done
+cvd=$(IFS=,; echo "${uuids[*]}")
+echo "export CUDA_VISIBLE_DEVICES=$cvd"
+echo "export GPU_DEVICE_ORDINAL=$cvd"
+# Pin the task (this script's parent, which then becomes the job's program) to the CPUs that go
+# with its GPUs: the cpus: lines of this machine's node file (see bin/add_node). Its children
+# inherit that.
+cpus=$(for m in "${minors[@]}"; do awk -v g="$m" '$1 == "cpus:" && $2 == g { print $3 }' "$SLURM_NODE_FILE"; done | paste -sd,)
+if [ -z "$cpus" ]; then
+    echo "print task_prolog: no cpus: lines for GPUs ${minors[*]} in $SLURM_NODE_FILE; not pinning to CPUs"
+elif ! err=$(taskset -cp "$cpus" "$PPID" 2>&1 > /dev/null); then
+    echo "print task_prolog: couldn't pin to CPUs $cpus: $err"
+fi

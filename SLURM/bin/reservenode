@@ -1,0 +1,36 @@
+#!/bin/bash
+# Usage: reservenode [--node NODE] [--gpus IDX...]
+# Makes GPUs look occupied: submits one job per GPU, reserve_<machine>_<IDX> (eg. reserve_A99_1),
+# each holding that GPU (nvidia-smi index IDX) by itself, like a blocker, with a small CUDA
+# allocation on it (bin/reserve.sh) so it looks occupied outside SLURM too. They're in the reserve
+# partition, below every other job, and any other job (blockers too) preempts them, so they only
+# hold GPUs nothing else wants; a preempted one is requeued and takes its GPU back once it's free.
+# Cancel with scancel -n reserve_A99_1, or scancel -p reserve for all. NODE: a machine name (A99)
+# or hostname (cs-apex-99s); default this machine. IDX: default every GPU NODE gives SLURM. GPUs
+# that already have a reservation are skipped.
+source "$(dirname "$0")/../env.sh"
+node=$(hostname -s) idxs=()
+while [ $# -gt 0 ]; do
+    case $1 in
+        --node) node=$(machine_host "$2"); shift 2 ;;
+        --gpus) shift; while [ $# -gt 0 ] && [[ $1 != --* ]]; do idxs+=("$1"); shift; done ;;
+        *) sed -n 's/^# \{0,1\}//; 2,10p' "$0" >&2; exit 2 ;;
+    esac
+done
+all=$(awk -v n="$node" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$SLURM_HOME/etc/gres.conf")
+[ -n "$all" ] || { echo "reservenode: $node has no GPUs in SLURM" >&2; exit 1; }
+[ ${#idxs[@]} -gt 0 ] || idxs=($all)
+machine=$(machine_name "$node")
+rel=${SLURM_DIR#"$HOME"/}
+rc=0
+for idx in "${idxs[@]}"; do
+    grep -qx "$idx" <<< "$all" || { echo "reservenode: $node has no GPU $idx in SLURM" >&2; rc=1; continue; }
+    name="reserve_${machine}_$idx"
+    if [ -n "$(squeue -h -n "$name" -o %i)" ]; then echo "$name: already reserved"; continue; fi
+    # The job runs in NODE's home (through $SLURM_HOME_LINK), so paths are relative to it: this
+    # folder's place in the home is the same on every machine, unlike the home itself.
+    id=$(sbatch --parsable -p reserve -w "$node" --gres="gpu:g$idx:1" -c 1 -J "$name" \
+        --chdir="$SLURM_HOME_LINK" -o /dev/null -e ".local/slurm/var/log/$name.err" \
+        --wrap "exec '$rel/bin/reserve.sh'") && echo "$name: submitted ($id)" || rc=1
+done
+exit $rc

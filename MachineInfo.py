@@ -1,7 +1,6 @@
 """Contains dictionaries of host information and methods for accessing them, all in one place.
 
-Feel free to submit a pull request to add additional SSH names for hosts if you don't
-use what's here. The only requirement is that no two hosts can share an SSH name.
+Machine names and their hostnames (and aliases) are in SSHCommunication.machine2hostname.
 """
 import argparse
 from collections import defaultdict
@@ -25,7 +24,8 @@ from UserConfig import cluster2accounts
 #                     Basically the leading digit of the generation's gaming GPUs,
 #                     or made-up as needed.
 # good              -- overall judgement on if the GPU is good (worth displaying in sqb) or not
-# gpu_name          -- name of the GPU as per SLURM, often not what we'd call it
+# gpu_name          -- name of the GPU as per SLURM, often not what we'd call it. On the
+#                     APEX workstations' SLURM it's the alias (SLURM/gpu_names).
 # ddp               -- whether the GPU can be used with DDP
 # gpu_frac        -- how many fractions of a regular GPU's VRAM it takes up
 # rgus_per_gpu    -- multiplier for RGUs when using this GPU type. See
@@ -57,7 +57,7 @@ gpu2info = dict(
     a5000=dict(vram=24, gen=3, good=True, gpu_name="rtx_a5000" if Utils.is_solar() else "a5000", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.0),
     a6000=dict(vram=48, gen=3, good=True, gpu_name="a6000", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.1),                   # Estimated rgus_per_gpu
     a6000a=dict(vram=48, gen=4, good=True, gpu_name="rtx_6000_ada", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.4),                   # Estimated rgus_per_gpu
-    rtx6000=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_se", ddp=True, gpu_frac=1., rgus_per_gpu=4),                   # Estimated rgus_per_gpu
+    rtx6000=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_se" if Utils.is_solar() else "rtx6000", ddp=True, gpu_frac=1., rgus_per_gpu=4),                   # Estimated rgus_per_gpu
     rtx6000_maxq=dict(vram=96, gen=5, good=True, gpu_name="rtx_pro_6000_blackwell_max-q", ddp=True, gpu_frac=1., rgus_per_gpu=4),     
     a40=dict(vram=48, gen=1, good=True, gpu_name="a40", ddp=True, gpu_frac=1, rgus_per_gpu=3.2),                           # Estimated rgus_per_gpu
     a100=dict(vram=80 if Utils.is_solar() else 40, good=True, gpu_name="a100", ddp=True, gpu_frac=1.0, rgus_per_gpu=4.0),
@@ -76,7 +76,7 @@ gpu2info = dict(
 ) | {
     "default_gpu": dict(vram=0, gen=0, good=False, gpu_name="default_gpu", ddp=True, gpu_frac=1, rgus_per_gpu=1.0),          # Placeholder values
     "titan": dict(vram=8, gen=1, good=False, gpu_name="titan_x", ddp=True, gpu_frac=1.0, rgus_per_gpu=0.1),                 # Estimated rgus_per_gpu
-    "2080": dict(vram=8, gen=2, good=False, gpu_name="2080_ti", ddp=True, gpu_frac=1.0, rgus_per_gpu=1.2),                   # Estimated rgus_per_gpu
+    "2080s": dict(vram=8, gen=2, good=False, gpu_name="2080s", ddp=True, gpu_frac=1.0, rgus_per_gpu=1.2),                   # Estimated rgus_per_gpu
     "3090": dict(vram=24, gen=3, good=True, gpu_name="3090", ddp=True, gpu_frac=1.0, rgus_per_gpu=3.0),
     }
 gpu2info = {k: argparse.Namespace(**v) for k,v in gpu2info.items()}
@@ -87,43 +87,37 @@ bad_gpus = [k for k,v in gpu2info.items() if not v.good]
 gpu_alias2name = {k: v.gpu_name for k,v in gpu2info.items()}
 gpu_name2alias = {v.gpu_name: k for k,v in gpu2info.items()} | dict(rtx_a6000="a6000")
 
-# Dictionary machine names to their information. Note that hostnames are not included,
-# and some functionality requires this. By assumption, for at least one element of
-# [ssh_names] in each entry, you will have the corresponding Hostname or IP address in
-#your ~/.ssh/config file.
-#
-# Each entry is thus:
+# Dictionary machine names to their hardware information. How to SSH to each machine is
+# in SSHCommunication.machine2hostname instead. Each entry is thus:
 #   num_cpus: Number of CPU cores on the host
 #   num_gpus: Number of GPUs on the host
 #   hyperthread: Whether the host has hyperthreading enabled
-#   ssh_names: List of SSH all SSH names that anyone in our group uses to SSH into the
-#   host (DO NOT add the actual hostname or IP address here)
 machine2info = {
-    "S1": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S1"]),
-    "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S2"]),
-    "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True, ssh_names=["S3"]),
-    "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A1"]),
-    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A2"]),
-    "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A3"]),
-    "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False, ssh_names=["A4"]),
-    "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A5"]),
-    "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A6"]),
-    "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A7"]),
-    "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A8"]),
-    "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False, ssh_names=["A9"]),
-    "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False, ssh_names=["A99", "emily"]),
-    "V21": dict(num_cpus=64, num_gpus=8, hyperthread=False, ssh_names=["V21"]),
+    "S1": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "S2": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "S3": dict(num_cpus=128, num_gpus=10, hyperthread=True),
+    "A1": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A2": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A3": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A4": dict(num_cpus=16, num_gpus=2, hyperthread=False),
+    "A5": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A6": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A7": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A8": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A9": dict(num_cpus=12, num_gpus=2, hyperthread=False),
+    "A99": dict(num_cpus=8, num_gpus=1, hyperthread=False),
+    "V21": dict(num_cpus=64, num_gpus=8, hyperthread=False),
 } | dict( # Made up info for the ComputeCanada and Solar clusters so we can run commands on them. This should probably be refactored!
-    solar=dict(num_cpus=1, num_gpus=0, hyperthread=False, ssh_names=["solar"]),
-    narval=dict(num_cpus=40, num_gpus=4, hyperthread=False, ssh_names=["narval"]),
-    cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["cedar"]),
-    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["killarney", "killa"]),
-    vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["vulcan"]),
-    trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["trillium"]),
-    fir=dict(num_cpus=48, num_gpus=4, hyperthread=False, ssh_names=["fir"]),
-    rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["rorqual"]),
-    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False, ssh_names=["nibi"]),
-    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False, ssh_names=["tamia"]),)
+    solar=dict(num_cpus=1, num_gpus=0, hyperthread=False),
+    narval=dict(num_cpus=40, num_gpus=4, hyperthread=False),
+    cedar=dict(num_cpus=48, num_gpus=4, hyperthread=False),
+    killarney=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    vulcan=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    trillium=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    fir=dict(num_cpus=48, num_gpus=4, hyperthread=False),
+    rorqual=dict(num_cpus=64, num_gpus=4, hyperthread=False),
+    nibi=dict(num_cpus=114, num_gpus=8, hyperthread=False),
+    tamia=dict(num_cpus=64, num_gpus=4, hyperthread=False),)
 
 # All ComputeCanada hosts. Filtering these out of [machine2info] is useful gives just
 # workstation-y machines and Solar.
@@ -175,6 +169,40 @@ def get_solar_node2config():
     node2config = dict(nodes_configs)
 
     return node2config
+
+def get_apex_node2config():
+    """Returns a dictionary describing the APEX workstations' SLURM nodes as in
+    [cluster2node2config], or an empty one where that SLURM isn't available. Like
+    Solar, there's no canonical GPU type, so this is read from SLURM. Each node's GPU
+    type is its feature, which is the GPU's alias (SLURM/gpu_names), and its GPUs are
+    one GRES type each (gpu:g0:1,gpu:g1:1,...).
+    """
+    try:
+        result = subprocess.run(["scontrol", "show", "nodes", "--json"], capture_output=True, text=True, timeout=10)
+        node_datas = json.loads(result.stdout)["nodes"]
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError):
+        return dict()
+
+    def parse_node_data(nd):
+        gpu_aliases = [gpu_name2alias[f] for f in nd.get("features", []) if f in gpu_name2alias]
+        gpu_alias = gpu_aliases[0] if gpu_aliases else "unknown"
+        gpus_per_node = sum([int(g.split(":")[-1]) for g in nd.get("gres", "").split(",") if g.startswith("gpu:")])
+
+        cpus_per_gpu, mem_per_gpu = 1, 1
+        for tr_key,tr_val in [tr.split("=") for tr in nd.get("tres", "").split(",") if "=" in tr]:
+            if tr_key == "cpu":
+                cpus_per_gpu = int(tr_val) // max(1, gpus_per_node)
+            elif tr_key == "mem":
+                mem_per_gpu = UtilsBase.unit_conversion(tr_val, target="GiB") // max(1, gpus_per_node)
+
+        return nd["name"], dict(
+            can_allocate="gpu" in nd.get("partitions", []),
+            gpu_name=gpu_alias2name.get(gpu_alias, gpu_alias), gpu_alias=gpu_alias, gpus_per_node=gpus_per_node,
+            cpus_per_gpu=cpus_per_gpu, mem_per_gpu=mem_per_gpu,
+            gpu_frac=1.,
+        )
+
+    return dict([parse_node_data(nd) for nd in node_datas])
 
 # Data from https://docs.alliancecan.ca/wiki/Allocations_and_compute_scheduling/en
 # for Alliance clusters. For these the amounts below record one bundle of compute.
@@ -259,8 +287,7 @@ cluster2node2config = dict(
         p100l=dict(cpus_per_gpu=6, mem_per_gpu=56, gpu_alias="p100l", gpus_per_node=4,  gpu_name="p100l", can_allocate=True),
     ),
     solar=get_solar_node2config() if Utils.is_solar() else dict(),
-    # These values don't have to be right
-    cs_apex=dict(default=dict(cpus_per_gpu=8, mem_per_gpu=48, gpu_alias="3090", gpus_per_node=2, can_allocate=True),)
+    apex=get_apex_node2config() if Utils.is_apex_cluster() else dict(),
 )
 cluster2node2config = {k: {nk: dict(cpus_per_gpu_target=nv["cpus_per_gpu"], mem_per_gpu_target=nv["mem_per_gpu"]) | nv for nk,nv in v.items()} for k,v in cluster2node2config.items()}
 cluster2node2config = {k: {nk: argparse.Namespace(**nv) for nk,nv in v.items()} for k,v in cluster2node2config.items()}
@@ -326,7 +353,7 @@ def get_updated_machine_info(m, verbose=0):
     CPU cores on machine [m].
 
     Args:
-    m           -- machine name, which must be a key in [machine2info], or a hostname
+    m           -- machine name, which must be a key in [machine2info]
     """
     try:
         result = SSHCommunication.run_command_on_machine(machine=m, command="nvidia-smi ; nvidia-smi --query-gpu=name --format=csv,noheader | wc -l ; nproc")
@@ -342,10 +369,6 @@ def get_updated_machine_info(m, verbose=0):
     nvidia_smi_lines = result[:-2]
     nvidia_smi_output = "\n".join(nvidia_smi_lines)
 
-    # If the machine name isn't in [machine2info] (eg. because it's a hostname),
-    # change [m] to the machine name
-    m = m if m in machine2info else SSHCommunication.hostname_to_machine(m)
-    
     if not len([idx for idx,l in enumerate(nvidia_smi_lines) if l.startswith("|=")]) == 2:
         if verbose:
             print(f"Error: {m} doesn't have any output. Probably nvidia-smi isn't working.\n\n{nvidia_smi_output}")

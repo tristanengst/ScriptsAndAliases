@@ -1,0 +1,19 @@
+#!/bin/bash
+# Prolog: runs on each node once per job, before any of its tasks (and before SLURM changes into
+# the job's directory or opens its output files).
+# - Points $SLURM_HOME_LINK (/tmp/<user>-home) at this machine's home, so that jobs can use
+#   --chdir=$SLURM_HOME_LINK/some/path. ln -T: never put the link inside an existing directory;
+#   -f: replace it (atomically). If someone else made that path, ln fails (/tmp is sticky), and so
+#   does the Prolog, draining the node: jobs would otherwise run wherever their link points.
+# - Makes the job's SLURM_TMPDIR, empty: if the job was requeued after a crash here, the epilog
+#   never ran, so the last run's dir may still be there. Under the lock bin/sweep_tmpdirs holds
+#   while it decides whether to delete a dir. Failures here don't drain the node; bin/task_prolog
+#   fails the job's tasks instead if the dir isn't there.
+source "$(dirname "$0")/../env.sh" --node-home || exit 0
+if ! err=$(ln -sfT "$HOME" "$SLURM_HOME_LINK" 2>&1); then
+    echo "$(date '+%F %T') job $SLURM_JOB_ID: $err" >> "$HOME/.local/slurm/var/log/prolog.log"
+    exit 1
+fi
+tmpdir=$SLURM_TMPDIR_ROOT/job_$SLURM_JOB_ID
+mkdir -p "$SLURM_TMPDIR_ROOT" && flock "$SLURM_TMPDIR_ROOT/.lock" sh -c 'rm -rf "$1" && mkdir "$1"' sh "$tmpdir"
+exit 0

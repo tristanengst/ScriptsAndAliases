@@ -1,0 +1,3 @@
+# Workstation SLURM (see ${SLURM_DIR}). Installed by bin/setup_node, which fills in ${SLURM_DIR}.
+* * * * * ${SLURM_DIR}/bin/start_daemons >> $HOME/.local/slurm/var/log/cron.log 2>&1; ${SLURM_DIR}/bin/sweep_tmpdirs >> $HOME/.local/slurm/var/log/cron.log 2>&1
+* * * * * ${SLURM_DIR}/bin/blocker_cron >> $HOME/.local/slurm/var/log/cron.log 2>&1; sleep 30; ${SLURM_DIR}/bin/blocker_cron >> $HOME/.local/slurm/var/log/cron.log 2>&1

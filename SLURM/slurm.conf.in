@@ -1,0 +1,65 @@
+# Non-root SLURM on the lab workstations. See README.md and Setup.md.
+# Daemons and jobs all run as the user who set it up; nothing here needs root.
+# Template: bin/render_config writes it to ~/.local/slurm/etc/slurm.conf on each node, filling in
+# ${HOME}, ${USER} and ${SLURM_DIR} (this folder) for that node, and @PRIVATE@ (the site's lines)
+# and @NODES@ from ../Private/SLURM/. Edit this file only.
+ClusterName=apex
+@PRIVATE@
+SlurmUser=${USER}
+SlurmdUser=${USER}
+# Ports (SlurmctldPort, SlurmdPort, SrunPortRange): in ../Private/SLURM/slurm.conf.
+
+AuthType=auth/munge
+# munged runs with its default paths (under ~/.local/slurm), which libmunge also defaults to.
+CredType=cred/munge
+
+StateSaveLocation=${HOME}/.local/slurm/var/state
+SlurmdSpoolDir=${HOME}/.local/slurm/var/spool
+SlurmctldLogFile=${HOME}/.local/slurm/var/log/slurmctld.log
+SlurmdLogFile=${HOME}/.local/slurm/var/log/slurmd.log
+SlurmctldPidFile=${HOME}/.local/slurm/var/run/slurmctld.pid
+SlurmdPidFile=${HOME}/.local/slurm/var/run/slurmd.pid
+
+ProctrackType=proctrack/pgid      # cgroups need root
+# TaskPlugin unset (= none); task/cgroup needs root
+TaskProlog=${SLURM_DIR}/bin/task_prolog
+Prolog=${SLURM_DIR}/bin/prolog
+Epilog=${SLURM_DIR}/bin/epilog
+TreeWidth=65533                   # slurmctld contacts every slurmd itself, never relaying through
+                                  # other machines (which may not reach each other; Setup.md, Tunnels)
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core      # don't schedule memory on shared boxes
+GresTypes=gpu
+SchedulerType=sched/backfill
+LaunchParameters=use_interactive_step   # salloc's shell is a step on the allocated node (through
+                                        # task_prolog; killed if the job is preempted), not a plain
+                                        # shell where salloc was typed
+AccountingStorageType=accounting_storage/none
+JobCompType=jobcomp/script         # bin/job_record: var/log/jobs/, var/log/jobcomp.txt
+JobCompLoc=${SLURM_DIR}/bin/job_record
+JobAcctGatherType=jobacct_gather/none
+MpiDefault=none
+ReturnToService=2
+MailProg=/bin/true                # no mail on the workstations
+DebugFlags=NO_CONF_HASH           # rendered configs differ per node (paths)
+
+# Nodes: render_config inserts the slurm: lines of ../Private/SLURM/nodes/*.conf here (written
+# per machine by bin/add_node), with features renamed per gpu_names.
+# One GRES type per GPU (gN = nvidia-smi index N = /dev/nvidiaN), so blockers can pin one GPU.
+@NODES@
+
+# Preemption (README, "Partitions and preemption"): a job can preempt only jobs in a partition with
+# a strictly lower PriorityTier and PreemptMode other than OFF, requeueing them (srun/salloc jobs,
+# which can't be requeued, are cancelled). So urgent jobs preempt gpu jobs, and every job preempts
+# reservations; blockers share gpu's tier, so they preempt only reservations, and they can't be
+# preempted. They go first among waiting jobs through the priority blocker_cron gives them on
+# release, not their tier.
+PreemptType=preempt/partition_prio
+PreemptMode=REQUEUE
+PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
+PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
+PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE
+# Reservations (bin/reservenode): placeholders that make idle GPUs look occupied. Below every other
+# job, and preempted (requeued) by any of them, blockers included, so they only ever hold GPUs
+# nothing else wants; a preempted one waits to take its GPU again.
+PartitionName=reserve Nodes=ALL PriorityTier=0 PreemptMode=REQUEUE Hidden=YES MaxTime=INFINITE
