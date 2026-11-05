@@ -169,9 +169,11 @@ def atomic_save_lite(*, data, fpath, **kwargs):
 def atomic_append_lite(*, data, fname, weights_only=False, map_location="cpu", **kwargs):
     fname = osp.expanduser(fname)
     if fname.endswith(".pt") or fname.endswith(".pth"):
+        orig_data = load_file_lite(fname) if osp.exists(fname) else dict()
         return atomic_save_lite(data=load_file_lite(fname, weights_only=weights_only, map_location=map_location) | data, fpath=fname, **kwargs)
     elif fname.endswith(".json"):
-        return atomic_save_lite(data=load_file_lite(fname) | data, fpath=fname, indent=4, sort_keys=True)
+        orig_data = load_file_lite(fname) if osp.exists(fname) else dict()
+        return atomic_save_lite(data=orig_data | data, fpath=fname, indent=4, sort_keys=True)
     elif fname.endswith(".txt") or fname.endswith(".sh") or fname.endswith(".py"):
         with open(fname, "a+") as f:
             f.write(data)
