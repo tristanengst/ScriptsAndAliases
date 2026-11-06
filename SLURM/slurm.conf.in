@@ -60,7 +60,7 @@ PreemptType=preempt/partition_prio
 PreemptMode=REQUEUE
 PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
 PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
-# Manual blockers (bin/BlockGPUsManually): submitted, held and released by hand.
+# Manual blockers (BlockGPUsManually.py): submitted, held and released by hand.
 PartitionName=block-manual Nodes=ALL PriorityTier=3 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
 PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=REQUEUE MaxTime=INFINITE
 # Reservations (bin/reservenode): placeholders that make idle GPUs look occupied. Below every other

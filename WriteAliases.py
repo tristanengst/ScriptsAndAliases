@@ -183,7 +183,7 @@ aliases = [
 # workstation SLURM line
 if Utils.is_apex_cluster():
     aliases.insert(aliases.index(next(a for a in aliases if "SLURM/env.sh" in a)) + 1,
-        "alias block_gpus=\"~/.ScriptsAndAliases/SLURM/bin/BlockGPUsManually \"")
+        "alias block_gpus=\"python3 ~/.ScriptsAndAliases/SLURM/BlockGPUsManually.py \"")
 
 def alias_to_name(alias): return alias.split("=")[0].strip()
 
