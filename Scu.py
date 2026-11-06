@@ -146,7 +146,7 @@ def args_to_scontrol_update_dict(args):
 		else:
 			return update.capitalize()
 
-	kv_scontrol_updates = ["dependency", "account", "partition", "time", "added_partitions"]
+	kv_scontrol_updates = ["dependency", "account", "partition", "time", "added_partitions", "nice"]
 	update2update_str = dict(time="TimeLimit")
 
 	args_update2value = {k: v for k,v in vars(args).items() if k in kv_scontrol_updates and not v is None}
@@ -237,7 +237,7 @@ def update_job(*, job_info, args, verbose=True):
 	# 	twrite(match_partition_to_time=args.match_partition_to_time, interac=args.interac, time=args.time, update2value=update2value, verbose=verbose)
 
 
-	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit"]
+	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit", "Nice"]
 	cmd_suffix = " ".join([f"{u}={v}" for u,v in update2value.items() if u in valid_suffixs])
 
 	# `scontrol hold`/`release`/`requeue`/`requeuehold` take a bare job ID, but `scontrol update` needs the
@@ -295,6 +295,8 @@ if __name__ == "__main__":
 		help="Add this comma-separated list of partitions")
 	P.add_argument("--time", default=None,
 		help="Update jobs to new time limit, in format HH:MM:SS")
+	P.add_argument("--nice", type=int, default=None,
+		help="Update jobs to new nice value: higher lowers their priority, negative raises it (needs SLURM operator rights)")
 
 	# Configuration options for how SCU should behave
 	P.add_argument("--match_partition_to_time", type=UtilsBase.truthy_type, default=True,
