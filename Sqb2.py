@@ -3,6 +3,7 @@ job name, and time remaining. Jobs are separated by SLURM account.
 """
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import copy
 from datetime import datetime
 from functools import partial
@@ -722,6 +723,25 @@ def job_info_with_parition(ji):
 
 
 
+def job_info_with_machine_name_excludes(ji):
+    """Returns job info [ji] with its excluded nodes (SLURM's short hostnames, eg.
+    cs-apex-03s) shown as machine names (eg. A3), as in SSHCommunication.machine2hostname.
+    Nodes without a machine name are left as they are.
+    """
+    exclude = getattr(ji, "exclude", None)
+    if not exclude or exclude == "(null)":
+        return ji
+    if "[" in exclude:  # a compressed hostlist, eg. cs-apex-0[3,5]s
+        expanded = subprocess.run(["scontrol", "show", "hostnames", exclude], capture_output=True, text=True)
+        hosts = expanded.stdout.split() if expanded.returncode == 0 else [exclude]
+    else:
+        hosts = exclude.split(",")
+    import SSHCommunication  # Imported here to be faster when not needed
+    short2machine = dict()
+    for m,fqdn in SSHCommunication.machine2hostname.items():
+        short2machine.setdefault(fqdn.split(".")[0], m)  # the first name, not aliases
+    return UtilsBase.updated_namespace(ji, exclude=",".join([short2machine.get(h, h) for h in hosts]))
+
 def job_info_with_workdir(jd, mode="short"):
     """Returns job info [jd] with the 'workdir' key formatted for display.
 
@@ -772,6 +792,15 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
 
     job2info = {j: info for j,info in job2info.items() if not info.name in args.hidden}
 
+    # On APEX, jobs in the gpu and urgent partitions come first, in squeue's order, then
+    # the rest (blockers, reservations; SLURM/README.md) sorted by name, numbers by value
+    # (A99_blocker_2 before A99_blocker_10).
+    if Utils.is_apex_cluster():
+        def natural(name): return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", name)]
+        first = [j for j,v in job2info.items() if getattr(v, "partition", None) in ["gpu", "urgent"]]
+        rest = sorted([j for j in job2info if not j in first], key=lambda j: natural(job2info[j].name))
+        job2info = {j: job2info[j] for j in first + rest}
+
     if submit_time or heartbeat_analysis:
         job2info = {j: job_info_with_formatted_date_time(v, key="submit_time", tz=args.tz) for j,v in job2info.items()}
     if eligible_time:
@@ -786,6 +815,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         job2info = {j: job_info_with_heartbeat(v) for j,v in job2info.items()}
     if partition:
         job2info = {j: job_info_with_parition(v) for j,v in job2info.items()}
+    if excluded and Utils.is_apex_cluster():
+        job2info = {j: job_info_with_machine_name_excludes(v) for j,v in job2info.items()}
     if workdir:
         job2info = {j: job_info_with_workdir(v, mode=workdir) for j,v in job2info.items()}
 
@@ -883,6 +914,15 @@ def account_to_levelfs_record(account):
         return dict(group=group, user=user)
     else:
         return dict(group=None, user=None)
+
+def get_free_resources_str(printable_free_nodes):
+    """Returns the free-resources summary printed last. Independent of the queue, so
+    it's fetched concurrently with it.
+    """
+    if Utils.is_apex_cluster():
+        return subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py")
+    else:
+        return "\t| " + ClusterInfo2.get_str(printable_free_nodes=printable_free_nodes)
 
 def build_record(*, job_datas, account2lfs):
     """Returns a JSON record giving what was going on with the cluster when run."""
@@ -1076,6 +1116,16 @@ if __name__ == "__main__":
     args.time_left = (not Utils.is_apex_cluster()) if args.time_left is None else args.time_left
     args.elapsed = Utils.is_apex_cluster() if args.elapsed is None else args.elapsed
 
+    # The LevelFS and free-resource summaries don't depend on the queue, so start them
+    # now, while it's read, and collect them when they're printed. Not on workstations
+    # without SLURM, which only print FindFreeGPUs.py's output (below).
+    background = ThreadPoolExecutor(max_workers=2)
+    if Utils.is_solar() or Utils.is_cc() or (Utils.is_apex_cluster() and shutil.which("squeue")):
+        free_resources_future = background.submit(get_free_resources_str, args.printable_free_nodes)
+    if Utils.is_cc():
+        lfs_accounts = Utils.cluster2info[Utils.get_cluster_type()].accounts
+        account2lfs_future = background.submit(lambda: {a: account_to_levelfs_record(a) for a in lfs_accounts})
+
 
     if Utils.is_solar():
         job_datas, colnames = jobs_data(cur_user=not args.users, account=None,
@@ -1134,7 +1184,7 @@ if __name__ == "__main__":
             time_left=args.time_left,
             elapsed=args.elapsed,
             verbose=args.verbose)
-        job_datas = job_datas if args.blockers else [jd for jd in job_datas if not jd.name.startswith("blocking_job_")]
+        job_datas = job_datas if args.blockers else [jd for jd in job_datas if not re.search(r"_blocker_\d+$", jd.name)]
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
     else:
         # On workstations, the obvious equivalent is finding free GPUs.
@@ -1218,8 +1268,7 @@ if __name__ == "__main__":
         print(meta_str)
     
     if Utils.is_cc():
-        accounts = Utils.cluster2info[Utils.get_cluster_type()].accounts
-        account2lfs = {a: account_to_levelfs_record(a) for a in accounts} # This is a record with saving
+        account2lfs = account2lfs_future.result() # This is a record with saving
         account2lfs_str = {a: {k: f"{l:.2f}" if isinstance(l, float) else str(l) for k,l in lfs.items()} for a,lfs in account2lfs.items() if not lfs["group"] is None}
         level_fs_strs = [f"{a}={lfs['group']:} (user={lfs['user']})" for a,lfs in account2lfs_str.items()]
         level_fs_str = "\t| LevelFS:\t\t" + "\t".join(level_fs_strs)
@@ -1230,9 +1279,9 @@ if __name__ == "__main__":
         meta_str2 = ""    
     
     if Utils.is_apex_cluster():
-        meta_str2 = subprocess.getoutput("python ~/.ScriptsAndAliases/FindFreeGPUs.py")
+        meta_str2 = free_resources_future.result()
     else:
-        meta_str2 += "\t| " + ClusterInfo2.get_str(printable_free_nodes=args.printable_free_nodes)
+        meta_str2 += free_resources_future.result()
     # meta_str2 +=  "\t| " + ClusterInfo.get_resource_info_summary()
     if args.verbose:
         print(meta_str2)
