@@ -379,7 +379,7 @@ Run by cron (`crontab`).
   `bin/reserve.sh` is the reservation job itself: a CUDA context and a 16 MiB allocation on its
   GPU, through libcuda with the system python, so the GPU looks occupied outside SLURM too.
 - `bin/BlockGPUsManually` (by hand): makes sure given GPUs each have a running manual blocker,
-  `<machine>_blocker_manual_<N>`, in the `block-manual` partition (same tier as `block`),
+  `<machine>_blocker_manual_<N>`, in the `block-manual` partition (top tier: preempts all but blockers),
   submitting it (singleton, comment = its name) or releasing it if held.
 - `bin/preempt` (by hand): `scontrol requeue` (or `requeuehold` with `--hold`) for running batch
   jobs, refusing blockers and jobs that can't be requeued; logs to `var/log/preempt.log`.

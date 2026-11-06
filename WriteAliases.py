@@ -4,6 +4,8 @@ import argparse
 import os.path as osp
 import re
 
+import Utils
+
 start_str = """
 # .bashrc
 
@@ -176,6 +178,12 @@ aliases = [
 
     "# END USEFUL ML ALIASES"]
 
+
+# APEX cluster only: manual GPU blockers (SLURM/README.md, "Blocking GPUs by hand"), next to the
+# workstation SLURM line
+if Utils.is_apex_cluster():
+    aliases.insert(aliases.index(next(a for a in aliases if "SLURM/env.sh" in a)) + 1,
+        "alias block_gpus=\"~/.ScriptsAndAliases/SLURM/bin/BlockGPUsManually \"")
 
 def alias_to_name(alias): return alias.split("=")[0].strip()
 

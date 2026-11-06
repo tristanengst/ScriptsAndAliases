@@ -53,15 +53,16 @@ DebugFlags=NO_CONF_HASH           # rendered configs differ per node (paths)
 # which can't be requeued, are cancelled). So urgent jobs preempt gpu jobs, and every job preempts
 # reservations; blockers share gpu's tier, so they preempt only reservations, and they can't be
 # preempted. They go first among waiting jobs through the priority blocker_cron gives them on
-# release, not their tier.
+# release, not their tier. Manual blockers are the top tier: they go before every waiting job and
+# preempt every job but blockers (urgent ones too; nothing else is above urgent), and can't be
+# preempted.
 PreemptType=preempt/partition_prio
 PreemptMode=REQUEUE
 PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
 PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
-# Manual blockers (bin/BlockGPUsManually): same tier and preemption as block, but submitted, held
-# and released by hand.
-PartitionName=block-manual Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
-PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE
+# Manual blockers (bin/BlockGPUsManually): submitted, held and released by hand.
+PartitionName=block-manual Nodes=ALL PriorityTier=3 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
+PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=REQUEUE MaxTime=INFINITE
 # Reservations (bin/reservenode): placeholders that make idle GPUs look occupied. Below every other
 # job, and preempted (requeued) by any of them, blockers included, so they only ever hold GPUs
 # nothing else wants; a preempted one waits to take its GPU again.

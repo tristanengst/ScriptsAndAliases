@@ -41,7 +41,9 @@ for n in "${nodes[@]}"; do
                 -o /dev/null -e /dev/null --wrap 'exec sleep infinity') \
                 && echo "$name: submitted ($jobid)" || rc=1
         elif [ "$state" = PENDING ] && [ "$prio" = 0 ]; then   # held (--hold or requeuehold)
-            scontrol release "$jobid" && echo "$name: released ($jobid)" || rc=1
+            # Start now, not after a requeue's ~2 min BeginTime.
+            scontrol release "$jobid" && scontrol update jobid="$jobid" StartTime=now \
+                && echo "$name: released ($jobid)" || rc=1
         else
             echo "$name: already $state ($jobid)"
         fi
