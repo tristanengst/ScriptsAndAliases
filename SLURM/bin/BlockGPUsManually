@@ -4,9 +4,9 @@
 # A99_blocker_manual_1), one job per GPU, in the block-manual partition: submits it if there's
 # none, and releases it if it's held. Nothing else releases or holds them: give a GPU back with
 # scontrol requeuehold JOBID (rerun this to block it again), or scancel -n NAME. Each job's
-# comment is its name. NODE: machine names (A99) or hostnames, default every node with GPUs in
-# SLURM. IDX: nvidia-smi indices, default every GPU each NODE gives SLURM. Lists may be space or
-# comma separated. --no-singleton: don't submit with --dependency=singleton.
+# comment is its name. NODE: machine names (A99) or hostnames, default this machine only. IDX:
+# nvidia-smi indices, default every GPU each NODE gives SLURM. Lists may be space or comma
+# separated. --no-singleton: don't submit with --dependency=singleton.
 source "$(dirname "$0")/../env.sh"
 nodes=() idxs=() singleton=--dependency=singleton
 while [ $# -gt 0 ]; do
@@ -19,7 +19,7 @@ while [ $# -gt 0 ]; do
 done
 gres=$SLURM_HOME/etc/gres.conf   # lists every node's GPUs
 gpus_of() { awk -v n="$1" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$gres"; }
-[ ${#nodes[@]} -gt 0 ] || nodes=($(awk '/Type=g[0-9]+/ { sub(/^NodeName=/, "", $1); print $1 }' "$gres" | sort -u))
+[ ${#nodes[@]} -gt 0 ] || nodes=($(hostname -s))
 rc=0
 for n in "${nodes[@]}"; do
     node=$(machine_host "$n")
