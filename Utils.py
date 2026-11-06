@@ -122,7 +122,7 @@ def expand_jobid(s):
     return [f"{base}_{t}" for t in tasks]
 
 def get_slurm_status(cur_user=False, account=None, verbose=False,
-    keys=["jobid", "user", "state", "start_time", "time_left", "time_limit", "gres",
+    keys=["jobid", "user", "state", "start_time", "time_left", "elapsed", "time_limit", "gres",
         "nodes", "name", "reason", "account", "partition", "host", "exclude",
         "comment", "submit_time", "eligible_time", "stderr", "stdout", "uid",
         "partition", "dependency", "tres_per_task", "tres_per_node", "tres_per_job", "num_tasks", "script", "workdir"],
@@ -191,6 +191,7 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
         state=f"%T",
         start_time=f"%S",
         time_left=f"%L",
+        elapsed=f"%M", # time used so far
         time_limit=f"%l",
         gres=f"%b",
         nodes=f"%D",

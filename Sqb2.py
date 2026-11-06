@@ -43,7 +43,7 @@ def colorize_submit_times(job_infos):
         num_colors=len(cutoff_values)+1)
 
     def colorize_submit_time(ji):
-        if ji.time_left is None or not any([vc.isdigit() for vc in ji.submit_time]):
+        if getattr(ji, "time_left", None) is None or not any([vc.isdigit() for vc in ji.submit_time]):
             return ji
         else:
             time_ago = UtilsBase.hours_since_time(ji.submit_time)
@@ -266,7 +266,7 @@ def job_datas_with_to_prints(*, job_datas, col2max_chars):
     should be printed to the terminal added for each job data.
     """
     try:
-        all_time_left_prefixed_zero = all([jd.time_left.startswith("0") or jd.time_left == "time_left" for jd in job_datas])
+        all_time_left_prefixed_zero = "time_left" in col2max_chars and all([jd.time_left.startswith("0") or jd.time_left == "time_left" for jd in job_datas])
         if all_time_left_prefixed_zero:
             for jd in job_datas:
                 jd.time_left = jd.time_left[1:] if jd.time_left.startswith("0") else jd.time_left
@@ -741,7 +741,7 @@ def job_info_with_workdir(jd, mode="short"):
 def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     submit_time=False, eligible_time=False, time_limit=False, queue=False, checkpoint=False,
     excluded=False, heartbeat=False, heartbeat_analysis=False, output_files=None,
-    partition=False, workdir=False,
+    partition=False, workdir=False, time_left=True, elapsed=False,
     verbose=False):
     """Returns a (job2info, col_names) tuple where job2info is a dictionary mapping
     job IDs to info about their SLURM whatnot, and col_names is a list of column names
@@ -764,6 +764,9 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     workdir     -- False, 'short', or 'full'. If not False, include the job's
                    working directory as the far-right column ('short' shows just
                    the basename, 'full' shows the path relative to $HOME)
+    time_left   -- if True, include the time left for all jobs
+    elapsed     -- if True, include the time elapsed for all jobs (in the same
+                   position as the time left, just before it if both are shown)
     """
     job2info = Utils.get_slurm_status(cur_user=cur_user, account=account, verbose=(verbose > 1))
 
@@ -789,6 +792,8 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
     job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_date_time(info, key="start_time", tz=args.tz) for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_time_delta(info, key="time_left") for j,info in job2info.items()}
+    if elapsed:
+        job2info = {j: job_info_with_formatted_time_delta(info, key="elapsed") for j,info in job2info.items()}
     job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
     job2info = {j: job_info_without_preempt_me_name(info) for j,info in job2info.items()}
 
@@ -813,7 +818,10 @@ def jobs_data(*, account=None, cur_user=False, next_chunks=False, nodes=False,
         "start_time",
         "time_limit" if time_limit else None,
         "heartbeat" if heartbeat else None,
-        "gpus", "name", "time_left", "reason",
+        "gpus", "name",
+        "elapsed" if elapsed else None,
+        "time_left" if time_left else None,
+        "reason",
         "workdir" if workdir else None,]
     col_names = [c for c in col_names if not c is None]        
     
@@ -1055,7 +1063,18 @@ if __name__ == "__main__":
 
     P.add_argument("--usage", default=False, action="store_true",
         help="Show the cluster usage commitment string")
+    P.add_argument("--time_left", "--tl", action="store_true", dest="time_left", default=None,
+        help="Show the time left for each job. Default: on except on APEX")
+    P.add_argument("--no_time_left", "--notl", action="store_false", dest="time_left",
+        help="Don't show the time left for each job")
+    P.add_argument("--elapsed", "--el", action="store_true", dest="elapsed", default=None,
+        help="Show the time elapsed for each job. Default: on only on APEX")
+    P.add_argument("--no_elapsed", "--noel", action="store_false", dest="elapsed",
+        help="Don't show the time elapsed for each job")
     args = P.parse_args()
+    # On APEX there are no time limits, so the time elapsed is more useful than the time left
+    args.time_left = (not Utils.is_apex_cluster()) if args.time_left is None else args.time_left
+    args.elapsed = Utils.is_apex_cluster() if args.elapsed is None else args.elapsed
 
 
     if Utils.is_solar():
@@ -1071,6 +1090,8 @@ if __name__ == "__main__":
             checkpoint=args.checkpoint,
             partition=args.partition,
             workdir=args.workdir,
+            time_left=args.time_left,
+            elapsed=args.elapsed,
             verbose=args.verbose)
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
     elif Utils.is_cc():
@@ -1089,6 +1110,8 @@ if __name__ == "__main__":
                 checkpoint=args.checkpoint,
                 partition=args.partition,
                 workdir=args.workdir,
+                time_left=args.time_left,
+                elapsed=args.elapsed,
                 verbose=args.verbose)
             if len(job_datas_account) > 0:
                 colnames_job_data = argparse.Namespace(**{c: f"__account {account}" if c == "jobid" else c for c in colnames})
@@ -1108,6 +1131,8 @@ if __name__ == "__main__":
             checkpoint=args.checkpoint,
             partition=args.partition,
             workdir=args.workdir,
+            time_left=args.time_left,
+            elapsed=args.elapsed,
             verbose=args.verbose)
         job_datas = job_datas if args.blockers else [jd for jd in job_datas if not jd.name.startswith("blocking_job_")]
         job_datas = [argparse.Namespace(**dict(zip(colnames, colnames)))] + job_datas
