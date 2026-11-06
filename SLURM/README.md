@@ -9,7 +9,7 @@ Stock SLURM (25.11.8) across the lab workstations, replacing SemiSLURM. Commands
 - **Getting the better-SLURM commands:** new shells have them where SLURM is installed (`~/.bashrc`, through `WriteAliases.py`, which skips this if another SLURM is already on PATH). Otherwise: `source ~/.ScriptsAndAliases/SLURM/env.sh`.
 - **Homes aren't shared,** and are at different paths on different machines; only `/NAS` is shared. In a job, `$HOME` is the home of the machine running it.
 - **Users are their user names, not uids.** The same user has different uids on different machines; SLURM here is patched to match users by name (`Setup.md`, "Users and uids"). Use names, never uid numbers: a uid SLURM shows (eg. `scontrol show job`'s `UserId=`) may be another machine's. `squeue -s -u` only works on the controller's machine.
-- **GPUs are shared with people who don't use SLURM.** An external, per-node cron job manages a blocker job for each GPU on a system, named `blocking_job_MACHINE_GPU_INDEX` (eg. `blocking_job_A99_1`; machine names as in `Private/MachineHostnames.py`). Released blockers go ahead of every waiting `gpu` job, but never preempt running jobs (see "Partitions and preemption"). They allocate GPUs in SLURM, but do not actually use them in any way. When the cron job detects a GPU is used outside of SLURM, it releases the corresponding blocker job. The corresponding blocker job ends and requeues itself when it detects its GPU isn't in use. The external cron job is at `~/.ScriptsAndAliases/SLURM/bin/blocker_cron` (run every 30 s; the crontab lines are in `SLURM/crontab`) and the script for the blocking jobs is at `~/.ScriptsAndAliases/SLURM/bin/blocker.sh`. Both use `SLURM/bin/gpu_busy_outside` to tell whether a GPU is in use outside SLURM. A GPU that `ffg` shows as an error (eg. uncorrected ECC errors) counts as in use, so it stays blocked.
+- **GPUs are shared with people who don't use SLURM.** An external, per-node cron job manages a blocker job for each GPU on a system, named `MACHINE_blocker_GPU_INDEX` (eg. `A99_blocker_1`; machine names as in `Private/MachineHostnames.py`). Released blockers go ahead of every waiting `gpu` job, but never preempt running jobs (see "Partitions and preemption"). They allocate GPUs in SLURM, but do not actually use them in any way. When the cron job detects a GPU is used outside of SLURM, it releases the corresponding blocker job. The corresponding blocker job ends and requeues itself when it detects its GPU isn't in use. The external cron job is at `~/.ScriptsAndAliases/SLURM/bin/blocker_cron` (run every 30 s; the crontab lines are in `SLURM/crontab`) and the script for the blocking jobs is at `~/.ScriptsAndAliases/SLURM/bin/blocker.sh`. Both use `SLURM/bin/gpu_busy_outside` to tell whether a GPU is in use outside SLURM. A GPU that `ffg` shows as an error (eg. uncorrected ECC errors) counts as in use, so it stays blocked.
 
 A job that starts on a GPU someone grabbed since the last check is requeued before its script runs (`srun`/`salloc` jobs are cancelled instead).
 
@@ -41,8 +41,38 @@ Relative `-o`/`-e` paths are relative to that directory, and written on the mach
 - **Interactive `srun`/`salloc` only works between machines the network connects:** not from a workstation onto S1–S3 or V21 (it hangs), since the network blocks those for SLURM (`Setup.md`, "Tunnels"). Use `sbatch` for those machines; `srun` inside a batch job works everywhere.
 - **Requeued jobs** wait ~2 minutes before they can start again (SLURM's behaviour).
 - **Reserving GPUs:** `reservenode [--node NODE] [--gpus IDX...]` (`SLURM/bin/reservenode`) submits one job per GPU, `reserve_MACHINE_IDX` (eg. `reserve_A99_1`), each holding that GPU by itself, like a blocker. NODE is a machine name (`A99`) or hostname, by default this machine; IDXs are nvidia-smi indices, by default all of NODE's GPUs in SLURM. They're placeholders that make idle GPUs look occupied, in SLURM and outside it: each holds a small CUDA allocation on its GPU (`SLURM/bin/reserve.sh`, 16 MiB plus the CUDA context), so `nvidia-smi` and `ffg` show it in use. They're in the hidden `reserve` partition, below every other job, and any other job (blockers too) preempts them, so they never keep a GPU from a job that wants it. Each GPU is taken independently of the others as soon as it's free; a preempted reservation is requeued and takes its GPU back once it's free again. Cancel with `scancel -n reserve_A99_1`, or `scancel -p reserve` for all.
+- **Blocking GPUs by hand:** `BlockGPUsManually [--nodes NODE...] [--gpus IDX...]` (`SLURM/bin/BlockGPUsManually`) makes sure each GPU has a running manual blocker, `MACHINE_blocker_manual_GPU_INDEX` (eg. `A99_blocker_manual_1`), one job per GPU: it submits it if there is none and releases it if it's held. NODEs are machine names or hostnames, by default every machine; IDXs are nvidia-smi indices, by default all of each machine's GPUs in SLURM. They're in the hidden `block-manual` partition, which ranks like `block`, but only you hold and release them: `scontrol requeuehold JOBID` gives a GPU back, and rerunning `BlockGPUsManually` blocks it again (`scancel -n NAME` removes it). Each job's comment is its name, and they're submitted `--dependency=singleton` unless `--no-singleton`.
 - **Preempting a job by hand:** `preempt JOBID...` (`SLURM/bin/preempt`) stops a running batch job and puts it back in the queue instead of cancelling it: it gets SIGTERM, then SIGKILL 30 s later, and is `PENDING` again, rerunning its script from the start once resources are free. Because of the ~2 minute requeue delay, jobs already waiting for its GPUs get them first. `preempt --hold JOBID` keeps it pending until `scontrol release JOBID`. So jobs that may be preempted should save checkpoints and resume from them. `srun`/`salloc` jobs and `sbatch --no-requeue` jobs can't be requeued (use `scancel`), and blockers are refused. Logged in `~/.local/slurm/var/log/preempt.log` on the machine it was run from.
 - **No `sacct`** (no accounting database). Instead, on the controller, every job has a record in `~/.local/slurm/var/log/jobs/<JobID>_<JobName>`: what was submitted, its latest state (eg. `COMPLETED`, `FAILED`, `CANCELLED`; `PENDING` once requeued), how many times it ran (`runs`), and its last run's start, end, nodes and exit code. `~/.local/slurm/var/log/jobcomp.txt` has a line per finished run. Eg. `grep -l state=FAILED ~/.local/slurm/var/log/jobs/*`.
+
+## Draining machines
+
+Draining stops SLURM from starting new jobs on a machine (eg. before maintenance); jobs already
+running there carry on. Plain `scontrol` does this; no root is needed, since the user running
+SLURM is its admin. Use node names as `sinfo -N` shows them.
+
+```bash
+scontrol update NodeName=NODE State=DRAIN Reason="why"   # Reason is required; NODE may be a list (a,b)
+sinfo -R                                                 # drained machines: reason, who, when
+squeue -w NODE                                           # what's still running there
+scontrol update NodeName=NODE State=RESUME               # take jobs again
+```
+
+`sinfo` shows a machine as `drng` (draining) while jobs still run on it, then `drain` once it's
+empty. There are no time limits, so it can stay draining indefinitely:
+
+- **Users' batch jobs:** let them finish, or `preempt JOBID...` to send them back to the queue to
+  rerun elsewhere (`srun`/`salloc` jobs can only be `scancel`led).
+- **Blockers:** a running blocker ends and requeues itself once its GPU is no longer used outside
+  SLURM, and can't start on the machine again until it's resumed.
+- **Reservations** (`reserve_MACHINE_IDX`) never end by themselves: `scancel -n reserve_MACHINE_IDX`.
+
+To stop everything at once, `State=DOWN Reason="why"` kills the machine's running jobs instead
+(batch jobs are requeued, others cancelled); `RESUME` undoes it too.
+
+**Machines also drain themselves** when a job's `bin/prolog` or `bin/epilog` fails (eg.
+`/tmp/$USER-home` made by someone else; `Setup.md`, "Run as part of jobs"). `sinfo -R` shows the
+reason; fix the cause, then `RESUME`.
 
 ## Choosing GPUs
 

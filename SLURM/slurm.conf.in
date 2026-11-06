@@ -58,6 +58,9 @@ PreemptType=preempt/partition_prio
 PreemptMode=REQUEUE
 PartitionName=gpu Nodes=ALL Default=YES MaxTime=INFINITE PriorityTier=1 PreemptMode=REQUEUE
 PartitionName=block Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
+# Manual blockers (bin/BlockGPUsManually): same tier and preemption as block, but submitted, held
+# and released by hand.
+PartitionName=block-manual Nodes=ALL PriorityTier=1 PreemptMode=OFF Hidden=YES MaxTime=INFINITE
 PartitionName=urgent Nodes=ALL PriorityTier=2 PreemptMode=OFF MaxTime=INFINITE
 # Reservations (bin/reservenode): placeholders that make idle GPUs look occupied. Below every other
 # job, and preempted (requeued) by any of them, blockers included, so they only ever hold GPUs

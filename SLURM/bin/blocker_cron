@@ -10,7 +10,7 @@ machine=$(machine_name "$node")   # blocker names use the machine name, eg. A99
 scontrol show node "$node" > /dev/null 2>&1 || exit 0
 idxs=$(awk -v n="$node" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$SLURM_HOME/etc/gres.conf")
 for idx in $idxs; do
-    name="blocking_job_${machine}_$idx"
+    name="${machine}_blocker_$idx"
     # If squeue fails, do nothing: an empty answer would mean "no blocker" and submit another.
     out=$(squeue -h -n "$name" -o '%i %T %Q') || continue
     read -r jobid state prio <<< "$(head -1 <<< "$out")"

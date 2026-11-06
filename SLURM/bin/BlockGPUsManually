@@ -1,0 +1,50 @@
+#!/bin/bash
+# Usage: BlockGPUsManually [--nodes NODE...] [--gpus IDX...] [--no-singleton]
+# Makes sure each given GPU has a running manual blocker, <machine>_blocker_manual_<IDX> (eg.
+# A99_blocker_manual_1), one job per GPU, in the block-manual partition: submits it if there's
+# none, and releases it if it's held. Nothing else releases or holds them: give a GPU back with
+# scontrol requeuehold JOBID (rerun this to block it again), or scancel -n NAME. Each job's
+# comment is its name. NODE: machine names (A99) or hostnames, default every node with GPUs in
+# SLURM. IDX: nvidia-smi indices, default every GPU each NODE gives SLURM. Lists may be space or
+# comma separated. --no-singleton: don't submit with --dependency=singleton.
+source "$(dirname "$0")/../env.sh"
+nodes=() idxs=() singleton=--dependency=singleton
+while [ $# -gt 0 ]; do
+    case $1 in
+        --nodes) shift; while [ $# -gt 0 ] && [[ $1 != --* ]]; do nodes+=(${1//,/ }); shift; done ;;
+        --gpus) shift; while [ $# -gt 0 ] && [[ $1 != --* ]]; do idxs+=(${1//,/ }); shift; done ;;
+        --no-singleton) singleton=; shift ;;
+        *) sed -n 's/^# \{0,1\}//; 2,9p' "$0" >&2; exit 2 ;;
+    esac
+done
+gres=$SLURM_HOME/etc/gres.conf   # lists every node's GPUs
+gpus_of() { awk -v n="$1" '$1 == "NodeName="n && /Type=g[0-9]+/ { match($0, /Type=g[0-9]+/); print substr($0, RSTART+6, RLENGTH-6) }' "$gres"; }
+[ ${#nodes[@]} -gt 0 ] || nodes=($(awk '/Type=g[0-9]+/ { sub(/^NodeName=/, "", $1); print $1 }' "$gres" | sort -u))
+rc=0
+for n in "${nodes[@]}"; do
+    node=$(machine_host "$n")
+    all=$(gpus_of "$node")
+    [ -n "$all" ] || { echo "BlockGPUsManually: $n has no GPUs in SLURM" >&2; rc=1; continue; }
+    machine=$(machine_name "$node")
+    want=("${idxs[@]}")
+    [ ${#want[@]} -gt 0 ] || want=($all)
+    for idx in "${want[@]}"; do
+        grep -qx "$idx" <<< "$all" || { echo "BlockGPUsManually: $n has no GPU $idx in SLURM" >&2; rc=1; continue; }
+        name="${machine}_blocker_manual_$idx"
+        # If squeue fails, skip: an empty answer would mean "none" and submit a second one.
+        out=$(squeue -h -n "$name" -o '%i %T %Q') || { rc=1; continue; }
+        read -r jobid state prio <<< "$(head -1 <<< "$out")"
+        if [ -z "$jobid" ]; then
+            # Runs in / (exists on every machine); it only sleeps, so there's no output to keep.
+            jobid=$(sbatch --parsable --requeue $singleton -p block-manual -w "$node" \
+                --gres="gpu:g$idx:1" -c 1 -J "$name" --comment="$name" --chdir=/ \
+                -o /dev/null -e /dev/null --wrap 'exec sleep infinity') \
+                && echo "$name: submitted ($jobid)" || rc=1
+        elif [ "$state" = PENDING ] && [ "$prio" = 0 ]; then   # held (--hold or requeuehold)
+            scontrol release "$jobid" && echo "$name: released ($jobid)" || rc=1
+        else
+            echo "$name: already $state ($jobid)"
+        fi
+    done
+done
+exit $rc
