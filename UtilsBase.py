@@ -190,7 +190,17 @@ def path_from_home(f):
     abspath = osp.abspath(osp.expanduser(f))
     home = osp.abspath(osp.expanduser("~"))
     return f"~/{abspath[len(home)+1:]}"
-    
+
+def safe_mtime(f):
+    """Returns the modification time of [f], or None if it can't be stat'd. Useful
+    when [f] can vanish or be unreadable between listing and stat-ing it (eg. a
+    mid-save rename, or a stale entry on a network filesystem).
+    """
+    try:
+        return osp.getmtime(f)
+    except OSError:
+        return None
+
 ######################################################################################
 ######################################################################################
 ######################################################################################
