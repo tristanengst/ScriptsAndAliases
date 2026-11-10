@@ -465,6 +465,7 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
 
     if gres_gpu == "N/A":
         gpus = "N/A"
+        rgus = "N/A"
     else:
         gpus = gres_gpu.replace("gres/gpu:", "").replace("gres:gpu:", "").replace("gpu:", "").split(":")
         gpus = UtilsBase.flatten([g.split(",") for g in gpus])
@@ -500,10 +501,11 @@ def job_info_with_formatted_resources(jd, num_nodes=1):
         else:
             raise NotImplementedError(f"Unexpected gres_gpu={gres_gpu} parsed as gpus={gpus} for jobid={jd.jobid}. Job data was {jd}")
         
+        rgus = MachineInfo.gpu2info[gpu_alias].rgus_per_gpu * num_gpus * int(multiplier)
         num_gpus = MachineInfo.gpu2info[gpu_alias].gpu_frac * num_gpus
         gpus =  f"{num_gpus * int(multiplier)}"
 
-    return UtilsBase.updated_namespace(jd, gpus=gpus)
+    return UtilsBase.updated_namespace(jd, gpus=gpus, rgus=rgus)
 
 def job_info_with_formatted_reason(jd):
     """Returns job info [jd] with the reason formatted."""
@@ -898,41 +900,55 @@ def get_cluster_usage_str(job_infos=None, cur_user=False):
     
     """
     if job_infos is None or cur_user:
-        job2info = Utils.get_slurm_status(cur_user=False, account=None, keys=["jobid", "user", "state", "nodes", "gres", "reason"])
-        job2info = {j: job_info_with_formatted_resources(info) for j,info in job2info.items()}
-        job2info = {j: job_info_with_formatted_reason(info) for j,info in job2info.items()}
-        job_infos = list(job2info.values())
-    
-    gpu_data = argparse.Namespace(running=0, allocated=0, depends=0, running_user=0, allocated_user=0, depends_user=0)
-    for ji in job_infos:
-        if (ji.jobid.startswith("__")
-            or not UtilsBase.is_numeric(ji.gpus)
-            or any([ji.reason.startswith(r) for r in ["Dependency", "JobHeld"]])):
-            continue
+        job2info = Utils.get_slurm_status(cur_user=False, account=None)
+        job_infos = [job_info_with_formatted_reason(job_info_with_formatted_resources(ji)) for ji in job2info.values()]
+    job_infos = [ji for ji in job_infos if not ji.jobid.startswith("__") and UtilsBase.is_numeric(ji.gpus)]
+    user = os.environ["USER"]
 
-        if ji.jobid == "3427149":
-            print(ji)
-        
-        num_gpus = float(ji.gpus)
-        if ji.state in ["RUNNING", "COMPLETING"]:
-            gpu_data.running += num_gpus
-            gpu_data.running_user += num_gpus if ji.user == os.environ["USER"] else 0
-        elif ji.state in ["PENDING"] and ji.dependency.startswith("after"):
-            gpu_data.depends += num_gpus
-            gpu_data.depends_user += num_gpus if ji.user == os.environ["USER"] else 0
-        # Note: presently I don't account for singleton dependencies. We can if this becomes a use case.
-        elif ji.state in ["PENDING"]:
-            gpu_data.allocated += num_gpus
-            gpu_data.allocated_user += num_gpus if ji.user == os.environ["USER"] else 0
-        else:
-            twrite(f"[WARNING] write_cluster_allocated_data(): jobid={ji.jobid} has unexpected state={ji.state}. Skipping.")
-            continue
-    gpu_data.total = gpu_data.running + gpu_data.allocated
-    gpu_data.total_user = gpu_data.running_user + gpu_data.allocated_user
-    
-    s = f"GPUS:\t\t\t{os.environ['USER']}=(run={gpu_data.running_user} alloc={gpu_data.allocated_user} total={gpu_data.total_user})"
-    s += f"\tall=(run={gpu_data.running} alloc={gpu_data.allocated} total={gpu_data.total} (depends={gpu_data.depends}))" 
+    for ji in job_infos:
+        if not ji.state in ["RUNNING", "COMPLETING", "PENDING"]:
+            twrite(f"[WARNING] get_cluster_usage_str(): jobid={ji.jobid} has unexpected state={ji.state}. Skipping.")
+
+    run = sum(float(ji.gpus) for ji in job_infos if ji.state in ["RUNNING", "COMPLETING"] and not ji.reason.startswith(("Dependency", "JobHeld")))
+    run_user = sum(float(ji.gpus) for ji in job_infos if ji.state in ["RUNNING", "COMPLETING"] and not ji.reason.startswith(("Dependency", "JobHeld")) and ji.user == user)
+    alloc = sum(float(ji.gpus) for ji in job_infos if ji.state == "PENDING" and not ji.dependency.startswith("after") and not ji.reason.startswith(("Dependency", "JobHeld")))
+    alloc_user = sum(float(ji.gpus) for ji in job_infos if ji.state == "PENDING" and not ji.dependency.startswith("after") and not ji.reason.startswith(("Dependency", "JobHeld")) and ji.user == user)
+    depends = sum(float(ji.gpus) for ji in job_infos if ji.state == "PENDING" and ji.dependency.startswith("after") and not ji.reason.startswith(("Dependency", "JobHeld")))
+
+    # Eligible jobs are pending ones SLURM could start now. Among singleton jobs with
+    # the same user and name, only one is eligible, and none if one of them is running.
+    running_names = {(ji.user, ji.name) for ji in job_infos if ji.state in ["RUNNING", "COMPLETING"]}
+    pending = [ji for ji in job_infos if ji.state == "PENDING"
+        and not ji.dependency.startswith("after")
+        and not ji.reason.startswith(("JobHeld", "JobArrayTaskLimit", "BeginTime"))]
+    singletons = {(ji.user, ji.name): ji for ji in pending
+        if ji.dependency.startswith("singleton") and not (ji.user, ji.name) in running_names}
+    eligible = list(singletons.values()) + [ji for ji in pending
+        if not ji.dependency.startswith("singleton") and not ji.reason.startswith("Dependency")]
+    eligible_rgu_days = sum(job_info_to_rgu_days(ji) for ji in eligible)
+    eligible_rgu_days_user = sum(job_info_to_rgu_days(ji) for ji in eligible if ji.user == user)
+
+    target = UserConfig.target_eligible_rgu_days
+    s = f"GPUS:\t\t\t{user}=(run={run_user} alloc={alloc_user} total={run_user + alloc_user} eligible={format_eligible_rgu_days(eligible_rgu_days_user, target=target / 3)})"
+    s += f"\tall=(run={run} alloc={alloc} total={run + alloc} (depends={depends}) eligible={format_eligible_rgu_days(eligible_rgu_days, target=target)})"
     return s
+
+def job_info_to_rgu_days(ji):
+    """Returns the RGU-days job info [ji] would use running to its time limit."""
+    if not UtilsBase.is_numeric(ji.rgus) or not ji.time_limit.strip()[:1].isdigit():
+        return 0
+    return ji.rgus * UtilsBase.time_to_seconds(ji.time_limit) / (60 * 60 * 24)
+
+def format_eligible_rgu_days(rgu_days, target):
+    """Returns 'rgu_days/target' colored red/orange/yellow/green with cutoffs
+    300/420/540 for the group target, scaled proportionally for other targets.
+    """
+    scale = target / UserConfig.target_eligible_rgu_days
+    color = ("red" if rgu_days < 300 * scale
+        else "orange" if rgu_days < 420 * scale
+        else "yellow" if rgu_days < 540 * scale
+        else "green")
+    return colorize(f"{rgu_days:.1f}/{target:.4g}", color=color)
 
 def count_jobs_by_state(job_infos):
     """Returns a Namespace giving the number of the current user's jobs in particular

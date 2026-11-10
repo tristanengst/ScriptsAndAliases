@@ -108,6 +108,10 @@ checkpoint_prefixes = ["fn", "probe_pretep", ""]
 # the number of values in each probably shouldn't be changed.
 ######################################################################################
 
+# Target RGU-days of eligible (pending, not held by a dependency) jobs for the group.
+# Shown in sqb's GPUS line; the per-user target is this divided by 3
+target_eligible_rgu_days = 420
+
 # 10 values. Colorizes TIME_LEFT column red-to-green depending on how many HOURS there
 # is left for a job to run
 colorize_time_lefts_cutoffs = [0.25, 0.5, 1, 2, 3, 5, 7, 12, 24, 48] # In HOURS
