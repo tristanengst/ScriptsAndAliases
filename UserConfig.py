@@ -44,7 +44,8 @@ checkpoints_search_dirs = ["~/scratch/IMLE-SSL/models_imle",
     # "~/scratch/openPiMLE/exps",
     # "~/scratch/LeRobot/exps",
     "~/Development/NewMetric/generated_images",
-    "~/scratch/BettercIMLE"]
+    "~/scratch/BettercIMLE",
+    "~/scratch/BettercIMLE/evals_pusht"]
 job_result_search_dirs = [
     "~/Development/IMLE-SSL-2/pretrain_results",
     "~/Development/IMLE-SSL-2/job_results",
