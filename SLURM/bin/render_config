@@ -15,12 +15,17 @@ shopt -s nullglob
 # is reached through the ssh tunnel it keeps to the controller (bin/start_daemons):
 # NodeAddr=127.0.0.1 Port=<its tunnel port>.
 node_lines() {
-    local ctld f line port
+    local ctld f line port addr
     ctld=$(sed -n 's/^SlurmctldHost=\([^( #]*\).*/\1/p' "$priv/slurm.conf")
     for f in "$priv"/nodes/*.conf; do
         line=$(sed -n 's/^slurm: *//p' "$f")
         port=$(tunnel_port "$(basename "$f" .conf)" "$f")
-        [ -n "$port" ] && [ "$(hostname -s)" = "$ctld" ] && line="$line NodeAddr=127.0.0.1 Port=$port"
+        if [ -n "$port" ] && [ "$(hostname -s)" = "$ctld" ]; then
+            line="$line NodeAddr=127.0.0.1 Port=$port"
+        else
+            addr=$(node_addr "$(basename "$f" .conf)")
+            [ -n "$addr" ] && line="$line NodeAddr=$addr"
+        fi
         printf '%s\n' "$line"
     done
 }
@@ -47,7 +52,10 @@ add_weights() {
 }
 while IFS= read -r line; do
     case $line in
-        @PRIVATE@) grep -v '^#' "$priv/slurm.conf" ;;
+        # SlurmctldHost=NAME(ADDR) where the controller has an address (node_addr in env.sh)
+        @PRIVATE@) ctld_addr=$(node_addr "$(sed -n 's/^SlurmctldHost=\([^( #]*\).*/\1/p' "$priv/slurm.conf")")
+                   grep -v '^#' "$priv/slurm.conf" | if [ -n "$ctld_addr" ]; then
+                       sed "s/^\(SlurmctldHost=[^( #]*\)[^ #]*/\1($ctld_addr)/"; else cat; fi ;;
         @NODES@) node_lines | rename_features | add_weights ;;
         *) printf '%s\n' "$line" ;;
     esac

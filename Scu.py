@@ -122,7 +122,11 @@ def job_info_to_time_limit_full_node(job_info):
 # 	return UtilsBase.updated_namespace(args, partition=partitions)
 
 def args_to_scontrol_prefix(args):
-	if args.hold:
+	if args.requeuehold:
+		return "requeuehold"
+	elif args.requeue:
+		return "requeue"
+	elif args.hold:
 		return "hold"
 	elif args.release:
 		return "release"
@@ -142,7 +146,7 @@ def args_to_scontrol_update_dict(args):
 		else:
 			return update.capitalize()
 
-	kv_scontrol_updates = ["dependency", "account", "partition", "time", "added_partitions"]
+	kv_scontrol_updates = ["dependency", "account", "partition", "time", "added_partitions", "nice"]
 	update2update_str = dict(time="TimeLimit")
 
 	args_update2value = {k: v for k,v in vars(args).items() if k in kv_scontrol_updates and not v is None}
@@ -157,10 +161,18 @@ def update_job(*, job_info, args, verbose=True):
 	if "TimeLimit" in update2value and not job_info.state == "PENDING" and not args.force:
 		twrite(f"[WARNING] Job {job_info.jobid} is not pending, cannot change TimeLimit. Use --force to override.")
 		return
-	elif cmd_prefix == "hold" and job_info.state in ["RUNNING"] and not args.force:
-		# I actually don't recall the exact semantics of holding running jobs, so this feels safer
-		twrite(f"[WARNING] Job {job_info.jobid} is not running, cannot hold. Use --force to override.")
-		return
+	elif cmd_prefix == "hold" and job_info.state in ["RUNNING"]:
+		# Holding only affects pending jobs, so for a running one the useful meaning is
+		# to stop it and hold it in the queue: requeuehold. That kills the running job,
+		# so ask first.
+		try:
+			answer = input(f"Job {job_info.jobid} ({job_info.name}) is RUNNING. --requeuehold it? [y/N] ")
+		except EOFError:
+			answer = ""
+		if not answer.strip().lower() in ["y", "yes"]:
+			twrite(f"[INFO] Not holding job {job_info.jobid}")
+			return
+		cmd_prefix = "requeuehold"
 
 	# If updating a time limit, then optionally also update the partition to match.
 	# This means that partitions should be specified specifically with the intent of
@@ -225,10 +237,10 @@ def update_job(*, job_info, args, verbose=True):
 	# 	twrite(match_partition_to_time=args.match_partition_to_time, interac=args.interac, time=args.time, update2value=update2value, verbose=verbose)
 
 
-	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit"]
+	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit", "Nice"]
 	cmd_suffix = " ".join([f"{u}={v}" for u,v in update2value.items() if u in valid_suffixs])
 
-	# `scontrol hold`/`release` take a bare job ID, but `scontrol update` needs the
+	# `scontrol hold`/`release`/`requeue`/`requeuehold` take a bare job ID, but `scontrol update` needs the
 	# `JobId=` form -- given a bare ID it silently ignores it and the update is a
 	# no-op (exit 0, no output).
 	if cmd_prefix == "update job":
@@ -269,6 +281,10 @@ if __name__ == "__main__":
 		help="Hold the specified jobs")
 	P.add_argument("--release", action="store_true",
 		help="Release the specified jobs")
+	P.add_argument("--requeue", action="store_true",
+		help="Requeue the specified jobs: stop running ones and put them back in the queue")
+	P.add_argument("--requeuehold", action="store_true",
+		help="Requeue the specified jobs held: stop running ones and hold them in the queue until released")
 	P.add_argument("--dependency", default=None,
 		help="Update jobs to new dependency, in format like 'afterok:12345'")
 	P.add_argument("--account", default=None,
@@ -279,6 +295,8 @@ if __name__ == "__main__":
 		help="Add this comma-separated list of partitions")
 	P.add_argument("--time", default=None,
 		help="Update jobs to new time limit, in format HH:MM:SS")
+	P.add_argument("--nice", type=int, default=None,
+		help="Update jobs to new nice value: higher lowers their priority, negative raises it (needs SLURM operator rights)")
 
 	# Configuration options for how SCU should behave
 	P.add_argument("--match_partition_to_time", type=UtilsBase.truthy_type, default=True,
@@ -295,6 +313,9 @@ if __name__ == "__main__":
 		args.hold = True
 	if len(args.jobs) >= 2 and args.jobs[0] == "release" and not args.hold:
 		args.release = True
+	if sum([args.hold, args.release, args.requeue, args.requeuehold]) > 1:
+		twrite(f"[WARNING] Give at most one of --hold, --release, --requeue, --requeuehold")
+		sys.exit(1)
 	if len(args.jobs) >= 2 and any([args.jobs[0].startswith(k) for k in ["TimeLimit=", "Account=", "Partition=", "Dependency="]]):
 		num_removed_args = 0
 		for j in args.jobs:

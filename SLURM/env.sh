@@ -32,6 +32,19 @@ tunnel_port() {
     fi
     echo "$p"
 }
+# node_addr NODE: the address to reach NODE (a short hostname, as in slurm.conf) by, or nothing to
+# use the name itself (Setup.md, "Addresses"). addr=IP in NODE's node file, for machines without a
+# DNS record, everywhere; otherwise, only where NODE doesn't resolve here (eg. a search domain
+# other than the lab's), its full name from ../Private/MachineHostnames.py if that resolves.
+node_addr() {
+    local a
+    a=$(sed -n 's/^addr= *\([^ #]*\).*/\1/p' "$SLURM_PRIVATE_DIR/nodes/$1.conf" 2>/dev/null)
+    if [ -z "$a" ] && ! getent ahostsv4 "$1" > /dev/null; then
+        a=$(sed -n "s/^ *[A-Za-z0-9_]* *= *\"\($1\.[^\"]*\)\".*/\1/p" "$SLURM_PRIVATE_DIR/../MachineHostnames.py" 2>/dev/null | head -1)
+        [ -n "$a" ] && getent ahostsv4 "$a" > /dev/null || a=
+    fi
+    echo "$a"
+}
 # machine_name HOST: HOST's machine name (eg. cs-apex-99s -> A99), its first key in
 # ../Private/MachineHostnames.py, or HOST if it has none. machine_host NAME: the reverse (eg. A99 ->
 # cs-apex-99s), or NAME if it isn't a machine name.

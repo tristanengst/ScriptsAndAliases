@@ -68,7 +68,8 @@ the new controller's `~/.local/slurm/var/state/`.
 2. **On NODE:** `~/.ScriptsAndAliases/SLURM/bin/setup_node --gpus all` (or `none`, or the
    nvidia-smi indices SLURM gets, eg. `--gpus 0,2`; the rest stay outside SLURM). Add `--tunnel`
    if the controller can't reach NODE directly (today: S1–S3, V21; see "Tunnels"), after
-   `ssh-copy-id` from NODE to the controller. It:
+   `ssh-copy-id` from NODE to the controller. Add `--addr IP` if NODE has no DNS record
+   (`getent hosts NODE.<domain>` fails on another machine; today: A1, A6; see "Addresses"). It:
    - checks the clock, crontab, that the ports are free and that the controller resolves;
    - opens SLURM's ports in `ufw` (with `sudo`) to the lab's machines (`MachineHostnames.py`);
    - builds SLURM if the installed build isn't `build.sh`'s (~5 min);
@@ -93,7 +94,7 @@ the new controller's `~/.local/slurm/var/state/`.
    - `cd /NAS/$USER; srun -w NODE --gpus-per-node=1 bash -c 'echo $CUDA_VISIBLE_DEVICES; nvidia-smi -L'`:
      a GPU UUID of one of the GPUs given to SLURM.
    - `sbatch` from NODE to the controller and back (`-w`).
-   - `squeue -n blocking_job_MACHINE_0` (etc.; MACHINE is its name in `Private/MachineHostnames.py`, eg. A99): one held blocker per GPU, within a minute.
+   - `squeue -n MACHINE_blocker_0` (etc.; MACHINE is its name in `Private/MachineHostnames.py`, eg. A99): one held blocker per GPU, within a minute.
    - Blocker cycle: run a CUDA process on one of those GPUs outside SLURM; within ~30 s its
      blocker runs; stop it; within ~30 s the blocker is held again. (`~/SLURMSetupProgress.md` has
      the test helper.)
@@ -243,6 +244,25 @@ machine on the same side.
 
 If the department opens SLURM's ports, delete the `tunnel_port=` lines: nothing else changes.
 
+## Addresses
+
+SLURM names machines by their short hostname (`hostname -s`), and every machine must be able to
+reach the controller, and the controller every node, by it. Two things get in the way (2026-11-05):
+
+- **No DNS record:** A1 and A6's hostnames don't resolve anywhere, under any
+  name. Their node files have `addr=IP` (`setup_node --addr IP`), and every machine's config lists
+  them as `NodeAddr=IP`. If such a machine's address changes, update `addr=`, commit, pull
+  everywhere, and rerun `setup_node` on every machine (firewalls: `setup_node` uses `addr=` for
+  machines that don't resolve).
+- **Another search domain:** A1 and A6 search the university's domain, not the lab's subdomain, so short names
+  (the controller's) don't resolve there, though full names do. Where a machine's short name doesn't
+  resolve, `bin/render_config` uses its full name from `Private/MachineHostnames.py` instead:
+  `NodeAddr=<full name>` for nodes, `SlurmctldHost=<name>(<full name>)` for the controller. So
+  only those machines' configs differ; nothing changes where short names resolve.
+
+Both are done by `node_addr` in `env.sh`. With root, a DNS record or `/etc/hosts` lines, and the
+lab's search domain, would make them unnecessary.
+
 ## Maintenance
 
 Rerun `setup_node` any time to check a machine; it only changes what's missing or out of date.
@@ -281,7 +301,8 @@ What's normally `/etc/slurm/`, the same for every machine.
 - `../Private/SLURM/nodes/<host>.conf`: one per machine, its node file: its home (`home=`, for
   scripts SLURM runs without a `HOME`), its `slurm.conf` node line (`slurm:`), its `gres.conf`
   lines (`gres:`) and its GPU-CPU map (`cpus: <GPU index> <CPUs>`, one per GPU, including ones
-  left out of SLURM).
+  left out of SLURM), and optionally `tunnel=yes`/`tunnel_port=` ("Tunnels") and `addr=`
+  ("Addresses").
 - `bin/add_node`: writes this machine's node file from `$HOME`, `slurmd -C`, nvidia-smi and the
   CPU topology (run by `setup_node`). The `cpus:` lines are only written if the file has none (or
   with `--reset-cpus`), so hand edits are kept. As written, each NUMA node's cores are split
@@ -344,7 +365,7 @@ Run by cron (`crontab`).
   the config if it changed (`SIGHUP`; running jobs are unaffected). So after a reboot or a crash,
   daemons are back within a minute.
 - `bin/blocker_cron` (every 30 s): for each of this machine's GPUs in SLURM, keeps a held blocker
-  job `blocking_job_<machine>_<N>` (eg. `blocking_job_A99_1`), and releases it when the GPU is used outside SLURM.
+  job `<machine>_blocker_<N>` (eg. `A99_blocker_1`), and releases it when the GPU is used outside SLURM.
   `bin/blocker.sh` is the blocker job itself: it holds the GPU until it's free again, then
   requeues itself held. `bin/gpu_busy_outside` tells whether a GPU is in use outside SLURM (a GPU
   process is SLURM's if a `slurmstepd` is among its ancestors), or errored as `ffg` shows it
@@ -357,6 +378,9 @@ Run by cron (`crontab`).
   partition (lowest tier, preempted by every other job), each holding one GPU, like a blocker.
   `bin/reserve.sh` is the reservation job itself: a CUDA context and a 16 MiB allocation on its
   GPU, through libcuda with the system python, so the GPU looks occupied outside SLURM too.
+- `BlockGPUsManually.py` (by hand): makes sure given GPUs each have a running manual blocker,
+  `<machine>_blocker_manual_<N>`, in the `block-manual` partition (top tier: preempts all but blockers),
+  submitting it (singleton, comment = its name) or releasing it if held.
 - `bin/preempt` (by hand): `scontrol requeue` (or `requeuehold` with `--hold`) for running batch
   jobs, refusing blockers and jobs that can't be requeued; logs to `var/log/preempt.log`.
 

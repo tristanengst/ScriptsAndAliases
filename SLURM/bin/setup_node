@@ -2,9 +2,11 @@
 # Sets up the workstation SLURM on this machine, or re-checks an existing setup. Safe to rerun:
 # each step only acts if something is missing or out of date.
 #
-# Usage: setup_node [--tunnel]                     existing node (its node file is in Private/SLURM/nodes/)
-#        setup_node --gpus all|none|0,2 [--tunnel]  new node, or hardware changed: also (re)writes the node file
+# Usage: setup_node [--tunnel] [--addr IP]                     existing node (its node file is in Private/SLURM/nodes/)
+#        setup_node --gpus all|none|0,2 [--tunnel] [--addr IP]  new node, or hardware changed: also (re)writes the node file
 # --tunnel marks this machine as one the controller can't reach directly (Setup.md, "Tunnels").
+# --addr sets the address other machines reach this one by, for one without a DNS record
+# (Setup.md, "Addresses").
 #
 # Steps: checks, firewall (lets the lab's machines in to SLURM's ports, with sudo ufw), build (if the installed SLURM version isn't build.sh's), node file
 # (bin/add_node), munge key (the shared one in Private/SLURM/), crontab (merged into the existing
@@ -17,11 +19,13 @@ priv=$SLURM_PRIVATE_DIR
 host=$(hostname -s)
 add_node_args=()
 mark_tunnel=0
+set_addr=
 while [ $# -gt 0 ]; do
     case $1 in
         --gpus) add_node_args+=("$1" "$2"); shift 2 ;;
         --tunnel) mark_tunnel=1; shift ;;
-        *) echo "usage: setup_node [--gpus all|none|0,2] [--tunnel]" >&2; exit 2 ;;
+        --addr) set_addr=$2; shift 2 ;;
+        *) echo "usage: setup_node [--gpus all|none|0,2] [--tunnel] [--addr IP]" >&2; exit 2 ;;
     esac
 done
 warnings=0
@@ -46,7 +50,12 @@ if ! running "$SLURM_HOME/var/run/slurmd.pid"; then
     [ -z "$busy" ] && ok "ports $p_ctld, $p_slurmd, $p_lo-$p_hi free" || fail "ports in use by something else: $busy"
 fi
 if [ "$host" != "$ctld" ]; then
-    getent hosts "$ctld" > /dev/null && ok "controller $ctld resolves" || fail "can't resolve controller $ctld"
+    ctld_addr=$(node_addr "$ctld")
+    if [ -n "$ctld_addr" ]; then
+        ok "controller $ctld reached as $ctld_addr"
+    else
+        getent ahostsv4 "$ctld" > /dev/null && ok "controller $ctld resolves" || fail "can't resolve controller $ctld"
+    fi
 fi
 
 echo "== Firewall"
@@ -61,6 +70,7 @@ machines=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from Machine
     || fail "couldn't read the lab's machines from $priv/../MachineHostnames.py"
 want=$(for m in $machines; do
     a=$(getent ahostsv4 "$m" | awk '$1 !~ /^127\./ { print $1 }' | sort -u)   # loopback isn't filtered
+    [ -n "$a" ] || a=$(sed -n 's/^addr= *\([^ #]*\).*/\1/p' "$priv/nodes/${m%%.*}.conf" 2>/dev/null)   # no DNS record
     [ -n "$a" ] || getent ahostsv4 "$m" > /dev/null || a="unresolved $m"
     [ -n "$a" ] && echo "$a"
 done | sort -u)
@@ -112,6 +122,9 @@ fi
 [ -f "$node_file" ] || fail "no $node_file; rerun with --gpus (all, none or eg. 0,2)"
 if [ $mark_tunnel = 1 ] && ! grep -qx 'tunnel=yes' "$node_file" && ! grep -q '^tunnel_port=' "$node_file"; then
     sed -i 's/^\(home=.*\)$/\1\ntunnel=yes/' "$node_file" && ok "marked $node_file tunnel=yes"
+fi
+if [ -n "$set_addr" ] && ! grep -qx "addr=$set_addr" "$node_file"; then
+    sed -i '/^addr=/d; s/^\(home=.*\)$/\1\naddr='"$set_addr"'/' "$node_file" && ok "set addr=$set_addr in $node_file"
 fi
 # Tunnel ports must be unique (Setup.md, "Tunnels").
 dups=$(for f in "$priv"/nodes/*.conf; do p=$(tunnel_port "$(basename "$f" .conf)" "$f"); [ -n "$p" ] && echo "$p $(basename "$f" .conf)"; done \

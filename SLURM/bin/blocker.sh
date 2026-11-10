@@ -1,5 +1,5 @@
 #!/bin/bash
-# Body of a blocker job (blocking_job_<node>_<idx>). Holds GPU idx while a non-SLURM process uses it,
+# Body of a blocker job (<machine>_blocker_<idx>). Holds GPU idx while a non-SLURM process uses it,
 # then gives it back by requeueing itself held. blocker_cron releases it when needed again.
 idx=$1
 dir=$(dirname "$0")
