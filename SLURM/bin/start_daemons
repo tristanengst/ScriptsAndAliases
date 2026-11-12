@@ -8,8 +8,14 @@ source "$(dirname "$0")/../env.sh"
 var=$SLURM_HOME/var
 mkdir -p "$var"/{run,log,state,spool} && chmod 700 "$var"/{run,log,state,spool}
 mkdir -p "$var"/run/munge "$var"/log/munge "$var"/lib/munge && chmod 700 "$var"/{run,log,lib}/munge
-running() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
-stop() { running "$1" && kill "$(cat "$1")" && while running "$1"; do sleep 0.2; done; }
+# A pid file's process is running if it's ours and has the expected name ($2, by default the pid
+# file's name without .pid): after a reboot, a stale pid file's pid may belong to an unrelated
+# process, which would otherwise count as the daemon (so it never restarted) and be killed by stop.
+running() {
+    local pid; pid=$(cat "$1" 2>/dev/null) && [ -n "$pid" ] || return 1
+    [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "${2:-$(basename "$1" .pid)}" ] && kill -0 "$pid" 2>/dev/null
+}
+stop() { running "$@" && kill "$(cat "$1")" && while running "$@"; do sleep 0.2; done; }
 
 render_config > /dev/null || exit 1
 chmod go-w "$SLURM_HOME" "$SLURM_HOME/etc"   # munged rejects a group-writable key dir
@@ -38,10 +44,10 @@ ctld_host=$(sed -n 's/^SlurmctldHost=\([^( ]*\).*/\1/p' "$SLURM_HOME/etc/slurm.c
 tunnel_port=$(tunnel_port "$(hostname -s)" "$SLURM_NODE_FILE")
 tunnel_want=
 [ -n "$tunnel_port" ] && [ "$ctld_host" != "$(hostname -s)" ] && tunnel_want="$ctld_host $tunnel_port"
-if running "$var/run/tunnel.pid" && [ "$(cat "$var/run/tunnel.target" 2>/dev/null)" != "$tunnel_want" ]; then
-    stop "$var/run/tunnel.pid" && echo "$(date '+%F %T') stopped the tunnel"
+if running "$var/run/tunnel.pid" ssh && [ "$(cat "$var/run/tunnel.target" 2>/dev/null)" != "$tunnel_want" ]; then
+    stop "$var/run/tunnel.pid" ssh && echo "$(date '+%F %T') stopped the tunnel"
 fi
-if [ -n "$tunnel_want" ] && ! running "$var/run/tunnel.pid"; then
+if [ -n "$tunnel_want" ] && ! running "$var/run/tunnel.pid" ssh; then
     slurmd_port=$(sed -n 's/^SlurmdPort= *\([0-9]*\).*/\1/p' "$SLURM_HOME/etc/slurm.conf")
     setsid ssh -N -o BatchMode=yes -o ControlMaster=no -o ControlPath=none \
         -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
