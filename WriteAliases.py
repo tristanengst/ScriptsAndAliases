@@ -142,16 +142,8 @@ aliases = [
     ##################################################################################
     ##################################################################################
 
-    # Workstation SLURM, where it's built and no other SLURM is (SLURM/Setup.md). Must come before
-    # SemiSLURM's sbatch checks
+    # Workstation SLURM, where it's built and no other SLURM is (SLURM/Setup.md)
     "command -v sbatch > /dev/null || { [ -x ~/.local/slurm/bin/sbatch ] && . ~/.ScriptsAndAliases/SLURM/env.sh; }",
-
-    # SemiSLURM: SLURM-like jobs on workstations. scancel and $TMP only where SLURM isn't
-    "alias ssqb=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py queue \"",
-    "alias ssbatch=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py submit \"",
-    "alias sdispatch=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py dispatch \"",
-    "command -v sbatch > /dev/null || alias scancel=\"python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py cancel \"",
-    "command -v sbatch > /dev/null || export TMP=\"$(python3 ~/.ScriptsAndAliases/SemiSLURM/SemiSLURM.py tmp)\"",
 
     # Useful on APEX workstations and servers: Miscellanous
     "alias get_wandb_id=\"python -c 'import uuid ; print(str(uuid.uuid4())[:8])'\"",

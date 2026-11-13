@@ -617,9 +617,13 @@ def job_info_with_latest_str(*, args, jd):
             if len(checkpoints) == 0:
                 return UtilsBase.updated_namespace(jd, chkpt="no checkpoints")
             else:
-                # Sort checkpoints by their modification time
-                checkpoints = sorted(checkpoints, key=lambda c: osp.getmtime(osp.join(exp_folder, c)), reverse=True)
-                return UtilsBase.updated_namespace(jd, chkpt=checkpoints[0])
+                # Pick the most recently modified checkpoint, skipping any that
+                # can't be stat'd rather than crashing.
+                c2mtime = {c: UtilsBase.safe_mtime(osp.join(exp_folder, c)) for c in checkpoints}
+                c2mtime = {c: t for c,t in c2mtime.items() if t is not None}
+                if len(c2mtime) == 0:
+                    return UtilsBase.updated_namespace(jd, chkpt="unreadable checkpoints")
+                return UtilsBase.updated_namespace(jd, chkpt=max(c2mtime, key=c2mtime.get))
 
 # def job_info_with_diagnosis(ji):
 #     """Returns [jd] with a diagnosis field. Basically, look at the past stderr/stdout
