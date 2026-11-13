@@ -177,9 +177,20 @@ def update_job(*, job_info, args, verbose=True):
 	# If updating a time limit, then optionally also update the partition to match.
 	# This means that partitions should be specified specifically with the intent of
 	# keeping them, ie. with --added_partitions or +p, rather than with --partitions
+	#
+	# Some clusters already assign partitions from the time limit themselves, so on
+	# those we never also update the partition.
+	match (cluster := Utils.get_cluster_type()):
+		case "nibi":
+			match_partition_to_time = False
+		case _:
+			match_partition_to_time = args.match_partition_to_time
+	if verbose and args.match_partition_to_time and not match_partition_to_time and "TimeLimit" in update2value:
+		twrite(f"[INFO] cluster={cluster} sets partitions from the time limit itself -> not updating partitions")
+
 	if ("TimeLimit" in update2value
 		and (args.added_partitions or not args.partition)
-		and args.match_partition_to_time):
+		and match_partition_to_time):
 		
 		time_limit_full_node = job_info_to_time_limit_full_node(job_info)
 		new_partitions_for_time_limit_list = find_partitions_for_job(
@@ -194,7 +205,7 @@ def update_job(*, job_info, args, verbose=True):
 			new_partitions_for_time_limit_list = list(set(new_partitions_for_time_limit_list + partitions_to_add))
 			new_partitions_for_time_limit = ",".join(new_partitions_for_time_limit_list)
 		update2value["Partition"] = new_partitions_for_time_limit
-	elif ("TimeLimit" in update2value and args.partition and args.match_partition_to_time):
+	elif ("TimeLimit" in update2value and args.partition and match_partition_to_time):
 		twrite(f"[WARNING] Can not simultaneously update TimeLimit and change partitions with --partition. To ensure the job is queued on a particular partition, use --added_partitions or +p. Skipping....")
 		return None
 	
