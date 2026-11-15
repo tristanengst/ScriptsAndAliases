@@ -1054,8 +1054,10 @@ if __name__ == "__main__":
         help="Show only jobs for all users")
     P.add_argument("-a", "--blockers", action="store_true", default=False,
         help="On APEX, also show the blocker jobs (SLURM/README.md)")
-    P.add_argument("-n", "--nodes", action="store_true", default=False,
-        help="Show show the node list for all jobs")
+    P.add_argument("-n", "--nodes", action="store_true", default=None,
+        help="Show the node list for all jobs. Default: on only on APEX")
+    P.add_argument("--no_nodes", "--non", action="store_false", dest="nodes",
+        help="Do not show the node list")
     P.add_argument("-s", "--submit_time", action="store_true", default=False,
         help="Show show the submit time for all jobs")
     P.add_argument("-e", "--eligible_time", action="store_true", default=False,
@@ -1070,9 +1072,9 @@ if __name__ == "__main__":
              "'--workdir' shows the basename; '--workdir full' shows the path "
              "relative to $HOME")
 
-    P.set_defaults(queue=True)
+    P.set_defaults(queue=None)
     P.add_argument("-q", "--queue", action="store_true",
-        help="Show the queue times")
+        help="Show the queue times. Default: on except on APEX")
     P.add_argument("--no_queue", "--noq", action="store_false", dest="queue",
         help="Do not show the queue times")
 
@@ -1135,6 +1137,9 @@ if __name__ == "__main__":
     # On APEX there are no time limits, so the time elapsed is more useful than the time left
     args.time_left = (not Utils.is_apex_cluster()) if args.time_left is None else args.time_left
     args.elapsed = Utils.is_apex_cluster() if args.elapsed is None else args.elapsed
+    # On APEX, queue times matter little, but which workstation a job is on does
+    args.queue = (not Utils.is_apex_cluster()) if args.queue is None else args.queue
+    args.nodes = Utils.is_apex_cluster() if args.nodes is None else args.nodes
 
     # The LevelFS and free-resource summaries don't depend on the queue, so start them
     # now, while it's read, and collect them when they're printed. Not on workstations
