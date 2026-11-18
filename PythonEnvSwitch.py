@@ -82,10 +82,34 @@ if __name__ == "__main__":
     env2activate_cmd = {e: c for e,c in env2activate_cmd.items() if is_conda_and_conda_avail(c) or is_venv_and_path_exists(c)}
     
     if not args.env_name:
-        avail_envs_str = "\n\t".join([f"{env:<30} {cmd}" for env, cmd in env2activate_cmd.items()])
-        _ = twrite(f"Available environments:\n\t{avail_envs_str}")
-        sys.exit(0)
-    elif args.env_name not in env2activate_cmd:
+        # The pythonact shell function captures stdout to find the EVAL line, so the
+        # menu and prompt go to stderr, which is still the terminal.
+        envs = list(env2activate_cmd)
+        if len(envs) == 0:
+            print("No environments available", file=sys.stderr)
+            sys.exit(1)
+        width = len(str(len(envs)))
+        menu = "\n".join([f"  [{idx+1:>{width}}] {env:<30} {env2activate_cmd[env]}"
+            for idx, env in enumerate(envs)])
+        print(f"Available environments:\n{menu}", file=sys.stderr)
+        try:
+            print(f"Enter a number (or name) to activate, blank to cancel: ", end="", file=sys.stderr, flush=True)
+            choice = sys.stdin.readline().strip()
+        except KeyboardInterrupt:
+            print("", file=sys.stderr)
+            sys.exit(1)
+
+        if choice == "":
+            sys.exit(0)
+        elif choice.isdigit() and 1 <= int(choice) <= len(envs):
+            args.env_name = envs[int(choice) - 1]
+        elif choice in env2activate_cmd:
+            args.env_name = choice
+        else:
+            print(f"Invalid choice '{choice}'", file=sys.stderr)
+            sys.exit(1)
+
+    if args.env_name not in env2activate_cmd:
         avail_envs_str = "\n\t".join([f"{env:<30} {cmd}" for env, cmd in env2activate_cmd.items()])
         _ = twrite(f"Environment {args.env_name} not found. Available environments:\n\t{avail_envs_str}")
         sys.exit(1)
