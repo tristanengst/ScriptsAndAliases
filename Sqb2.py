@@ -351,7 +351,10 @@ def job_info_with_queue(jd):
     else:
         raise NotImplementedError(f"job_dict={jd} ")
 
-    if jd.state in ["RUNNING", "COMPLETING"]:
+    if jd.state in ["RUNNING", "COMPLETING"] and jd.start_time in ["Unknown", "N/A", "", None]:
+        # Slurm can briefly report no start time for a job that's starting or completing
+        return UtilsBase.updated_namespace(jd, queue="N/A")
+    elif jd.state in ["RUNNING", "COMPLETING"]:
         start_time = datetime.strptime(jd.start_time, "%Y-%m-%dT%H:%M:%S")
     else:
         start_time = datetime.now()
