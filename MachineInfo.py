@@ -186,7 +186,7 @@ def get_apex_node2config():
     def parse_node_data(nd):
         gpu_aliases = [gpu_name2alias[f] for f in nd.get("features", []) if f in gpu_name2alias]
         gpu_alias = gpu_aliases[0] if gpu_aliases else "unknown"
-        gpus_per_node = sum([int(g.split(":")[-1]) for g in nd.get("gres", "").split(",") if g.startswith("gpu:")])
+        gpus_per_node = sum([int(g.split("(")[0].split(":")[-1]) for g in nd.get("gres", "").split(",") if g.startswith("gpu:")])
 
         cpus_per_gpu, mem_per_gpu = 1, 1
         for tr_key,tr_val in [tr.split("=") for tr in nd.get("tres", "").split(",") if "=" in tr]:
