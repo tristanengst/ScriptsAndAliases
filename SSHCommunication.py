@@ -61,8 +61,11 @@ def get_hostname():
     ##################################################################################
     # Method 1: read IP address from terminal and pass to gethostbyaddr()
     elif not "local" in result and not "." in result:
-        ip_address = subprocess.getoutput("ip route get 1.1.1.1 | grep -oP 'src \K[0-9.]+'")
-        socket_hostname = socket.gethostbyaddr(ip_address)[0]
+        try:
+            ip_address = subprocess.getoutput(r"ip route get 1.1.1.1 | grep -oP 'src \K[0-9.]+'")
+            socket_hostname = socket.gethostbyaddr(ip_address)[0]
+        except (OSError, UnicodeError): # eg. no `ip`, so [ip_address] is an error message
+            return os.uname().nodename
         if not "local" in socket_hostname and "." in socket_hostname:
             return socket_hostname
 

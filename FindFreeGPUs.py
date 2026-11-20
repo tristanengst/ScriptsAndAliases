@@ -132,7 +132,8 @@ def gpu_index_to_users(h=None):
     # ControlPersist closes it 10s after its last use, even if this process is killed.
     # LogLevel=error keeps login banners and known-hosts warnings out of command output
     # if a call ever opens a new connection instead of reusing this one.
-    ctrl_path = osp.join(tempfile.gettempdir(), f"ffg-{os.getpid()}-{uuid.uuid4().hex[:8]}-%C")
+    ctrl_dir = tempfile.gettempdir() if len(tempfile.gettempdir()) <= 8 else "/tmp" # Long paths (eg. macOS) overflow the socket path limit
+    ctrl_path = osp.join(ctrl_dir, f"ffg-{os.getpid()}-{uuid.uuid4().hex[:8]}-%C")
     ssh_args = ("-o ControlMaster=auto", f"-o ControlPath={ctrl_path}", "-o ControlPersist=10", "-o LogLevel=error")
     try:
         gpu_uid2index = gpu_uid_to_index(h=h, ssh_args=ssh_args)
