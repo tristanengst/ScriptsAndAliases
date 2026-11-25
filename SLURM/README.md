@@ -49,7 +49,8 @@ Relative `-o`/`-e` paths are relative to that directory, and written on the mach
 
 Draining stops SLURM from starting new jobs on a machine (eg. before maintenance); jobs already
 running there carry on. Plain `scontrol` does this; no root is needed, since the user running
-SLURM is its admin. Use node names as `sinfo -N` shows them.
+SLURM is its admin. Use node names as `sinfo -N` shows them. More on draining, disabling and
+resuming machines: `SLURMAdmin.md`.
 
 ```bash
 scontrol update NodeName=NODE State=DRAIN Reason="why"   # Reason is required; NODE may be a list (a,b)

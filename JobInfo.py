@@ -81,17 +81,9 @@ class JobInfo:
 
     @cached_property
     def comment(self):
-        if "comment" in self.raw and not self.raw["comment"] is None:
-            c = self.raw["comment"].strip()
-            if c.startswith("{") and c.endswith("}"):
-                c = c.replace("'", "\"")  # Replace single quotes with double quotes
-                try:
-                    return json.loads(c)
-                except json.JSONDecodeError:
-                    return dict()
-            else:
-                return dict()
-        else:
+        try:
+            return UtilsBase.job_comment_to_dict(self.raw.get("comment", None))
+        except ValueError:
             return dict()
 
     @cached_property
