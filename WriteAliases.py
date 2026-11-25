@@ -154,6 +154,8 @@ aliases = [
     "alias fsyncb=\"python ~/.ScriptsAndAliases/Rsyncb.py --filter_checkpoints \"",
     "alias send=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     "alias getfrom=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
+    "alias claudesend=\"python ~/.ScriptsAndAliases/ClaudeTransfer.py \"",
+    "alias sshmfa=\"bash ~/.ScriptsAndAliases/SSHMFA.sh \"",
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
@@ -179,11 +181,24 @@ if Utils.is_apex_cluster():
 
 def alias_to_name(alias): return alias.split("=")[0].strip()
 
+claude_guard = "*) [ -n \"$CLAUDECODE\" ] || return;; # Claude Code's shell gets these aliases too\n"
+
+def with_claude_code_guard(lines):
+    """Returns [lines] with the usual 'not interactive -> return' guard at the top of a
+    ~/.bashrc (`case $- in *i*) ;; *) return;; esac`) letting Claude Code's shell through.
+    Claude Code builds its shell by sourcing ~/.bashrc non-interactively, so otherwise it
+    never sees the aliases below. Other non-interactive shells still return.
+    """
+    for idx in range(1, min(len(lines), 30)):
+        if lines[idx].strip() == "*) return;;" and any(l.strip() == "case $- in" for l in lines[max(0, idx-3):idx]):
+            return lines[:idx] + [claude_guard] + lines[idx+1:]
+    return lines
+
 def write_aliases_to_file(fname):
     """Writes the aliases to file [fname], removing any that are already there."""
     aliases_names = set([alias_to_name(a) for a in aliases])
     with open(fname, "r") as f:
-        existing_lines = f.readlines()
+        existing_lines = with_claude_code_guard(f.readlines())
 
     # Aliases are only edited between the START and END comments if they exist;
     # otherwise they are added to the end

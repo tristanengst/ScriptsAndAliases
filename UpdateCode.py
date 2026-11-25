@@ -20,6 +20,8 @@ if __name__ == "__main__":
     P.add_argument("--dry_run", action="store_true")
     P.add_argument("--exp_search_dirs", nargs="+", default=FileFinding.exp_search_dirs)
     P.add_argument("-v", "--verbose", action="store_true")
+    P.add_argument("-y", "--yes", action="store_true",
+        help="Don't ask for confirmation before updating (eg. when run non-interactively)")
     args = P.parse_args()
 
     experiment_names = [FileFinding.str_to_exp_folder(s, search_dirs=args.exp_search_dirs, verbose=True, resolve="half_then_user") for s in args.substrs]
@@ -34,7 +36,7 @@ if __name__ == "__main__":
         tqdm.write(exp_name_str)
         tqdm.write("===================================================================")
 
-        proceed = UtilsBase.query_yes_no(f"Proceed with updating these experiments (dry_run={args.dry_run})?\t[y/n]")
+        proceed = args.yes or UtilsBase.query_yes_no(f"Proceed with updating these experiments (dry_run={args.dry_run})?\t[y/n]")
         if not proceed:
             _ = tqdm.write("Exiting.")
             sys.exit(0)

@@ -9,6 +9,7 @@ import argparse
 import glob
 import os
 import os.path as osp
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -340,7 +341,7 @@ if __name__ == "__main__":
                 
         filter_checkpoints_str = " --filter_checkpoints " if args.filter_checkpoints else ""
         underlying_rsync_flags = format_underlying_rsync_flags_for_rsyncb_cmd(args)
-        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} {filter_checkpoints_str} --output_as_meta --terminal_size {os.get_terminal_size().columns} " for c in args.clusters}
+        cluster2send_command = {c: f"{' '.join(args.files)} {c} {underlying_rsync_flags} {filter_checkpoints_str} --output_as_meta --terminal_size {shutil.get_terminal_size().columns} " for c in args.clusters}
         cluster2output = {c: run_cmd(c, s) for c,s in cluster2send_command.items()}
 
         try:
