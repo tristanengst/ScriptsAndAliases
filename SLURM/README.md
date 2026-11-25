@@ -1,6 +1,6 @@
 # Workstation SLURM
 
-Stock SLURM (25.11.8) across the lab workstations, replacing SemiSLURM. Commands and job scripts work as on any SLURM cluster (eg. the Alliance clusters), except for what's below. How it's installed, adding machines, and what each file does: `Setup.md`.
+Stock SLURM (25.11.8) across the lab workstations. Commands and job scripts work as on any SLURM cluster (eg. the Alliance clusters), except for what's below. How it's installed, adding machines, and what each file does: `Setup.md`.
 
 ## The setup
 
