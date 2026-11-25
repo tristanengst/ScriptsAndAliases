@@ -3,4 +3,6 @@ __pycache__
 APEXLabPrivate
 # JSON files are ignored unless explicitly included, eg. with a line like !path/to/file.json
 *.json
-.claude
+# .claude is tracked, except machine-local settings
+!.claude/**/*.json
+.claude/settings.local.json

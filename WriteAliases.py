@@ -157,7 +157,7 @@ aliases = [
     "alias send=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     "alias getfrom=\"python ~/.ScriptsAndAliases/Rsyncb.py \"",
     "alias claudesend=\"python ~/.ScriptsAndAliases/ClaudeTransfer.py \"",
-    "alias sshmfa=\"bash ~/.ScriptsAndAliases/SSHMFA.sh \"",
+    "alias sshmfa=\"python ~/.ScriptsAndAliases/SSHCommunication.py --mfa_login \"",
 
     "alias check_results=\"python ~/.ScriptsAndAliases/CheckResults.py --files \"",
     "alias update_code=\"python ~/.ScriptsAndAliases/UpdateCode.py --substrs \"",
