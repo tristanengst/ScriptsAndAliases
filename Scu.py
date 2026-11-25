@@ -1,8 +1,10 @@
 import argparse
 from collections import defaultdict
 from functools import cache
+import json
 import os
 import os.path as osp
+import shlex
 import subprocess
 import sys
 
@@ -153,11 +155,44 @@ def args_to_scontrol_update_dict(args):
 	update2value = {update_to_update_str(u): v for u,v in args_update2value.items()}
 	return update2value 
 
-def update_job(*, job_info, args, verbose=True):
-	"""Updates the job of [job_info] according to [args]."""
+def comment_value(s):
+	"""Returns the --comment_set value [s] as a JSON value if it is one (eg. '1' -> 1,
+	'true' -> True, '"1"' -> '1'), else as the string [s] (eg. 'NA' -> 'NA').
+	"""
+	try:
+		return json.loads(s)
+	except json.JSONDecodeError:
+		return s
+
+def new_comment(*, job_info, args):
+	"""Returns the comment the job of [job_info] should get according to [args], or None if
+	[args] doesn't change it. --comment replaces the comment; --comment_update,
+	--comment_set and --comment_del (applied in that order) change its JSON, raising
+	ValueError if it's nonempty and not JSON.
+	"""
+	if not args.comment is None:
+		return args.comment
+	elif len(args.comment_update) > 0 or len(args.comment_set) > 0 or len(args.comment_del) > 0:
+		d = UtilsBase.job_comment_to_dict(job_info.comment["comment"])
+		for u in args.comment_update:
+			d |= u
+		for kv in args.comment_set:
+			k,_,v = kv.partition("=")
+			d[k] = comment_value(v)
+		for k in args.comment_del:
+			d.pop(k, None)
+		return UtilsBase.dict_to_job_comment(d)
+	else:
+		return None
+
+def update_job(*, job_info, args, comment=None, verbose=True):
+	"""Updates the job of [job_info] according to [args], setting its comment to [comment]
+	unless it's None.
+	"""
 	cmd_prefix = args_to_scontrol_prefix(args)
 
 	update2value = args_to_scontrol_update_dict(args)
+	update2value |= dict() if comment is None else dict(Comment=comment)
 	if "TimeLimit" in update2value and not job_info.state == "PENDING" and not args.force:
 		twrite(f"[WARNING] Job {job_info.jobid} is not pending, cannot change TimeLimit. Use --force to override.")
 		return
@@ -248,8 +283,8 @@ def update_job(*, job_info, args, verbose=True):
 	# 	twrite(match_partition_to_time=args.match_partition_to_time, interac=args.interac, time=args.time, update2value=update2value, verbose=verbose)
 
 
-	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit", "Nice"]
-	cmd_suffix = " ".join([f"{u}={v}" for u,v in update2value.items() if u in valid_suffixs])
+	valid_suffixs = ["Dependency", "Account", "Partition", "TimeLimit", "Nice", "Comment"]
+	cmd_suffix = " ".join([shlex.quote(f"{u}={v}") for u,v in update2value.items() if u in valid_suffixs])
 
 	# `scontrol hold`/`release`/`requeue`/`requeuehold` take a bare job ID, but `scontrol update` needs the
 	# `JobId=` form -- given a bare ID it silently ignores it and the update is a
@@ -308,6 +343,15 @@ if __name__ == "__main__":
 		help="Update jobs to new time limit, in format HH:MM:SS")
 	P.add_argument("--nice", type=int, default=None,
 		help="Update jobs to new nice value: higher lowers their priority, negative raises it (needs SLURM operator rights)")
+	P.add_argument("--comment", default=None,
+		help="Replace jobs' comments with this string")
+	P.add_argument("--comment_update", action="append", default=[], metavar="JSON",
+		type=lambda s: UtilsBase.job_comment_to_dict(s),
+		help="Update jobs' JSON comments with this JSON object (quoted with ' or \"), as old | new. Repeatable. Fails with ValueError on a nonempty comment that isn't JSON")
+	P.add_argument("--comment_set", action="append", default=[], metavar="KEY=VALUE",
+		help="Set KEY of jobs' JSON comments to VALUE, parsed as JSON if it is (eg. 1, true), else a string. Repeatable. Fails with ValueError on a nonempty comment that isn't JSON")
+	P.add_argument("--comment_del", action="append", default=[], metavar="KEY",
+		help="Remove KEY from jobs' JSON comments (if there). Repeatable. Fails with ValueError on a nonempty comment that isn't JSON")
 
 	# Configuration options for how SCU should behave
 	P.add_argument("--match_partition_to_time", type=UtilsBase.truthy_type, default=True,
@@ -326,6 +370,17 @@ if __name__ == "__main__":
 		args.release = True
 	if sum([args.hold, args.release, args.requeue, args.requeuehold]) > 1:
 		twrite(f"[WARNING] Give at most one of --hold, --release, --requeue, --requeuehold")
+		sys.exit(1)
+	edits_comment = len(args.comment_update) > 0 or len(args.comment_set) > 0 or len(args.comment_del) > 0
+	changes_comment = not args.comment is None or edits_comment
+	if not args.comment is None and edits_comment:
+		twrite(f"[WARNING] Give either --comment or --comment_update/--comment_set/--comment_del, not both")
+		sys.exit(1)
+	if changes_comment and any([args.hold, args.release, args.requeue, args.requeuehold]):
+		twrite(f"[WARNING] Can't change comments together with --hold, --release, --requeue or --requeuehold")
+		sys.exit(1)
+	if any(not "=" in kv for kv in args.comment_set):
+		twrite(f"[WARNING] --comment_set takes KEY=VALUE, got {[kv for kv in args.comment_set if not '=' in kv]}")
 		sys.exit(1)
 	if len(args.jobs) >= 2 and any([args.jobs[0].startswith(k) for k in ["TimeLimit=", "Account=", "Partition=", "Dependency="]]):
 		num_removed_args = 0
@@ -386,6 +441,10 @@ if __name__ == "__main__":
 	##################################################################################
 	##################################################################################
 
+	# Work out every new comment before updating any job, so a comment that can't be
+	# changed (ValueError) stops scu before it has changed anything
+	jobid2comment = {j: new_comment(job_info=job2info[j], args=args) for j in job_substr2jobid_to_update.values()}
+
 	iter_over = job_substr2jobid_to_update.values()
 	iter_over = tqdm(iter_over, desc="Updating jobs", total=len(iter_over)) if args.stagger else iter_over
 
@@ -397,6 +456,6 @@ if __name__ == "__main__":
 			twrite(f"[INFO] Sleeping for seconds={wait_time} before updating jobid={jobid}...")
 			time.sleep(wait_time)
 
-		_ = update_job(job_info=job2info[jobid], args=args, verbose=True)
+		_ = update_job(job_info=job2info[jobid], args=args, comment=jobid2comment[jobid], verbose=True)
 		
 		

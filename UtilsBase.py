@@ -1,5 +1,6 @@
 """Utility functions I think should by in Python's standard library."""
 import argparse
+import contextlib
 import copy
 from collections import defaultdict
 from datetime import datetime
@@ -164,13 +165,33 @@ def atomic_save_lite(*, data, fpath, **kwargs):
         twrite(f"[WARNING] atomic_save_lite(): unknown extension for fpath={fpath} -> assume string-like")
         with open(tmp_file, "w+") as f:
             f.write(data)
+    fsync_path(path=tmp_file) # Else after a crash/power loss the rename can persist but the data not
     os.rename(tmp_file, fpath)
+    fsync_path(path=osp.dirname(fpath) or ".") # Persist the rename itself
+
+def fsync_path(*, path):
+    """Flushes file or directory [path] to disk. Ignores filesystems that don't support it."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
 
 def atomic_append_lite(*, data, fname, weights_only=False, map_location="cpu", **kwargs):
+    """Adds [data] to [fname]: for .pt/.pth/.json files, updates the dict in it with dict
+    [data] and atomically saves it; for text files, appends string [data]. The save is atomic,
+    so readers never see a partial file, but the read-modify-write isn't: processes updating
+    one file concurrently can lose each other's changes, so they shouldn't share a file.
+    """
     fname = osp.expanduser(fname)
     if fname.endswith(".pt") or fname.endswith(".pth"):
-        orig_data = load_file_lite(fname) if osp.exists(fname) else dict()
-        return atomic_save_lite(data=load_file_lite(fname, weights_only=weights_only, map_location=map_location) | data, fpath=fname, **kwargs)
+        orig_data = load_file_lite(fname, weights_only=weights_only, map_location=map_location) if osp.exists(fname) else dict()
+        return atomic_save_lite(data=orig_data | data, fpath=fname, **kwargs)
     elif fname.endswith(".json"):
         orig_data = load_file_lite(fname) if osp.exists(fname) else dict()
         return atomic_save_lite(data=orig_data | data, fpath=fname, indent=4, sort_keys=True)
@@ -184,6 +205,33 @@ def atomic_append_lite(*, data, fname, weights_only=False, map_location="cpu", *
 def dict_to_json(d, f): return atomic_save_lite(data=d, fpath=f, indent=4, sort_keys=True)
 def json_to_dict(f): return load_file_lite(f)
 def dict_append_json(d, f): atomic_append_lite(data=d, fname=f)
+
+def job_comment_to_dict(comment):
+    """Returns the SLURM job comment [comment] as a dict: empty if there's no comment (None,
+    blank, or '(null)' as squeue shows none), else the JSON object it holds, quoted with "
+    or with ' (as dict_to_job_comment() writes). Raises ValueError if it's a nonempty comment
+    that isn't a JSON object.
+    """
+    c = "" if comment is None else comment.strip()
+    if c in ["", "(null)"]:
+        return dict()
+    try:
+        result = json.loads(c)
+    except json.JSONDecodeError:
+        try:
+            result = json.loads(c.replace("'", "\""))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Job comment isn't JSON: {comment!r}") from e
+    if not isinstance(result, dict):
+        raise ValueError(f"Job comment isn't a JSON object: {comment!r}")
+    return result
+
+def dict_to_job_comment(d):
+    """Returns [d] as a SLURM job comment that job_comment_to_dict() reads: JSON quoted with '
+    rather than ", which would need escaping in #SBATCH lines and shell commands. Any ' in a
+    value is first escaped as \\u0027, so it can't be mistaken for a quote when read back.
+    """
+    return json.dumps(d).replace("'", "\\u0027").replace("\"", "'")
 
 def path_from_home(f):
     """Returns a path to [f] that will work from any home directory."""
@@ -200,6 +248,58 @@ def safe_mtime(f):
         return osp.getmtime(f)
     except OSError:
         return None
+
+@contextlib.contextmanager
+def file_lock(*, path, block=True):
+    """Context manager holding an exclusive flock() on [path], created if needed, for its
+    duration. Yields whether the lock was acquired, which is always True if [block] is True;
+    otherwise it's False if another process holds the lock. Subprocesses don't inherit the
+    lock, so eg. a daemon started inside the context can't keep holding it.
+
+    The lock belongs to the process, so the kernel releases it however the process ends (exit,
+    crash, SIGKILL, power loss); a leftover lock file is inert. But the lock is on the file, not
+    its path: if [path] is deleted or replaced while locked, another process can create and lock
+    a new file there. So use a dedicated file nothing else replaces (eg. not one written by
+    atomic_save_lite()) in a directory nothing cleans while it's in use (eg. not /dev/shm or
+    $XDG_RUNTIME_DIR, which systemd empties when the user's last login session ends). To
+    survive age-based cleaners (eg. of /tmp), acquiring the lock refreshes the file's times; and
+    if the file is deleted between opening and locking it, this retries on the new one.
+    """
+    import fcntl
+    _ = os.makedirs(osp.dirname(path), exist_ok=True) if osp.dirname(path) else None
+    while True:
+        f = open(path, "a")
+        try:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | (0 if block else fcntl.LOCK_NB))
+            except BlockingIOError:
+                yield False
+                return
+            try:
+                current = os.stat(path)
+            except FileNotFoundError:
+                continue
+            locked = os.fstat(f.fileno())
+            if (current.st_dev, current.st_ino) != (locked.st_dev, locked.st_ino):
+                continue
+            os.utime(f.fileno())
+            yield True
+            return
+        finally:
+            f.close()
+
+def named_lock(*, name, block=True):
+    """Returns file_lock() for the lock named [name], which is the same lock for every process
+    of this user on this machine. Its file is in a directory of /tmp (fixed rather than from eg.
+    $TMPDIR, which can differ between processes) private to this user.
+    """
+    lock_dir = f"/tmp/UtilsBase_locks_{os.getuid()}"
+    _ = os.makedirs(lock_dir, mode=0o700, exist_ok=True)
+    st = os.lstat(lock_dir) # Refuse a directory someone else made (/tmp is shared) or a symlink
+    if st.st_uid != os.getuid() or not osp.isdir(lock_dir) or osp.islink(lock_dir):
+        raise PermissionError(f"Lock directory {lock_dir} isn't a directory owned by this user")
+    return file_lock(path=osp.join(lock_dir, f"{name.replace(os.sep, '_')}.lock"), block=block)
+
 
 ######################################################################################
 ######################################################################################
@@ -814,40 +914,76 @@ def try_format_timestamp(t, time_format="default"):
 
 
 ###### Persisted State ###############################################################
-# For when environment variables have semantics not suitable for the task at hand. In
-# this case, we will generally assume that either there is one process running per
-# machine or that a machine isolates processes that would use this via $SLURM_TMPDIR.
-def get_persisted_state_file():
-    """Returns the path to the persisted state file."""
-    return f"{os.environ['SLURM_TMPDIR'] if 'SLURM_JOB_ID' in os.environ else '.'}/persisted_state.json"
+# State persisted across processes in a JSON file. The file defines who shares the state, so
+# choose it so that exactly the processes meant to share the state use it, and unrelated ones
+# never do. There's no locking: saves are atomic, so a reader never sees a partial file, but
+# concurrent updates to one file can lose each other's changes, so a file's users shouldn't
+# update it concurrently. Code that owns its state should pass its own file (eg. one per
+# thing it tracks); code that doesn't can use the default where one exists.
+def get_persisted_state_file(persisted_state_file=None):
+    """Returns the path to the persisted state file: [persisted_state_file] if given, else
+    inside a SLURM job, a file shared by that job's processes, in $SLURM_TMPDIR and named with
+    $SLURM_JOB_ID since $SLURM_TMPDIR isn't reliably unique to a job; else persisted_state.json
+    in the current directory.
+    """
+    if persisted_state_file is not None:
+        return persisted_state_file
+    elif "SLURM_JOB_ID" in os.environ and "SLURM_TMPDIR" in os.environ:
+        return osp.join(os.environ["SLURM_TMPDIR"], f"persisted_state_{os.environ['SLURM_JOB_ID']}.json")
+    else:
+        return "persisted_state.json"
 
-def persisted_state_get_all():
+def persisted_state_get_all(persisted_state_file=None):
     """Returns all persisted state as a dictionary."""
-    f = get_persisted_state_file()
+    f = get_persisted_state_file(persisted_state_file)
     return json_to_dict(f) if osp.exists(f) else dict()
 
-def persisted_state_get(k, default=None):
+def persisted_state_get(k, default=None, persisted_state_file=None):
     """Returns the value of [k] in persisted state or [default] if it isn't found."""
-    persisted_state = persisted_state_get_all()
+    persisted_state = persisted_state_get_all(persisted_state_file)
     return persisted_state.get(k, (default() if callable(default) else default))
 
-def persisted_state_contains(k):
+def persisted_state_contains(k, persisted_state_file=None):
     """Returns if [k] is in the persisted state."""
-    return k in persisted_state_get_all()
+    return k in persisted_state_get_all(persisted_state_file)
 
-def persisted_state_update(**kwargs):
-    """Sets key [k] to value [v] in persisted state."""
-    _ = dict_append_json(kwargs, get_persisted_state_file())
+def persisted_state_update(persisted_state_file=None, **kwargs):
+    """Sets key [k] to value [v] in persisted state for each k=v in [kwargs]."""
+    _ = dict_append_json(kwargs, get_persisted_state_file(persisted_state_file))
 
-def persistent_state_del(k):
+def persistent_state_del(k, persisted_state_file=None):
     """Deletes key [k] from the persisted state."""
-    persisted_state = persisted_state_get_all()
+    f = get_persisted_state_file(persisted_state_file)
+    persisted_state = persisted_state_get_all(f)
     persisted_state = {k1: v for k1,v in persisted_state.items() if not k1 == k}
-    return dict_to_json(persisted_state, get_persisted_state_file())
+    return dict_to_json(persisted_state, f)
 
-def persisted_state_clear():
+def persisted_state_clear(persisted_state_file=None):
     """Removes the persisted state file."""
-    _ = dict_to_json(dict(), get_persisted_state_file())
+    _ = dict_to_json(dict(), get_persisted_state_file(persisted_state_file))
+
+######################################################################################
+######################################################################################
+######################################################################################
+
+###### Email #########################################################################
+def send_email(*, subject, body, to_email, from_email, smtp_host, smtp_port, smtp_user,
+    smtp_password, timeout=30):
+    """Emails [subject] and plaintext [body] to [to_email] from [from_email], through SMTP
+    server [smtp_host]:[smtp_port], logging in as [smtp_user] with [smtp_password] over
+    STARTTLS. Raises an exception if it fails.
+    """
+    import email.message
+    import smtplib
+    msg = email.message.EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg.set_content(body)
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as s:
+        _ = s.starttls()
+        _ = s.login(smtp_user, smtp_password)
+        _ = s.send_message(msg)
 
 ######################################################################################
 ######################################################################################

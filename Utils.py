@@ -145,17 +145,11 @@ def get_slurm_status(cur_user=False, account=None, verbose=False,
     - Some keys must generally be included for sensible results, eg. 'jobid'
     - Some keys require others. In particular, 'uid' requires 'comment'
     """
-    import json
     def try_parse_comment(c):
-        """Tries to parse the comment [c]."""
-        c = c.strip()
-        if c.startswith("{") and c.endswith("}"):
-            c = c.replace("'", "\"")  # Replace single quotes with double quotes
-            try:
-                return json.loads(c) | dict(comment=c)
-            except json.JSONDecodeError:
-                return dict(comment=c)
-        else:
+        """Returns the comment [c] parsed as a dict, with [c] itself under 'comment'."""
+        try:
+            return UtilsBase.job_comment_to_dict(c) | dict(comment=c)
+        except ValueError:
             return dict(comment=c)
 
     # On ComputeCanada, get jobs by account

@@ -27,7 +27,7 @@ if __name__ == "__main__":
         twrite(f"Updating host={u}...")
         try:
             result = SSHCommunication.run_command_on_machine(machine=u,
-                command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",
+                command="bash -ic \"cd ~/.ScriptsAndAliases ; git pull ; git submodule update --init --recursive ; python ~/.ScriptsAndAliases/WriteAliases.py ; source ~/.bashrc\"",
                 if_connect_error="HostInfoError",
             )
         except Exception as e:

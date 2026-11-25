@@ -1,4 +1,6 @@
 __pycache__
 *rsyncb_cmd_*
 APEXLabPrivate
-persisted_state.json
+# JSON files are ignored unless explicitly included, eg. with a line like !path/to/file.json
+*.json
+.claude

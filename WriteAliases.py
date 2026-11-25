@@ -1,6 +1,8 @@
-"""Writes useful ML aliases to .zshrc and .bashrc files."""
+"""Writes useful ML aliases to .zshrc and .bashrc files, and links the Claude Code skills in
+Private/ClaudeSkills into ~/.claude/skills, where Claude Code finds them from any folder."""
 
 import argparse
+import os
 import os.path as osp
 import re
 
@@ -221,10 +223,38 @@ def write_aliases_to_file(fname):
     with open(fname, "w") as f:
         f.write(new_lines_str)
 
+def link_claude_skills(*, skills_src, skills_dst):
+    """Symlinks each skill folder in [skills_src] into [skills_dst]. An existing link to the
+    wrong place is replaced; a real file or folder there is left alone with a warning, since it
+    may be someone's own skill.
+    """
+    if not osp.isdir(skills_src):
+        print(f"No Claude skills at {skills_src} (is the Private submodule checked out?); skipping")
+        return
+    os.makedirs(skills_dst, exist_ok=True)
+    for name in sorted(os.listdir(skills_src)):
+        src = osp.join(skills_src, name)
+        dst = osp.join(skills_dst, name)
+        if not osp.isfile(osp.join(src, "SKILL.md")):
+            continue
+        if osp.islink(dst):
+            if os.readlink(dst) == src:
+                continue
+            os.remove(dst)
+        elif osp.exists(dst):
+            print(f"[WARNING] {dst} exists and isn't a link; not linking Claude skill {name}")
+            continue
+        os.symlink(src, dst)
+        print(f"Linked Claude skill {dst} -> {src}")
+
 if __name__ == "__main__":
     P = argparse.ArgumentParser()
     P.add_argument("--files", nargs="+", default=["~/.bashrc", "~/.zshrc"],
         help="Files to write aliases to")
+    P.add_argument("--claude_skills_src", default=osp.join(osp.dirname(osp.realpath(__file__)), "Private", "ClaudeSkills"),
+        help="Folder of Claude Code skills to link")
+    P.add_argument("--claude_skills_dst", default="~/.claude/skills",
+        help="Folder Claude Code reads user-level skills from")
     args = P.parse_args()
 
     args.files = [osp.expanduser(f) for f in args.files]
@@ -234,3 +264,5 @@ if __name__ == "__main__":
             continue
         _ = write_aliases_to_file(fname)
         print(f"Aliases written to {fname}")
+
+    link_claude_skills(skills_src=args.claude_skills_src, skills_dst=osp.expanduser(args.claude_skills_dst))
